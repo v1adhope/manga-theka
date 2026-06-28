@@ -1,0 +1,41 @@
+version: "3"
+
+dotenv: [".env"]
+
+tasks:
+  run:
+    cmds:
+      - cargo run
+
+  build:
+    cmds:
+      - cargo build
+
+  test:
+    cmds:
+      - cargo test
+
+  fmt:
+    cmds:
+      - cargo fmt -- --check
+
+  lint:
+    cmds:
+      - cargo clippy -- -D warnings
+
+  audit:
+    cmds:
+      - cargo audit
+
+  code-cov:
+    cmds:
+      - cargo tarpaulin --ignore-tests
+
+  prepare:
+    cmds:
+      - task: fmt
+      - task: lint
+      - task: audit
+      - task: test
+      - task: build
+      - task: code-cov
