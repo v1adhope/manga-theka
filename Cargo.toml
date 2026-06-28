@@ -8,8 +8,7 @@ documentation = "TODO"
 readme = "README.md"
 homepage = "TODO"
 repository = "https://github.com/v1adhope/manga-theka"
-# license = "MIT"
-# license-file = "LICENSE"
+license-file = "LICENSE"
 
 [lib]
 path = "src/lib.rs"
