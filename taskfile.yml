@@ -39,3 +39,36 @@ tasks:
       - task: test
       - task: build
       - task: code-cov
+
+  up:
+    cmds:
+      - docker compose up -d --build
+
+  down:
+    cmds:
+      - docker compose down
+
+  restart:
+    cmds:
+      - task: down
+      - task: up
+
+  clean:
+    cmds:
+      - task: down
+      - cmd: docker volume rm manga-theka_pgdata
+        ignore_error: true
+
+  migration-add:
+    cmds:
+      - sqlx migrate add -r {{.name}}
+    requires:
+      vars: [name]
+
+  migration-up:
+    cmds:
+      - sqlx migrate run
+
+  migration-down:
+    cmds:
+      - sqlx migrate revert

@@ -14,3 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Telemetry. Tracing with logger support
 - Graceful shutdown with Ctrl+C and terminate signals
 - `/healthz` route to check service health
+- `.env`
+- Docker compose with `postgres`
+- Migrations for `creator_roles`, `creators`, `content_ratings`, `book_statuses`,
+  `images`, `book_types`, `languages`, `books`, `label_types`, `labels`
