@@ -27,6 +27,21 @@ tracing-subscriber = { version = "0.3", features = [
   "json",
 ] }
 tracing-log = "0.2"
+uuid = { version = "1", features = ["v7", "serde"] }
+time = "0.3"
+sqlx = { version = "0.9", features = [
+  "runtime-tokio",
+  "postgres",
+  "macros",
+  "migrate",
+  "uuid",
+  "time",
+] }
+thiserror = "2"
+unicode-segmentation = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# anyhow = "1"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

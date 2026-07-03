@@ -7,7 +7,11 @@ use tower::ServiceExt;
 
 #[tokio::test]
 async fn healthz_works() {
-    let app = App::build("0.0.0.0:3000").await.unwrap();
+    // TODO: config
+    let addr = "0.0.0.0:3000";
+    let pg_url = "postgres://postgres:postgres@localhost:5432/manga_theka";
+
+    let app = App::build(addr, pg_url).await.unwrap();
     let router = app.router();
     let req = Request::get("/healthz").body(Body::empty()).unwrap();
 

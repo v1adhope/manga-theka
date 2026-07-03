@@ -4,8 +4,11 @@ use manga_theka::{startup::App, telemetry};
 async fn main() -> Result<(), std::io::Error> {
     telemetry::init_subsciber("info".into());
 
-    let addr = String::from("0.0.0.0:3000");
-    let app = App::build(&addr).await?;
+    // TODO: config
+    let addr = "0.0.0.0:3000";
+    let pg_url = "postgres://postgres:postgres@localhost:5432/manga_theka";
+
+    let app = App::build(addr, pg_url).await?;
 
     tracing::info!("listening on {}", addr);
     app.run().await?;
