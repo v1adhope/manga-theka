@@ -3,9 +3,10 @@ use axum::{
     routing::{get, post},
 };
 use sqlx::PgPool;
-use tokio::{net::TcpListener, signal};
+use tokio::signal;
 
 use crate::{
+    config::Config,
     database::Database,
     route::{healthz, store_creator},
     service::Service,
@@ -13,12 +14,12 @@ use crate::{
 
 pub struct App {
     router: Router,
-    listener: TcpListener,
+    addr: String,
 }
 
 impl App {
-    pub async fn build(addr: &str, pg_url: &str) -> Result<Self, std::io::Error> {
-        let pool = PgPool::connect(pg_url)
+    pub async fn build(cfg: Config) -> Self {
+        let pool = PgPool::connect_with(cfg.database.with_db())
             .await
             .expect("failed to connect to Postgres");
         let database = Database::new(pool);
@@ -28,17 +29,21 @@ impl App {
             .route("/healthz", get(healthz))
             .route("/creator", post(store_creator))
             .with_state(service);
-        let listener = tokio::net::TcpListener::bind(addr).await?;
 
-        Ok(Self { router, listener })
+        Self {
+            router,
+            addr: cfg.addr,
+        }
     }
 
     pub fn router(&self) -> Router {
         self.router.clone()
     }
 
-    pub async fn run(self) -> Result<(), std::io::Error> {
-        axum::serve(self.listener, self.router)
+    pub async fn serve(self) -> Result<(), std::io::Error> {
+        let listener = tokio::net::TcpListener::bind(self.addr).await?;
+
+        axum::serve(listener, self.router)
             .with_graceful_shutdown(shutdown_signal())
             .await
     }

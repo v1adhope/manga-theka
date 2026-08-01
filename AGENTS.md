@@ -11,6 +11,7 @@ This is an API for reading and hosting user-uploaded manga, manhwa, and manhua.
 
 - Use simple ASCII punctuation unless a file format requires otherwise.
 - Keep credentials, tokens, sessions, history, caches, logs, and runtime databases out of this repository.
+- Keep `CHANGELOG.md` in sync. Make point short, don't expose implementation.
 
 ## Safety
 
@@ -18,7 +19,7 @@ This is an API for reading and hosting user-uploaded manga, manhwa, and manhua.
 
 ## Commands
 
-- Refer to `taskfile.yml` for executable Bash commands.
+- Refer to `taskfile.yml` for executable Bash commands. Run `task --list` to check available.
 
 ## Documentation hierarchy
 

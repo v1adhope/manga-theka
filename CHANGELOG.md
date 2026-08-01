@@ -17,3 +17,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Docker compose with `postgres`
 - Migrations for `creator_roles`, `creators`, `content_ratings`, `book_statuses`,
   `images`, `book_types`, `languages`, `books`, `label_types`, `labels`
+- Configuration via `.env`

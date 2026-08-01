@@ -1,5 +1,9 @@
 # rust.md
 
+## Conventions
+
+- Don't use unsafe code.
+
 ## Dependencies & Versioning
 
 - Refer to `../Cargo.toml` for actual crate versions and active dependencies.

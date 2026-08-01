@@ -1,21 +1,19 @@
+mod helpers;
+
 use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use manga_theka::startup::App;
 use tower::ServiceExt;
+
+use crate::helpers::spawn_app;
 
 #[tokio::test]
 async fn healthz_works() {
-    // TODO: config
-    let addr = "0.0.0.0:3000";
-    let pg_url = "postgres://postgres:postgres@localhost:5432/manga_theka";
-
-    let app = App::build(addr, pg_url).await.unwrap();
-    let router = app.router();
+    let app = spawn_app().await;
     let req = Request::get("/healthz").body(Body::empty()).unwrap();
 
-    let resp = router.oneshot(req).await.unwrap();
+    let resp = app.router.oneshot(req).await.unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
 }

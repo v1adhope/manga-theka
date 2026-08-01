@@ -1,17 +1,14 @@
-use manga_theka::{startup::App, telemetry};
+use manga_theka::{config::Config, startup::App, telemetry};
 
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
-    telemetry::init_subsciber("info".into());
+    let cfg = Config::from_env();
 
-    // TODO: config
-    let addr = "0.0.0.0:3000";
-    let pg_url = "postgres://postgres:postgres@localhost:5432/manga_theka";
+    telemetry::init_subsciber(cfg.log_level.clone());
+    tracing::info!("listening on {}", cfg.addr);
 
-    let app = App::build(addr, pg_url).await?;
-
-    tracing::info!("listening on {}", addr);
-    app.run().await?;
+    let app = App::build(cfg).await;
+    app.serve().await?;
 
     Ok(())
 }
