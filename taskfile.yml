@@ -18,6 +18,10 @@ tasks:
     cmds:
       - cargo test
 
+  test-watch:
+    desc: Background test watching
+      - bacon test
+
   fmt:
     desc: Check code formatting
     cmds:

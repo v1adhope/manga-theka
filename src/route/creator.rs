@@ -1,5 +1,5 @@
 use axum::{Json, extract::State, http::StatusCode};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -36,15 +36,21 @@ impl TryFrom<(StoreCreatorReq, Uuid, OffsetDateTime)> for Creator {
     }
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreCreatorResp {
+    pub id: Uuid,
+}
+
 pub async fn store_creator(
     State(service): State<Service>,
     Json(req): Json<StoreCreatorReq>,
-) -> Result<StatusCode, AppError> {
+) -> Result<(StatusCode, Json<StoreCreatorResp>), AppError> {
     let id = Uuid::now_v7();
     let created_at = OffsetDateTime::now_utc();
     let creator: Creator = (req, id, created_at).try_into()?;
 
     service.store_creator(creator).await?;
 
-    Ok(StatusCode::OK)
+    Ok((StatusCode::CREATED, Json(StoreCreatorResp { id })))
 }
