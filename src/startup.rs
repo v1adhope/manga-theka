@@ -8,7 +8,7 @@ use tokio::signal;
 use crate::{
     config::Config,
     database::Database,
-    route::{healthz, store_creator},
+    route::{delete_creator, get_creator, get_creators, healthz, store_creator, update_creator},
     service::Service,
 };
 
@@ -18,7 +18,7 @@ pub struct App {
 }
 
 impl App {
-    pub async fn build(cfg: Config) -> Self {
+    pub async fn build(cfg: &Config) -> Self {
         let pool = PgPool::connect_with(cfg.database.with_db())
             .await
             .expect("failed to connect to Postgres");
@@ -27,12 +27,16 @@ impl App {
 
         let router = Router::new()
             .route("/healthz", get(healthz))
-            .route("/creator", post(store_creator))
+            .route("/creators", post(store_creator).get(get_creators))
+            .route(
+                "/creators/{id}",
+                get(get_creator).put(update_creator).delete(delete_creator),
+            )
             .with_state(service);
 
         Self {
             router,
-            addr: cfg.addr,
+            addr: cfg.addr.clone(),
         }
     }
 

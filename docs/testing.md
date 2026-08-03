@@ -41,3 +41,7 @@ Don't mock:
 - Your own classes/modules
 - Internal collaborators
 - Anything you control
+
+## Conventions
+
+- Ask befor edit test.

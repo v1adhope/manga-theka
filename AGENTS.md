@@ -11,7 +11,7 @@ This is an API for reading and hosting user-uploaded manga, manhwa, and manhua.
 
 - Use simple ASCII punctuation unless a file format requires otherwise.
 - Keep credentials, tokens, sessions, history, caches, logs, and runtime databases out of this repository.
-- Keep `CHANGELOG.md` in sync. Make point short, don't expose implementation.
+- Make `CHANGELOG.md` point short, don't expose implementation. Don't edit if not asked.
 
 ## Safety
 
@@ -26,3 +26,4 @@ This is an API for reading and hosting user-uploaded manga, manhwa, and manhua.
 - See `docs/rust.md` for Rust coding standards, style, and patterns.
 - See `docs/git.md` for Version control, branching, and commit rules.
 - See `docs/testing.md` for testing strategy, guidelines, and coverage requirements.
+- See `docs/sql.md` for SQL coding standards, query guidelines, and schema conventions.

@@ -2,7 +2,12 @@
 
 ## Conventions
 
-- Don't use unsafe code.
+- Don't use `unsafe` code.
+- Follow `Guard Clause` / `Early Return Pattern`.
+- Traits such as `From`, `TryFrom`, `Display`, and `Debug` represent structural behavior and syntax guarantees, not execution side-effects.
+- Log internal errors immediately at the point of failure.
+- Don't use dounle convertion like `value.as_ref().to_string()`. Implement for `value` type `to_string()` itself.
+- Don't add unused macros in `#[derive(...)` for future. Place them when need.
 
 ## Dependencies & Versioning
 

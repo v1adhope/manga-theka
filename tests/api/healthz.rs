@@ -1,4 +1,4 @@
-mod helpers;
+use crate::helpers::TestApp;
 
 use axum::{
     body::Body,
@@ -6,11 +6,9 @@ use axum::{
 };
 use tower::ServiceExt;
 
-use crate::helpers::spawn_app;
-
 #[tokio::test]
 async fn healthz_works() {
-    let app = spawn_app().await;
+    let app = TestApp::new().await;
     let req = Request::get("/healthz").body(Body::empty()).unwrap();
 
     let resp = app.router.oneshot(req).await.unwrap();

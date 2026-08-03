@@ -1,11 +1,12 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use time::OffsetDateTime;
 use unicode_segmentation::UnicodeSegmentation;
 use uuid::Uuid;
 
 use crate::error::EntityError;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Type, Deserialize)]
+#[derive(Debug, PartialEq, Eq, sqlx::Type, Deserialize, Serialize)]
 #[sqlx(type_name = "text", rename_all = "snake_case")]
 #[serde(rename_all = "camelCase")]
 pub enum CreatorRole {
@@ -13,16 +14,40 @@ pub enum CreatorRole {
     Author,
 }
 
-#[derive(Debug, Clone)]
+impl FromStr for CreatorRole {
+    type Err = EntityError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "artist" => Ok(Self::Artist),
+            "author" => Ok(Self::Author),
+            other => Err(EntityError::InvalidCreatorRole(other.to_owned())),
+        }
+    }
+}
+
+impl AsRef<str> for CreatorRole {
+    fn as_ref(&self) -> &str {
+        match self {
+            Self::Artist => "artist",
+            Self::Author => "author",
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Creator {
     pub id: Uuid,
     pub first_name: Name,
     pub last_name: Name,
     pub role: CreatorRole,
+    #[serde(with = "time::serde::rfc3339")]
     pub created_at: OffsetDateTime,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Name(String);
 
 impl TryFrom<String> for Name {

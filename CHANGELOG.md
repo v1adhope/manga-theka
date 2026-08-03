@@ -9,12 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- README.md
-- Taskfile with all used commands
-- Telemetry. Tracing with logger support
-- Graceful shutdown with Ctrl+C and terminate signals
-- `/healthz` route to check service health
-- Docker compose with `postgres`
+- `README.md`.
+- `taskfile.yml` with all used commands.
+- Telemetry. Tracing with logger support.
+- Graceful shutdown with Ctrl+C and terminate signals.
+- `/healthz` route to check service health.
+- Docker compose with `postgres` for local development.
 - Migrations for `creator_roles`, `creators`, `content_ratings`, `book_statuses`,
-  `images`, `book_types`, `languages`, `books`, `label_types`, `labels`
-- Configuration via `.env`
+  `images`, `book_types`, `languages`, `books`, `label_types`, `labels`.
+- Configuration via `.env`.
+- `/creators` and `/creators/{id}` for base usage with creators.

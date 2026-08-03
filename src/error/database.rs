@@ -19,13 +19,26 @@ pub enum DatabaseError {
     #[error("Creator full name has already exist")]
     CreatorFullNameDuplication(#[source] sqlx::Error),
 
+    #[error("Creator not found")]
+    CreatorNotFound,
+
+    #[error("Database invariant corrupted on field '{field}': {message}")]
+    InvariantCorrupted { field: String, message: String },
+
     #[error("Unknown database error")]
     Unknown(#[source] sqlx::Error),
 }
 
 impl DatabaseError {
-    pub fn is_unknown(&self) -> bool {
-        matches!(self, Self::Unknown(_))
+    pub fn is_internal(&self) -> bool {
+        matches!(self, Self::Unknown(_) | Self::InvariantCorrupted { .. })
+    }
+
+    pub fn invariant_corrupted(field: &str, message: impl std::error::Error) -> Self {
+        Self::InvariantCorrupted {
+            field: field.to_string(),
+            message: message.to_string(),
+        }
     }
 }
 
@@ -55,10 +68,11 @@ impl From<sqlx::Error> for DatabaseError {
 impl IntoResponse for DatabaseError {
     fn into_response(self) -> Response {
         match self {
-            Self::Unknown(_) => (
+            Self::Unknown(_) | Self::InvariantCorrupted { .. } => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Something went wrong".to_string(),
             ),
+            Self::CreatorNotFound => (StatusCode::NOT_FOUND, self.to_string()),
             e => (StatusCode::UNPROCESSABLE_ENTITY, e.to_string()),
         }
         .into_response()

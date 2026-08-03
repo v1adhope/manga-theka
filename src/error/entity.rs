@@ -13,8 +13,14 @@ pub enum EntityError {
     #[error("'{0}' exceeds character limit")]
     NameExceedsCharLimit(String),
 
-    #[error("{0} can only contains letters")]
+    #[error("'{0}' can only contains letters")]
     NameContainsNotLetters(String),
+
+    #[error("'{0}' invalid creator role")]
+    InvalidCreatorRole(String),
+
+    #[error("Limit {0} is out of range [1, {1}]")]
+    LimitOutOfRange(u32, u32),
 }
 
 impl IntoResponse for EntityError {
