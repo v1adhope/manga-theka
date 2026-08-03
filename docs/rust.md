@@ -6,12 +6,15 @@
 - Follow `Guard Clause` / `Early Return Pattern`.
 - Traits such as `From`, `TryFrom`, `Display`, and `Debug` represent structural behavior and syntax guarantees, not execution side-effects.
 - Log internal errors immediately at the point of failure.
-- Don't use dounle convertion like `value.as_ref().to_string()`. Implement for `value` type `to_string()` itself.
+- Don't use double convertion like `value.as_ref().to_string()`. Implement for `value` type `to_string()` itself.
 - Don't add unused macros in `#[derive(...)` for future. Place them when need.
+- Time format is `RFC3339`.
+- Don't pass external invalid data to the application layer, use `NewType Pattern`.
 
 ## Dependencies & Versioning
 
 - Refer to `../Cargo.toml` for actual crate versions and active dependencies.
+- Prefer the latest major version for new crates; fallback to the latest minor if unavailable.
 
 ## Project structure
 

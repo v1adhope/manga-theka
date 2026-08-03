@@ -3,5 +3,4 @@
 ## Conventions
 
 - Write queries in lowercase.
-- Name template is `<function name>.sql`.
-- Static queries should be readed from file, dynamic builded directly in code.
+- Place static queries to `<function_name>.sql` and construct dynamic queries directly in code.

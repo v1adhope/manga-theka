@@ -18,4 +18,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Migrations for `creator_roles`, `creators`, `content_ratings`, `book_statuses`,
   `images`, `book_types`, `languages`, `books`, `label_types`, `labels`.
 - Configuration via `.env`.
-- `/creators` and `/creators/{id}` for base usage with creators.
+- `/creators` and `/creators/{id}` for base creators usage.

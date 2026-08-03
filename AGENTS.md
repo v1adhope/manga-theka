@@ -27,3 +27,7 @@ This is an API for reading and hosting user-uploaded manga, manhwa, and manhua.
 - See `docs/git.md` for Version control, branching, and commit rules.
 - See `docs/testing.md` for testing strategy, guidelines, and coverage requirements.
 - See `docs/sql.md` for SQL coding standards, query guidelines, and schema conventions.
+
+## Other
+
+- Execute all tasks strictly compliant with applicable ISO, RFC, NIST, and IEEE technical and governance standards.

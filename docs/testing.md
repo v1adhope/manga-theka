@@ -42,6 +42,6 @@ Don't mock:
 - Internal collaborators
 - Anything you control
 
-## Conventions
+## Other
 
-- Ask befor edit test.
+- Never modify existing tests without explicit human confirmation.

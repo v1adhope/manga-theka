@@ -55,7 +55,7 @@ impl Database {
             item.id,
             item.first_name.as_ref(),
             item.last_name.as_ref(),
-            item.role as _,
+            item.role.as_ref() as _,
             item.created_at
         )
         .execute(&self.pool)
@@ -76,7 +76,7 @@ impl Database {
             item.id,
             item.first_name.as_ref(),
             item.last_name.as_ref(),
-            item.role as _,
+            item.role.as_ref() as _,
         )
         .fetch_optional(&self.pool)
         .await
@@ -142,11 +142,12 @@ impl Database {
 
         let mut creators: Vec<Creator> = Vec::with_capacity(rows.len());
         for row in rows {
-            creators.push(row.try_into().inspect_err(|e| {
+            let creator = row.try_into().inspect_err(|e| {
                 if DatabaseError::is_internal(e) {
                     tracing::error!("failed to convert creator row: {e:?}");
                 }
-            })?);
+            })?;
+            creators.push(creator);
         }
 
         let mut next_cursor = None;

@@ -49,7 +49,7 @@ impl TestApp {
             ("APP_ADDR", "0.0.0.0:0"),
             ("APP_LOG_LEVEL", "info"),
         ]);
-        let pool = Self::configure_database(&cfg.database).await;
+        let pool = Self::configure_db(&cfg.database).await;
         let app = App::build(&cfg).await;
 
         TestApp {
@@ -58,7 +58,7 @@ impl TestApp {
         }
     }
 
-    async fn configure_database(cfg: &Database) -> PgPool {
+    async fn configure_db(cfg: &Database) -> PgPool {
         let conn_cfg = cfg
             .without_db()
             .log_slow_statements(LevelFilter::Warn, Duration::from_secs(3));
@@ -85,17 +85,17 @@ impl TestApp {
         pool
     }
 
-    pub async fn insert_creator(&self, creator: &Creator) {
+    pub async fn insert_creator(&self, c: &Creator) {
         sqlx::query!(
             r#"
 insert into creators(id, first_name, last_name, role, created_at)
 values($1, $2, $3, $4, $5);
         "#,
-            creator.id,
-            creator.first_name.as_ref(),
-            creator.last_name.as_ref(),
-            creator.role as _,
-            creator.created_at
+            c.id,
+            c.first_name.as_ref(),
+            c.last_name.as_ref(),
+            c.role.as_ref() as _,
+            c.created_at
         )
         .execute(&self.pool)
         .await
