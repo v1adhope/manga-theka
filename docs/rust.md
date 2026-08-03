@@ -6,8 +6,8 @@
 - Follow `Guard Clause` / `Early Return Pattern`.
 - Traits such as `From`, `TryFrom`, `Display`, and `Debug` represent structural behavior and syntax guarantees, not execution side-effects.
 - Log internal errors immediately at the point of failure.
-- Don't use double convertion like `value.as_ref().to_string()`. Implement for `value` type `to_string()` itself.
-- Don't add unused macros in `#[derive(...)` for future. Place them when need.
+- Don't use double conversion like `value.as_ref().to_string()`. Implement `to_string()` for the `value` type itself.
+- Don't add unused macros in `#[derive(...)` for future. Place them when needed.
 - Time format is `RFC3339`.
 - Don't pass external invalid data to the application layer, use `NewType Pattern`.
 
@@ -22,7 +22,7 @@ All code must strictly adhere to Clean Architecture principles with explicit lay
 
 - **Domain Layer**: Contains core business entities, value objects, and domain logic.
 - **Application Layer**: Defines business use cases, application services.
-- **Infrastructure Layer**: Handles all external technical concerns, including database persistence, API integrations, framework code, hardware.
+- **Infrastructure Layer**: Handles all external technical concerns, including database persistence, API integrations, framework code, and hardware.
 - **Controllers Layer**: Handles API endpoints, request parsing, input validation, HTTP status codes, and response serialization by delegating to Application use cases.
 
 ## Behavioral guidelines

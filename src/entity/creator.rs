@@ -55,7 +55,7 @@ impl TryFrom<String> for Name {
 
     fn try_from(s: String) -> Result<Self, Self::Error> {
         if s.trim().is_empty() {
-            return Err(EntityError::NameIsEmptyOrWhitespaces(s));
+            return Err(EntityError::NameIsEmptyOrWhitespace(s));
         }
         if s.graphemes(true).count() > 255 {
             return Err(EntityError::NameExceedsCharLimit(s));
@@ -102,7 +102,7 @@ mod tests {
     }
 
     #[test]
-    fn not_latters_are_rejected() {
+    fn not_letters_are_rejected() {
         let res = Name::try_from("123".to_owned());
         assert!(res.is_err());
     }

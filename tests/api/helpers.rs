@@ -26,7 +26,7 @@ pub struct RespWrapper<T> {
 }
 
 static TRACING: LazyLock<()> = LazyLock::new(|| {
-    telemetry::init_subsciber("info".into());
+    telemetry::init_subscriber("info".into());
 });
 
 pub struct TestApp {

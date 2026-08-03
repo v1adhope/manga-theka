@@ -4,7 +4,7 @@ use manga_theka::{config::Config, startup::App, telemetry};
 async fn main() -> Result<(), std::io::Error> {
     let cfg = Config::from_env();
 
-    telemetry::init_subsciber(&cfg.log_level);
+    telemetry::init_subscriber(&cfg.log_level);
     tracing::info!("listening on {}", &cfg.addr);
 
     let app = App::build(&cfg).await;

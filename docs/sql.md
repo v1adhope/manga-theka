@@ -1,4 +1,4 @@
-# git.md
+# sql.md
 
 ## Conventions
 

@@ -7,16 +7,16 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum DatabaseError {
-    #[error("Creator first name exceeds the 255 character limit")]
+    #[error("Creator first name exceeds the 255-character limit")]
     CreatorFirstNameTooLong(#[source] sqlx::Error),
 
-    #[error("Creator last name exceeds the 255 character limit")]
+    #[error("Creator last name exceeds the 255-character limit")]
     CreatorLastNameTooLong(#[source] sqlx::Error),
 
-    #[error("Create role doesn't exist")]
+    #[error("Creator role doesn't exist")]
     CreatorRoleDoesNotExist(#[source] sqlx::Error),
 
-    #[error("Creator full name has already exist")]
+    #[error("Creator full name already exists")]
     CreatorFullNameDuplication(#[source] sqlx::Error),
 
     #[error("Creator not found")]

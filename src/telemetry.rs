@@ -1,7 +1,7 @@
 use tracing_log::LogTracer;
 use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt};
 
-pub fn init_subsciber(env_filter: &str) {
+pub fn init_subscriber(env_filter: &str) {
     LogTracer::init().expect("failed to set global logger");
 
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(env_filter));
