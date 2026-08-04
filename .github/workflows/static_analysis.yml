@@ -1,4 +1,4 @@
-name: Static Analysis
+name: Static Analysis (stable)
 
 on:
   push:
@@ -29,3 +29,6 @@ jobs:
 
       - name: Run Clippy
         run: cargo clippy -- -D warnings
+
+      - name: cargo-machete
+        uses: bnjbvr/cargo-machete@main

@@ -38,18 +38,24 @@ tasks:
     cmds:
       - cargo audit
 
+  machete:
+    desc: Detect unused dependencies
+    cmds:
+      - cargo machete
+
   code-cov:
     desc: Measure test coverage with tarpaulin (ignoring tests)
     cmds:
       - cargo tarpaulin --ignore-tests
 
   push-prepare:
-    desc: Run all git pre-push checks (fmt, lint, audit, test, build, coverage)
+    desc: Run all git pre-push checks (sqlx-prepare, fmt, lint, audit, machete, test, build, coverage)
     cmds:
       - task: sqlx-prepare
       - task: fmt
       - task: lint
       - task: audit
+      - task: machete
       - task: test
       - task: build
       - task: code-cov
