@@ -97,4 +97,4 @@ tasks:
   sqlx-prepare:
     desc: Generate sqlx offline query data for cargo build
     cmds:
-      - cargo sqlx prepare
+      - cargo sqlx prepare --all
