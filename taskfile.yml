@@ -46,6 +46,7 @@ tasks:
   push-prepare:
     desc: Run all git pre-push checks (fmt, lint, audit, test, build, coverage)
     cmds:
+      - task: sqlx-prepare
       - task: fmt
       - task: lint
       - task: audit
@@ -92,3 +93,8 @@ tasks:
     desc: Revert the most recent database migration
     cmds:
       - sqlx migrate revert
+
+  sqlx-prepare:
+    desc: Generate sqlx offline query data for cargo build
+    cmds:
+      - cargo sqlx prepare
