@@ -1,5 +1,7 @@
 # Creators API: plural REST with `{data}` envelope and UUID-v7 cursor pagination
 
+Status: partially superseded by ADR-0003 (duplicate-name status code -- the project now uses 409 Conflict for duplicate resource conflicts per RFC 9110 §15.5.10, not 422 Unprocessable Content).
+
 The creators API uses plural REST routes (`/creators`, `/creators/{id}`) with a uniform `{data: ...}` response envelope across all endpoints — including the existing `POST /creators`, which was migrated from the singular `/creator` path with a bare `{id}` body. Responses wrap payloads in `{data}` so single-item, list, and create-acknowledgement responses share one shape; `nextCursor` is always present (no `skip_serializing_if`) and is `null` at end of list.
 
 List pagination is cursor-based on the raw UUID v7 id (`?after=<uuid>&limit=<n>`, `WHERE id < $after ORDER BY id DESC`), over-fetching by one row to detect the next page in a single query. The v7 id encodes creation time, so ordering by id is equivalent to ordering by `created_at` with no ties possible — a separate `created_at` cursor was rejected as redundant. Opaque/base64 cursors were rejected in favor of raw UUIDs for debuggability while no client depends on the wire format yet.
