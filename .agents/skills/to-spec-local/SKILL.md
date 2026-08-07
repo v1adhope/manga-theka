@@ -1,5 +1,5 @@
 ---
-name: to-spec-stateless
+name: to-spec-local
 description: Turn the current conversation into a spec in markdown format — no interview, just synthesis of what you've already discussed.
 disable-model-invocation: true
 ---
