@@ -89,7 +89,7 @@ The physical position of a Book Cover or `Chapter Page` within its parent, start
 _Avoid_: Number, Position, Rank (see `Chapter Number` for the semantic counterpart)
 
 **Chapter Release**:
-A single-language set of `Chapter Page`s submitted in one upload. A `Chapter` may have multiple Releases -- different languages, or competing releases in the same language. The release itself (its `Chapter` and language) is fixed after creation; its pages can be individually replaced, inserted, removed, or reordered.
+A single-language set of `Chapter Page`s submitted in one upload. A `Chapter` may have multiple Releases -- different languages, or competing releases in the same language. The release itself (its `Chapter` and language) is fixed after creation; its pages can be individually replaced, inserted, removed, or reordered. Always a translation -- its language can never be the `Book`'s original publication language.
 _Avoid_: Scan, Scanlation, Version
 
 **Chapter Page**:
