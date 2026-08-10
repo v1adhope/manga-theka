@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::error::EntityError;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub enum LabelKind {
     Genre,
     Tag,
