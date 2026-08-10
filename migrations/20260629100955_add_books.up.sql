@@ -9,7 +9,7 @@ create table if not exists books (
 	created_at timestamptz not null,
 	artist uuid not null,
 	author uuid not null,
-	type text not null,
+	kind text not null,
 	publication_language uuid not null,
 
 	constraint pk_books_id primary key(id),
@@ -19,6 +19,6 @@ create table if not exists books (
 	constraint enum_books_status check(status in ('Ongoing', 'Completed', 'Hiatus', 'Cancelled')),
 	constraint fk_books_creators_artist foreign key(artist) references creators(id),
 	constraint fk_books_creators_author foreign key(author) references creators(id),
-	constraint enum_books_type check(type in ('Manga', 'Manhwa', 'Manhua')),
+	constraint enum_books_kind check(kind in ('Manga', 'Manhwa', 'Manhua')),
 	constraint fk_books_languages_publication_language foreign key(publication_language) references languages(id)
 );
