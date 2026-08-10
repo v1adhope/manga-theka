@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into book_links(id, book_id, kind, url)\nselect link.id, $1, link.kind, link.url\nfrom unnest($2::uuid[], $3::text[], $4::text[]) as link(id, kind, url);\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray",
+        "TextArray",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a2177d271e62b755b8f5ec0a366a3f2612ee259d947c7aa37d58ba30dff7b393"
+}

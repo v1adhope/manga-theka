@@ -1,9 +1,11 @@
+mod book;
 mod content_rating;
 mod creator;
 mod healthz;
 mod label;
 mod language;
 
+pub use book::*;
 pub use content_rating::*;
 pub use creator::*;
 pub use healthz::*;

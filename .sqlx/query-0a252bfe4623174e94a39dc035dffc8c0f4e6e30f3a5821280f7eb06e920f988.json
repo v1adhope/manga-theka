@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select labels.id, labels.name, labels.kind\nfrom labels\njoin book_labels on book_labels.label_id = labels.id\nwhere book_labels.book_id = $1\norder by labels.name;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "labels",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "labels",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "labels",
+            "name": "kind"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "0a252bfe4623174e94a39dc035dffc8c0f4e6e30f3a5821280f7eb06e920f988"
+}

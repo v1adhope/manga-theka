@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update books\nset name = $2, description = $3, publication_year = $4, content_rating = $5, status = $6,\n    kind = $7, publication_language = $8, author = $9, artist = $10, updated_at = $11\nwhere id = $1\nreturning id;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "books",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Int2",
+        "Uuid",
+        "Text",
+        "Text",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "47faa005cf68ac5d9872e777629e71ebbd785ee9ab7e2e9d1982230f6b1bf305"
+}

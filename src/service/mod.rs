@@ -1,3 +1,4 @@
+mod book;
 mod content_rating;
 mod creator;
 mod label;

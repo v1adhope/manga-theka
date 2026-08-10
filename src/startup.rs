@@ -9,8 +9,9 @@ use crate::{
     config::Config,
     database::Database,
     route::{
-        delete_creator, get_content_ratings, get_creator, get_creators, get_labels, get_languages,
-        healthz, store_creator, update_creator,
+        delete_book, delete_creator, get_book, get_books, get_content_ratings, get_creator,
+        get_creators, get_labels, get_languages, healthz, store_book, store_creator, update_book,
+        update_creator,
     },
     service::Service,
 };
@@ -37,6 +38,11 @@ impl App {
             .route(
                 "/creators/{id}",
                 get(get_creator).put(update_creator).delete(delete_creator),
+            )
+            .route("/books", post(store_book).get(get_books))
+            .route(
+                "/books/{id}",
+                get(get_book).put(update_book).delete(delete_book),
             )
             .with_state(service);
 
