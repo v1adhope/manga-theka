@@ -13,7 +13,7 @@ const GENRE_NAMES: [&str; 5] = ["Action", "Adventure", "Comedy", "Crime", "Drama
 const TAG_NAMES: [&str; 5] = ["Mafia", "Music", "School Life", "Survival", "Time Travel"];
 
 #[tokio::test]
-async fn get_labels_with_no_filter_returns_all_labels() {
+async fn get_labels_with_no_filter_returns_seeded_labels() {
     let app = TestApp::new().await;
 
     let req = Request::get("/labels").body(Body::empty()).unwrap();
