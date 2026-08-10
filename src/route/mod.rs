@@ -1,8 +1,14 @@
+mod content_rating;
 mod creator;
 mod healthz;
+mod label;
+mod language;
 
+pub use content_rating::*;
 pub use creator::*;
 pub use healthz::*;
+pub use label::*;
+pub use language::*;
 
 use axum::{Json, http::StatusCode};
 use serde::Serialize;

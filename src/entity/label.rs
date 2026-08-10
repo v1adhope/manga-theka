@@ -1,0 +1,40 @@
+use serde::{Deserialize, Serialize};
+use std::str::FromStr;
+use uuid::Uuid;
+
+use crate::error::EntityError;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+pub enum LabelType {
+    Genre,
+    Tag,
+}
+
+impl FromStr for LabelType {
+    type Err = EntityError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Genre" => Ok(Self::Genre),
+            "Tag" => Ok(Self::Tag),
+            other => Err(EntityError::InvalidLabelType(other.to_owned())),
+        }
+    }
+}
+
+impl AsRef<str> for LabelType {
+    fn as_ref(&self) -> &str {
+        match self {
+            Self::Genre => "Genre",
+            Self::Tag => "Tag",
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Label {
+    pub id: Uuid,
+    pub name: String,
+    pub r#type: LabelType,
+}

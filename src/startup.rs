@@ -8,7 +8,10 @@ use tokio::signal;
 use crate::{
     config::Config,
     database::Database,
-    route::{delete_creator, get_creator, get_creators, healthz, store_creator, update_creator},
+    route::{
+        delete_creator, get_content_ratings, get_creator, get_creators, get_labels, get_languages,
+        healthz, store_creator, update_creator,
+    },
     service::Service,
 };
 
@@ -27,6 +30,9 @@ impl App {
 
         let router = Router::new()
             .route("/healthz", get(healthz))
+            .route("/content_ratings", get(get_content_ratings))
+            .route("/languages", get(get_languages))
+            .route("/labels", get(get_labels))
             .route("/creators", post(store_creator).get(get_creators))
             .route(
                 "/creators/{id}",
