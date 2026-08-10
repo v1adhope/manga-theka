@@ -16,8 +16,8 @@ impl FromStr for LabelKind {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "Genre" => Ok(Self::Genre),
-            "Tag" => Ok(Self::Tag),
+            "genre" => Ok(Self::Genre),
+            "tag" => Ok(Self::Tag),
             other => Err(EntityError::InvalidLabelKind(other.to_owned())),
         }
     }
@@ -26,8 +26,8 @@ impl FromStr for LabelKind {
 impl AsRef<str> for LabelKind {
     fn as_ref(&self) -> &str {
         match self {
-            Self::Genre => "Genre",
-            Self::Tag => "Tag",
+            Self::Genre => "genre",
+            Self::Tag => "tag",
         }
     }
 }
