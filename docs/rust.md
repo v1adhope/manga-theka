@@ -11,6 +11,7 @@
 - Derive what you use now — add macros when a real need arises, not in advance for possible future use. Exception is `Debug`.
 - Avoid chained conversions like `value.as_ref().to_string()` — implement the target conversion directly on value's type instead of composing it from intermediate ones.
 - Traits such as `From`, `TryFrom`, `Display`, and `Debug` represent structural behavior and syntax guarantees, not execution side-effects.
+- Flag if expected to use raw identifier syntax like `r#type`.
 
 ## Dependencies & Versioning
 
