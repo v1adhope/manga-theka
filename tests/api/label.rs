@@ -7,7 +7,7 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 use crate::helpers::{RespWrapper, TestApp};
-use manga_theka::entity::{Label, LabelType};
+use manga_theka::entity::{Label, LabelKind};
 
 #[tokio::test]
 async fn get_labels_with_no_filter_returns_all_labels() {
@@ -16,13 +16,13 @@ async fn get_labels_with_no_filter_returns_all_labels() {
     app.insert_label(&Label {
         id: Uuid::now_v7(),
         name: "Isekai".to_owned(),
-        r#type: LabelType::Genre,
+        kind: LabelKind::Genre,
     })
     .await;
     app.insert_label(&Label {
         id: Uuid::now_v7(),
         name: "Completed Translation".to_owned(),
-        r#type: LabelType::Tag,
+        kind: LabelKind::Tag,
     })
     .await;
 
@@ -47,17 +47,17 @@ async fn get_labels_filtered_by_genre_returns_only_genre_labels() {
     app.insert_label(&Label {
         id: Uuid::now_v7(),
         name: "Isekai".to_owned(),
-        r#type: LabelType::Genre,
+        kind: LabelKind::Genre,
     })
     .await;
     app.insert_label(&Label {
         id: Uuid::now_v7(),
         name: "Completed Translation".to_owned(),
-        r#type: LabelType::Tag,
+        kind: LabelKind::Tag,
     })
     .await;
 
-    let req = Request::get("/labels?type=Genre")
+    let req = Request::get("/labels?kind=Genre")
         .body(Body::empty())
         .unwrap();
     let resp = app.router.oneshot(req).await.unwrap();
@@ -77,17 +77,17 @@ async fn get_labels_filtered_by_tag_returns_only_tag_labels() {
     app.insert_label(&Label {
         id: Uuid::now_v7(),
         name: "Isekai".to_owned(),
-        r#type: LabelType::Genre,
+        kind: LabelKind::Genre,
     })
     .await;
     app.insert_label(&Label {
         id: Uuid::now_v7(),
         name: "Completed Translation".to_owned(),
-        r#type: LabelType::Tag,
+        kind: LabelKind::Tag,
     })
     .await;
 
-    let req = Request::get("/labels?type=Tag")
+    let req = Request::get("/labels?kind=Tag")
         .body(Body::empty())
         .unwrap();
     let resp = app.router.oneshot(req).await.unwrap();
@@ -101,10 +101,10 @@ async fn get_labels_filtered_by_tag_returns_only_tag_labels() {
 }
 
 #[tokio::test]
-async fn get_labels_with_invalid_type_returns_422() {
+async fn get_labels_with_invalid_kind_returns_422() {
     let app = TestApp::new().await;
 
-    let req = Request::get("/labels?type=NotAType")
+    let req = Request::get("/labels?kind=NotAType")
         .body(Body::empty())
         .unwrap();
     let resp = app.router.oneshot(req).await.unwrap();

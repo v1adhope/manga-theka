@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use crate::{
     database::Database,
-    entity::{Label, LabelType},
+    entity::{Label, LabelKind},
     error::DatabaseError,
 };
 
@@ -11,22 +11,22 @@ use crate::{
 struct LabelRow {
     id: Uuid,
     name: String,
-    r#type: String,
+    kind: String,
 }
 
 impl TryFrom<LabelRow> for Label {
     type Error = DatabaseError;
 
     fn try_from(row: LabelRow) -> Result<Self, Self::Error> {
-        let r#type: LabelType = row
-            .r#type
+        let kind: LabelKind = row
+            .kind
             .parse()
-            .map_err(|e| DatabaseError::invariant_corrupted("type", e))?;
+            .map_err(|e| DatabaseError::invariant_corrupted("kind", e))?;
 
         Ok(Label {
             id: row.id,
             name: row.name,
-            r#type,
+            kind,
         })
     }
 }
@@ -34,15 +34,15 @@ impl TryFrom<LabelRow> for Label {
 impl Database {
     pub async fn get_labels(
         &self,
-        label_type: Option<LabelType>,
+        label_kind: Option<LabelKind>,
     ) -> Result<Vec<Label>, DatabaseError> {
         let mut builder: QueryBuilder<Postgres> =
-            QueryBuilder::new("select id, name, type from labels");
+            QueryBuilder::new("select id, name, kind from labels");
 
-        if let Some(label_type) = label_type {
+        if let Some(label_kind) = label_kind {
             builder
-                .push(" where type = ")
-                .push_bind(label_type.as_ref());
+                .push(" where kind = ")
+                .push_bind(label_kind.as_ref());
         }
 
         builder.push(" order by name");

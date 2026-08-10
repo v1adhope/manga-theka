@@ -105,12 +105,12 @@ values($1, $2, $3, $4, $5);
     pub async fn insert_label(&self, l: &Label) {
         sqlx::query!(
             r#"
-insert into labels(id, name, type)
+insert into labels(id, name, kind)
 values($1, $2, $3);
         "#,
             l.id,
             l.name,
-            l.r#type.as_ref() as _
+            l.kind.as_ref() as _
         )
         .execute(&self.pool)
         .await

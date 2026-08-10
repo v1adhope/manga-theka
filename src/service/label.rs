@@ -1,5 +1,5 @@
 use crate::{
-    entity::{Label, LabelType},
+    entity::{Label, LabelKind},
     error::ServiceError,
     service::Service,
 };
@@ -7,10 +7,10 @@ use crate::{
 impl Service {
     pub async fn get_labels(
         &self,
-        label_type: Option<LabelType>,
+        label_kind: Option<LabelKind>,
     ) -> Result<Vec<Label>, ServiceError> {
         self.database
-            .get_labels(label_type)
+            .get_labels(label_kind)
             .await
             .map_err(Into::into)
     }
