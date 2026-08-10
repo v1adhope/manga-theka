@@ -8,7 +8,7 @@ use fake::faker::name::en::FirstName;
 use fake::rand::RngExt;
 use manga_theka::{
     config::{Config, Database},
-    entity::{Creator, CreatorRole, Label, Name},
+    entity::{Creator, CreatorRole, Name},
     startup::App,
     telemetry,
 };
@@ -100,21 +100,6 @@ values($1, $2, $3, $4, $5);
         .execute(&self.pool)
         .await
         .expect("failed to insert factory creator");
-    }
-
-    pub async fn insert_label(&self, l: &Label) {
-        sqlx::query!(
-            r#"
-insert into labels(id, name, kind)
-values($1, $2, $3);
-        "#,
-            l.id,
-            l.name,
-            l.kind.as_ref() as _
-        )
-        .execute(&self.pool)
-        .await
-        .expect("failed to insert factory label");
     }
 }
 
