@@ -5,6 +5,7 @@ use uuid::Uuid;
 use crate::error::EntityError;
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum LabelKind {
     Genre,
     Tag,

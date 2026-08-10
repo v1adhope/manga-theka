@@ -37,7 +37,7 @@ async fn get_labels_with_no_filter_returns_seeded_labels() {
 async fn get_labels_filtered_by_genre_returns_only_genre_labels() {
     let app = TestApp::new().await;
 
-    let req = Request::get("/labels?kind=Genre")
+    let req = Request::get("/labels?kind=genre")
         .body(Body::empty())
         .unwrap();
     let resp = app.router.oneshot(req).await.unwrap();
@@ -66,7 +66,7 @@ async fn get_labels_filtered_by_genre_returns_only_genre_labels() {
 async fn get_labels_filtered_by_tag_returns_only_tag_labels() {
     let app = TestApp::new().await;
 
-    let req = Request::get("/labels?kind=Tag")
+    let req = Request::get("/labels?kind=tag")
         .body(Body::empty())
         .unwrap();
     let resp = app.router.oneshot(req).await.unwrap();
@@ -92,14 +92,14 @@ async fn get_labels_filtered_by_tag_returns_only_tag_labels() {
 }
 
 #[tokio::test]
-async fn get_labels_with_invalid_kind_returns_422() {
+async fn get_labels_with_invalid_kind_returns_400() {
     let app = TestApp::new().await;
 
     let req = Request::get("/labels?kind=NotAType")
         .body(Body::empty())
         .unwrap();
     let resp = app.router.oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     assert!(
         !resp
             .into_body()

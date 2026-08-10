@@ -5,19 +5,18 @@ use axum::{
 };
 use serde::Deserialize;
 
-use crate::{error::AppError, route::json_data_response, service::Service};
+use crate::{entity::LabelKind, error::AppError, route::json_data_response, service::Service};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetLabelsQuery {
-    pub kind: Option<String>,
+    pub kind: Option<LabelKind>,
 }
 
 pub async fn get_labels(
     State(service): State<Service>,
     Query(query): Query<GetLabelsQuery>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    let label_kind = query.kind.map(|t| t.parse()).transpose()?;
-    let labels = service.get_labels(label_kind).await?;
+    let labels = service.get_labels(query.kind).await?;
     Ok(json_data_response(StatusCode::OK, labels))
 }
