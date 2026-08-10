@@ -19,6 +19,9 @@ pub enum EntityError {
     #[error("'{0}' invalid creator role")]
     InvalidCreatorRole(String),
 
+    #[error("'{0}' invalid label kind")]
+    InvalidLabelKind(String),
+
     #[error("Limit {0} is out of range [1, {1}]")]
     LimitOutOfRange(u32, u32),
 }

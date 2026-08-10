@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::error::EntityError;
 
-#[derive(Debug, PartialEq, Eq, sqlx::Type, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, sqlx::Type, Deserialize, Serialize)]
 #[sqlx(type_name = "text", rename_all = "snake_case")]
 #[serde(rename_all = "camelCase")]
 pub enum CreatorRole {
@@ -46,7 +46,7 @@ pub struct Creator {
     pub created_at: OffsetDateTime,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Name(String);
 

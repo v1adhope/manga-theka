@@ -16,19 +16,20 @@ insert
 	name,
 	code)
 values ('019f124b-314f-73fc-8310-701df63eacea',
-'EVERYONE',
+'Everyone',
 'E'),
 	   ('019f125c-33ef-753d-984f-08781390d2f4',
-'TEEN',
+'Teen',
 'T'),
 	   ('019f125c-bf63-7578-a57d-16f2f593c365',
-'TEEN PLUS',
+'Teen Plus',
 'T+'),
 	   ('019f125d-2006-7a75-bcc2-4fc07e370d2d',
-'MATURE',
+'Mature',
 'M')
 on
 conflict(code) do
 update
 set
-	code = excluded.code;
+	code = excluded.code,
+	name = excluded.name;

@@ -12,6 +12,7 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 - **Close**: `gh issue close <number> --comment "..."`
 
 Infer the repo from `git remote -v` — `gh` does this automatically when run inside a clone.
+PRs run through the same labels and states as issues, using the `gh pr` equivalents.
 
 ## Triage labels
 
