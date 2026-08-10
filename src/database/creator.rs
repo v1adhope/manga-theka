@@ -2,14 +2,10 @@ use sqlx::{Postgres, QueryBuilder};
 use uuid::Uuid;
 
 use crate::{
+    database::Database,
     entity::{Creator, CreatorRole, Name, Pagination},
     error::DatabaseError,
 };
-
-#[derive(Debug, Clone)]
-pub struct Database {
-    pub pool: sqlx::PgPool,
-}
 
 #[derive(sqlx::FromRow)]
 struct CreatorRow {
@@ -45,10 +41,6 @@ impl TryFrom<CreatorRow> for Creator {
 
 // TODO: tune tracing
 impl Database {
-    pub fn new(pool: sqlx::PgPool) -> Self {
-        Self { pool }
-    }
-
     pub async fn store_creator(&self, item: Creator) -> Result<(), DatabaseError> {
         sqlx::query_file!(
             "queries/store_creator.sql",
