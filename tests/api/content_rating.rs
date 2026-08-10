@@ -13,7 +13,7 @@ use manga_theka::entity::ContentRating;
 async fn get_content_ratings_returns_seeded_set() {
     let app = TestApp::new().await;
 
-    let req = Request::get("/content_ratings")
+    let req = Request::get("/content-ratings")
         .body(Body::empty())
         .unwrap();
     let resp = app.router.oneshot(req).await.unwrap();

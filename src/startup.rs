@@ -30,7 +30,7 @@ impl App {
 
         let router = Router::new()
             .route("/healthz", get(healthz))
-            .route("/content_ratings", get(get_content_ratings))
+            .route("/content-ratings", get(get_content_ratings))
             .route("/languages", get(get_languages))
             .route("/labels", get(get_labels))
             .route("/creators", post(store_creator).get(get_creators))
