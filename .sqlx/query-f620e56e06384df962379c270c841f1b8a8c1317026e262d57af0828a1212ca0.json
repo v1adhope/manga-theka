@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select labels.id, labels.name, labels.kind\nfrom labels\njoin book_labels on book_labels.label_id = labels.id\nwhere book_labels.book_id = $1\norder by labels.name;\n",
+  "query": "select l.id, l.name, l.kind\nfrom labels l\njoin book_labels bl on bl.label_id = l.id\nwhere bl.book_id = $1\norder by l.name;\n",
   "describe": {
     "columns": [
       {
@@ -48,5 +48,5 @@
       false
     ]
   },
-  "hash": "0a252bfe4623174e94a39dc035dffc8c0f4e6e30f3a5821280f7eb06e920f988"
+  "hash": "f620e56e06384df962379c270c841f1b8a8c1317026e262d57af0828a1212ca0"
 }

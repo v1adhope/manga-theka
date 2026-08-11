@@ -1,5 +1,5 @@
-select labels.id, labels.name, labels.kind
-from labels
-join book_labels on book_labels.label_id = labels.id
-where book_labels.book_id = $1
-order by labels.name;
+select l.id, l.name, l.kind
+from labels l
+join book_labels bl on bl.label_id = l.id
+where bl.book_id = $1
+order by l.name;

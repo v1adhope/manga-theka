@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select creators.id, creators.first_name, creators.last_name, creators.role, creators.created_at\nfrom creators\njoin book_creators on book_creators.creator_id = creators.id\nwhere book_creators.book_id = $1\norder by creators.last_name, creators.first_name;\n",
+  "query": "select c.id, c.first_name, c.last_name, c.role, c.created_at\nfrom creators c\njoin book_creators bc on bc.creator_id = c.id\nwhere bc.book_id = $1\norder by c.id;\n",
   "describe": {
     "columns": [
       {
@@ -72,5 +72,5 @@
       false
     ]
   },
-  "hash": "db3ddb6d8753f94208f10d2b958b6b0dbcb245326950f3c2f8c9cac2468ff27e"
+  "hash": "e774d82218a7438e82478caa09b56c407769ba22fd37d0dd4274635efb5ee21d"
 }
