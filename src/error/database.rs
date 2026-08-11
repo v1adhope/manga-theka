@@ -64,9 +64,6 @@ pub enum DatabaseError {
     #[error("Alternative title is attached more than once")]
     BookTitleNameDuplication(#[source] sqlx::Error),
 
-    #[error("Alternative titles exceed the limit of 12")]
-    BookTitlesExceedLimit(#[source] sqlx::Error),
-
     #[error("Book not found")]
     BookNotFound,
 
@@ -147,9 +144,6 @@ impl From<sqlx::Error> for DatabaseError {
                 }
                 Some("unique_book_titles_book_id_language_id_name") => {
                     return Self::BookTitleNameDuplication(err);
-                }
-                Some("check_count_book_titles_book_id") => {
-                    return Self::BookTitlesExceedLimit(err);
                 }
                 _ => {}
             }

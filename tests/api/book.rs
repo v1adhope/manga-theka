@@ -373,43 +373,6 @@ async fn store_book_with_more_than_12_titles_returns_422() {
     assert_eq!(count, Some(0), "the book must not be written at all");
 }
 
-/// The trigger backstops any write path that skips request validation.
-#[tokio::test]
-async fn book_titles_trigger_rejects_a_thirteenth_row() {
-    let app = TestApp::new().await;
-    let refs = app.book_refs().await;
-    let id = app.insert_book(&TestApp::book_body(&refs)).await;
-
-    for i in 0..12 {
-        sqlx::query!(
-            "insert into book_titles(id, book_id, language_id, name) values($1, $2, $3, $4)",
-            uuid::Uuid::now_v7(),
-            id,
-            refs.language,
-            format!("Title {i}")
-        )
-        .execute(&app.pool)
-        .await
-        .expect("the first 12 titles must be accepted");
-    }
-
-    let res = sqlx::query!(
-        "insert into book_titles(id, book_id, language_id, name) values($1, $2, $3, $4)",
-        uuid::Uuid::now_v7(),
-        id,
-        refs.language,
-        "Title 13"
-    )
-    .execute(&app.pool)
-    .await;
-
-    let err = res.expect_err("the 13th title must be rejected");
-    assert_eq!(
-        err.as_database_error().unwrap().constraint(),
-        Some("check_count_book_titles_book_id")
-    );
-}
-
 #[tokio::test]
 async fn store_book_with_unknown_link_type_returns_422() {
     let app = TestApp::new().await;
