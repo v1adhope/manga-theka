@@ -52,11 +52,17 @@ pub enum DatabaseError {
     #[error("Book link url exceeds the 2048-character limit")]
     BookLinkUrlTooLong(#[source] sqlx::Error),
 
+    #[error("Book link url is attached more than once")]
+    BookLinkUrlDuplication(#[source] sqlx::Error),
+
     #[error("Alternative title language doesn't exist")]
     BookTitleLanguageDoesNotExist(#[source] sqlx::Error),
 
     #[error("Alternative title exceeds the 255-character limit")]
     BookTitleNameTooLong(#[source] sqlx::Error),
+
+    #[error("Alternative title is attached more than once")]
+    BookTitleNameDuplication(#[source] sqlx::Error),
 
     #[error("Alternative titles exceed the limit of 12")]
     BookTitlesExceedLimit(#[source] sqlx::Error),
@@ -130,11 +136,17 @@ impl From<sqlx::Error> for DatabaseError {
                 Some("check_length_book_links_url") => {
                     return Self::BookLinkUrlTooLong(err);
                 }
+                Some("unique_book_links_book_id_link_hash") => {
+                    return Self::BookLinkUrlDuplication(err);
+                }
                 Some("fk_book_titles_languages_language_id") => {
                     return Self::BookTitleLanguageDoesNotExist(err);
                 }
                 Some("check_length_book_titles_name") => {
                     return Self::BookTitleNameTooLong(err);
+                }
+                Some("unique_book_titles_book_id_language_id_name") => {
+                    return Self::BookTitleNameDuplication(err);
                 }
                 Some("check_count_book_titles_book_id") => {
                     return Self::BookTitlesExceedLimit(err);

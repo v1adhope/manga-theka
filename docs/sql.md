@@ -11,3 +11,4 @@
 - Static queries go in `../queries/`; construct dynamic queries directly in code.
 - Use `PascalCase` for enum values.
 - Use table aliases when a query references two or more tables; qualify every column with its alias.
+- Flag if `on delete` not present on fk.
