@@ -4,7 +4,10 @@ use time::OffsetDateTime;
 use unicode_segmentation::UnicodeSegmentation;
 use uuid::Uuid;
 
-use crate::{entity::Label, error::EntityError};
+use crate::{
+    entity::{Creator, Label},
+    error::EntityError,
+};
 
 pub const MAX_TITLES: usize = 12;
 
@@ -186,8 +189,6 @@ pub struct Book {
     #[serde(rename = "type")]
     pub kind: BookKind,
     pub publication_language: Uuid,
-    pub author: Uuid,
-    pub artist: Uuid,
     #[serde(with = "time::serde::rfc3339::option")]
     pub updated_at: Option<OffsetDateTime>,
     #[serde(with = "time::serde::rfc3339")]
@@ -248,6 +249,9 @@ pub struct BookDetails {
     pub labels: Vec<Label>,
     pub links: Vec<BookLink>,
     pub titles: Vec<AlternativeTitle>,
+    /// Read-only: no book write touches `book_creators`, so this array stays
+    /// empty until a separate write path fills it.
+    pub creators: Vec<Creator>,
 }
 
 #[cfg(test)]

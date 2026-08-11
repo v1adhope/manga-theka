@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "update books\nset name = $2, description = $3, publication_year = $4, content_rating = $5, status = $6,\n    kind = $7, publication_language = $8, author = $9, artist = $10, updated_at = $11\nwhere id = $1\nreturning id;\n",
+  "query": "update books\nset name = $2, description = $3, publication_year = $4, content_rating = $5, status = $6,\n    kind = $7, publication_language = $8, updated_at = $9\nwhere id = $1\nreturning id;\n",
   "describe": {
     "columns": [
       {
@@ -25,8 +25,6 @@
         "Text",
         "Text",
         "Uuid",
-        "Uuid",
-        "Uuid",
         "Timestamptz"
       ]
     },
@@ -34,5 +32,5 @@
       false
     ]
   },
-  "hash": "47faa005cf68ac5d9872e777629e71ebbd785ee9ab7e2e9d1982230f6b1bf305"
+  "hash": "e71c9fa93812920de5dabfd3dd262235d5fbab6f408371b2348173228e755961"
 }

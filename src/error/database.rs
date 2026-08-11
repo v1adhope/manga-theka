@@ -37,12 +37,6 @@ pub enum DatabaseError {
     #[error("Book content rating doesn't exist")]
     BookContentRatingDoesNotExist(#[source] sqlx::Error),
 
-    #[error("Book author doesn't exist")]
-    BookAuthorDoesNotExist(#[source] sqlx::Error),
-
-    #[error("Book artist doesn't exist")]
-    BookArtistDoesNotExist(#[source] sqlx::Error),
-
     #[error("Book publication language doesn't exist")]
     BookPublicationLanguageDoesNotExist(#[source] sqlx::Error),
 
@@ -120,12 +114,6 @@ impl From<sqlx::Error> for DatabaseError {
                 }
                 Some("fk_books_content_ratings_content_rating") => {
                     return Self::BookContentRatingDoesNotExist(err);
-                }
-                Some("fk_books_creators_author") => {
-                    return Self::BookAuthorDoesNotExist(err);
-                }
-                Some("fk_books_creators_artist") => {
-                    return Self::BookArtistDoesNotExist(err);
                 }
                 Some("fk_books_languages_publication_language") => {
                     return Self::BookPublicationLanguageDoesNotExist(err);

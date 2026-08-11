@@ -5,8 +5,9 @@ use axum::{
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
-use crate::helpers::{RespWrapper, TestApp};
-use manga_theka::entity::Book;
+use crate::helpers::{CreatorFaker, RespWrapper, TestApp};
+use fake::Fake;
+use manga_theka::entity::{Book, Creator};
 
 #[tokio::test]
 async fn store_book_with_valid_body_passes() {
@@ -29,7 +30,7 @@ async fn store_book_with_valid_body_passes() {
     let row = sqlx::query!(
         r#"
 select id, name, description, publication_year, content_rating, status, kind,
-       publication_language, author, artist, updated_at, created_at
+       publication_language, updated_at, created_at
 from books
         "#
     )
@@ -48,8 +49,6 @@ from books
     assert_eq!(row.status, "Ongoing");
     assert_eq!(row.kind, "Manga");
     assert_eq!(row.publication_language, refs.language);
-    assert_eq!(row.author, refs.author);
-    assert_eq!(row.artist, refs.artist);
     assert!(row.updated_at.is_none());
     assert_ne!(row.created_at, time::OffsetDateTime::UNIX_EPOCH);
 }
@@ -162,8 +161,6 @@ async fn get_book_embeds_labels_links_and_titles() {
     assert_eq!(data["type"], "Manga");
     assert_eq!(data["contentRating"], refs.content_rating.to_string());
     assert_eq!(data["publicationLanguage"], refs.language.to_string());
-    assert_eq!(data["author"], refs.author.to_string());
-    assert_eq!(data["artist"], refs.artist.to_string());
     assert!(data["updatedAt"].is_null());
 
     let labels = data["labels"].as_array().unwrap();
@@ -181,6 +178,90 @@ async fn get_book_embeds_labels_links_and_titles() {
     assert_eq!(titles[0]["name"], "ベルセルク");
     assert_eq!(titles[0]["languageId"], refs.language.to_string());
     assert!(uuid::Uuid::parse_str(titles[0]["id"].as_str().unwrap()).is_ok());
+}
+
+#[tokio::test]
+async fn get_book_embeds_attached_creators() {
+    let app = TestApp::new().await;
+    let refs = app.book_refs().await;
+    let id = app.insert_book(&TestApp::book_body(&refs)).await;
+
+    let creator: Creator = CreatorFaker.fake();
+    app.insert_creator(&creator).await;
+    app.attach_creator(id, creator.id).await;
+
+    let req = Request::get(format!("/books/{id}"))
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.router.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+
+    let creators = v["data"]["creators"].as_array().unwrap();
+    assert_eq!(creators.len(), 1);
+    assert_eq!(creators[0]["id"], creator.id.to_string());
+    assert_eq!(creators[0]["firstName"], creator.first_name.as_ref());
+    assert_eq!(creators[0]["lastName"], creator.last_name.as_ref());
+    assert_eq!(creators[0]["role"], creator.role.as_ref());
+}
+
+/// The book endpoints only ever read `book_creators`, so a `PUT` must not
+/// detach the creators a separate write path attached.
+#[tokio::test]
+async fn update_book_leaves_attached_creators_alone() {
+    let app = TestApp::new().await;
+    let refs = app.book_refs().await;
+    let id = app.insert_book(&TestApp::book_body(&refs)).await;
+
+    let creator: Creator = CreatorFaker.fake();
+    app.insert_creator(&creator).await;
+    app.attach_creator(id, creator.id).await;
+
+    let mut body = TestApp::book_body(&refs);
+    body["name"] = serde_json::json!("Renamed");
+    assert_eq!(put_book(&app, id, &body).await, StatusCode::NO_CONTENT);
+
+    let attached = sqlx::query_scalar!(
+        "select creator_id from book_creators where book_id = $1",
+        id
+    )
+    .fetch_all(&app.pool)
+    .await
+    .unwrap();
+    assert_eq!(attached, vec![creator.id]);
+}
+
+/// The book endpoints never write `book_creators`, so the database detaches
+/// the rows itself when the book goes.
+#[tokio::test]
+async fn delete_book_cascades_to_its_creators() {
+    let app = TestApp::new().await;
+    let refs = app.book_refs().await;
+    let id = app.insert_book(&TestApp::book_body(&refs)).await;
+
+    let creator: Creator = CreatorFaker.fake();
+    app.insert_creator(&creator).await;
+    app.attach_creator(id, creator.id).await;
+
+    let req = Request::delete(format!("/books/{id}"))
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.router.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    let attached = sqlx::query_scalar!("select count(*) from book_creators where book_id = $1", id)
+        .fetch_one(&app.pool)
+        .await
+        .unwrap();
+    assert_eq!(attached, Some(0));
+
+    let creators = sqlx::query_scalar!("select count(*) from creators")
+        .fetch_one(&app.pool)
+        .await
+        .unwrap();
+    assert_eq!(creators, Some(1), "the creator itself must survive");
 }
 
 /// Posts `body` and asserts it is rejected as semantically invalid.
@@ -371,17 +452,6 @@ async fn store_book_with_unknown_content_rating_returns_422() {
 
     let mut body = TestApp::book_body(&refs);
     body["contentRating"] = serde_json::json!(uuid::Uuid::now_v7());
-
-    assert_store_book_returns_422(&app, body).await;
-}
-
-#[tokio::test]
-async fn store_book_with_unknown_author_returns_422() {
-    let app = TestApp::new().await;
-    let refs = app.book_refs().await;
-
-    let mut body = TestApp::book_body(&refs);
-    body["author"] = serde_json::json!(uuid::Uuid::now_v7());
 
     assert_store_book_returns_422(&app, body).await;
 }

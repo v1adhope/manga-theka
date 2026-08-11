@@ -5,7 +5,7 @@ use crate::{
     database::Database,
     entity::{
         AlternativeTitle, Book, BookDetails, BookKind, BookLink, BookLinkKind, BookName,
-        BookStatus, BookWrite, Description, Label, LinkUrl, Pagination,
+        BookStatus, BookWrite, Creator, CreatorRole, Description, Label, LinkUrl, Name, Pagination,
     },
     error::DatabaseError,
 };
@@ -20,8 +20,6 @@ struct BookRow {
     status: String,
     kind: String,
     publication_language: Uuid,
-    author: Uuid,
-    artist: Uuid,
     updated_at: Option<time::OffsetDateTime>,
     created_at: time::OffsetDateTime,
 }
@@ -52,8 +50,6 @@ impl TryFrom<BookRow> for Book {
             status,
             kind,
             publication_language: row.publication_language,
-            author: row.author,
-            artist: row.artist,
             updated_at: row.updated_at,
             created_at: row.created_at,
         })
@@ -82,8 +78,6 @@ impl Database {
             item.book.status.as_ref(),
             item.book.kind.as_ref(),
             item.book.publication_language,
-            item.book.author,
-            item.book.artist,
             item.book.updated_at,
             item.book.created_at,
         )
@@ -117,8 +111,6 @@ impl Database {
             item.book.status.as_ref(),
             item.book.kind.as_ref(),
             item.book.publication_language,
-            item.book.author,
-            item.book.artist,
             item.book.updated_at,
         )
         .fetch_optional(&mut *tx)
@@ -202,11 +194,34 @@ impl Database {
             });
         }
 
+        let creator_rows = sqlx::query_file!("queries/get_book_creators.sql", id)
+            .fetch_all(&self.pool)
+            .await?;
+        let mut creators = Vec::with_capacity(creator_rows.len());
+        for row in creator_rows {
+            let role: CreatorRole = row
+                .role
+                .parse()
+                .map_err(|e| DatabaseError::invariant_corrupted("role", e))?;
+            let first_name = Name::try_from(row.first_name)
+                .map_err(|e| DatabaseError::invariant_corrupted("first_name", e))?;
+            let last_name = Name::try_from(row.last_name)
+                .map_err(|e| DatabaseError::invariant_corrupted("last_name", e))?;
+            creators.push(Creator {
+                id: row.id,
+                first_name,
+                last_name,
+                role,
+                created_at: row.created_at,
+            });
+        }
+
         Ok(BookDetails {
             book,
             labels,
             links,
             titles,
+            creators,
         })
     }
 
@@ -217,7 +232,7 @@ impl Database {
         let limit = pagination.limit.as_u32();
         let mut builder: QueryBuilder<Postgres> = QueryBuilder::new(
             "select id, name, description, publication_year, content_rating, status, kind, \
-             publication_language, author, artist, updated_at, created_at from books",
+             publication_language, updated_at, created_at from books",
         );
 
         if let Some(id) = pagination.after {
@@ -269,8 +284,10 @@ impl Database {
     async fn delete_book_inner(&self, id: Uuid) -> Result<(), DatabaseError> {
         let mut tx = self.pool.begin().await?;
 
-        // The attached rows are cleared here rather than by ON DELETE CASCADE,
-        // so the ordering stays visible in the application layer.
+        // The three payload arrays are cleared here rather than by ON DELETE
+        // CASCADE, so the ordering stays visible in the application layer.
+        // book_creators is the exception: no book write touches it, so the
+        // database cascades it instead.
         delete_book_relations(&mut tx, id).await?;
 
         let row = sqlx::query_file!("queries/delete_book.sql", id)

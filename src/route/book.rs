@@ -44,8 +44,6 @@ pub struct BookReq {
     #[serde(rename = "type")]
     pub kind: BookKind,
     pub publication_language: Uuid,
-    pub author: Uuid,
-    pub artist: Uuid,
     #[serde(default)]
     pub label_ids: Vec<Uuid>,
     #[serde(default)]
@@ -71,8 +69,6 @@ impl TryFrom<(BookReq, Uuid, Option<OffsetDateTime>, OffsetDateTime)> for BookWr
             status: req.status,
             kind: req.kind,
             publication_language: req.publication_language,
-            author: req.author,
-            artist: req.artist,
             updated_at,
             created_at,
         };

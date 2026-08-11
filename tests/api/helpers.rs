@@ -40,8 +40,6 @@ pub struct TestApp {
 
 #[derive(Debug)]
 pub struct BookRefs {
-    pub author: Uuid,
-    pub artist: Uuid,
     pub content_rating: Uuid,
     pub language: Uuid,
     pub other_language: Uuid,
@@ -100,11 +98,6 @@ impl TestApp {
 
     /// Seeds the rows a book must reference and hands back their ids.
     pub async fn book_refs(&self) -> BookRefs {
-        let author: Creator = CreatorFaker.fake();
-        let artist: Creator = CreatorFaker.fake();
-        self.insert_creator(&author).await;
-        self.insert_creator(&artist).await;
-
         let content_rating = sqlx::query_scalar!("select id from content_ratings order by name")
             .fetch_one(&self.pool)
             .await
@@ -115,8 +108,6 @@ impl TestApp {
             .expect("failed to pick seeded languages");
 
         BookRefs {
-            author: author.id,
-            artist: artist.id,
             content_rating,
             language: languages[0],
             other_language: languages[1],
@@ -141,9 +132,20 @@ impl TestApp {
             "status": "Ongoing",
             "type": "Manga",
             "publicationLanguage": refs.language,
-            "author": refs.author,
-            "artist": refs.artist,
         })
+    }
+
+    /// Attaches `creator` to `book_id` directly, standing in for the write path
+    /// that `book_creators` does not have yet.
+    pub async fn attach_creator(&self, book_id: Uuid, creator_id: Uuid) {
+        sqlx::query!(
+            "insert into book_creators(book_id, creator_id) values($1, $2)",
+            book_id,
+            creator_id
+        )
+        .execute(&self.pool)
+        .await
+        .expect("failed to attach creator to book");
     }
 
     /// Row counts of the three tables a book write replaces wholesale, as
