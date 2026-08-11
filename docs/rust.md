@@ -3,7 +3,7 @@
 ## Conventions
 
 - Don't write unsafe code.
-- Use `camelCase` for JSON keys and `snake_case` for enum JSON values in router contracts.
+- Use `camelCase` for JSON keys and `PascalCase` for enum JSON values in router contracts.
 - Follow Guard Clause / Early Return Pattern.
 - Log internal errors immediately at the point of failure.
 - Time format is `RFC3339`.

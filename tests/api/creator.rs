@@ -16,7 +16,7 @@ async fn store_creator_with_valid_body_passes() {
     let body = serde_json::json!({
         "firstName": "John",
         "lastName": "Doe",
-        "role": "artist",
+        "role": "Artist",
     })
     .to_string();
     let req = Request::post("/creators")
@@ -40,7 +40,7 @@ async fn store_creator_with_valid_body_passes() {
     assert_eq!(row.id, id);
     assert_eq!(row.first_name, "John");
     assert_eq!(row.last_name, "Doe");
-    assert_eq!(row.role, "artist");
+    assert_eq!(row.role, "Artist");
     assert_ne!(row.created_at, OffsetDateTime::UNIX_EPOCH)
 }
 
@@ -71,7 +71,7 @@ async fn store_creator_with_missing_first_name_returns_422() {
     let app = TestApp::new().await;
     let body = serde_json::json!({
         "lastName": "Doe",
-        "role": "artist",
+        "role": "Artist",
     })
     .to_string();
     let req = Request::post("/creators")
@@ -103,7 +103,7 @@ async fn update_creator_with_valid_body_passes() {
     let body = serde_json::json!({
         "firstName": "Updated",
         "lastName": "Name",
-        "role": "author",
+        "role": "Author",
     })
     .to_string();
 
@@ -122,7 +122,7 @@ async fn update_creator_with_valid_body_passes() {
 
     assert_eq!(row.first_name, "Updated");
     assert_eq!(row.last_name, "Name");
-    assert_eq!(row.role, "author");
+    assert_eq!(row.role, "Author");
     assert_eq!(
         row.created_at.unix_timestamp(),
         creator.created_at.unix_timestamp()
@@ -141,7 +141,7 @@ async fn update_creator_leaves_other_creators_untouched() {
     let body = serde_json::json!({
         "firstName": "Updated",
         "lastName": "Name",
-        "role": "author",
+        "role": "Author",
     })
     .to_string();
     let req = Request::put(format!("/creators/{}", creator.id))
@@ -176,7 +176,7 @@ async fn update_creator_with_unknown_id_returns_404() {
     let body = serde_json::json!({
         "firstName": "Updated",
         "lastName": "Name",
-        "role": "author",
+        "role": "Author",
     })
     .to_string();
     let req = Request::put(format!("/creators/{}", uuid::Uuid::now_v7()))
@@ -240,7 +240,7 @@ async fn update_creator_name_validation_failure_returns_422() {
     let body = serde_json::json!({
         "firstName": "John123",
         "lastName": "Doe",
-        "role": "artist",
+        "role": "Artist",
     })
     .to_string();
 

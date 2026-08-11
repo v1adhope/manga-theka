@@ -45,8 +45,8 @@ from books
     );
     assert_eq!(row.publication_year, 1989);
     assert_eq!(row.content_rating, refs.content_rating);
-    assert_eq!(row.status, "ongoing");
-    assert_eq!(row.kind, "manga");
+    assert_eq!(row.status, "Ongoing");
+    assert_eq!(row.kind, "Manga");
     assert_eq!(row.publication_language, refs.language);
     assert_eq!(row.author, refs.author);
     assert_eq!(row.artist, refs.artist);
@@ -63,8 +63,8 @@ async fn store_book_attaches_labels_links_and_titles() {
     let mut body = TestApp::book_body(&refs);
     body["labelIds"] = serde_json::json!(label_ids);
     body["links"] = serde_json::json!([
-        { "type": "where_to_read", "url": "https://example.com/read" },
-        { "type": "track", "url": "https://example.com/track" },
+        { "type": "WhereToRead", "url": "https://example.com/read" },
+        { "type": "Track", "url": "https://example.com/track" },
     ]);
     body["titles"] = serde_json::json!([
         { "languageId": refs.language, "name": "ベルセルク" },
@@ -92,9 +92,9 @@ async fn store_book_attaches_labels_links_and_titles() {
     .await
     .unwrap();
     assert_eq!(links.len(), 2);
-    assert_eq!(links[0].kind, "where_to_read");
+    assert_eq!(links[0].kind, "WhereToRead");
     assert_eq!(links[0].url, "https://example.com/read");
-    assert_eq!(links[1].kind, "track");
+    assert_eq!(links[1].kind, "Track");
     assert_eq!(links[1].url, "https://example.com/track");
 
     let titles = sqlx::query!(
@@ -137,7 +137,7 @@ async fn get_book_embeds_labels_links_and_titles() {
     let mut body = TestApp::book_body(&refs);
     body["labelIds"] = serde_json::json!(label_ids);
     body["links"] = serde_json::json!([
-        { "type": "where_to_buy", "url": "https://example.com/buy" },
+        { "type": "WhereToBuy", "url": "https://example.com/buy" },
     ]);
     body["titles"] = serde_json::json!([
         { "languageId": refs.language, "name": "ベルセルク" },
@@ -158,8 +158,8 @@ async fn get_book_embeds_labels_links_and_titles() {
     assert_eq!(data["id"], id.to_string());
     assert_eq!(data["name"], "Berserk");
     assert_eq!(data["publicationYear"], 1989);
-    assert_eq!(data["status"], "ongoing");
-    assert_eq!(data["type"], "manga");
+    assert_eq!(data["status"], "Ongoing");
+    assert_eq!(data["type"], "Manga");
     assert_eq!(data["contentRating"], refs.content_rating.to_string());
     assert_eq!(data["publicationLanguage"], refs.language.to_string());
     assert_eq!(data["author"], refs.author.to_string());
@@ -172,7 +172,7 @@ async fn get_book_embeds_labels_links_and_titles() {
 
     let links = data["links"].as_array().unwrap();
     assert_eq!(links.len(), 1);
-    assert_eq!(links[0]["type"], "where_to_buy");
+    assert_eq!(links[0]["type"], "WhereToBuy");
     assert_eq!(links[0]["url"], "https://example.com/buy");
     assert!(uuid::Uuid::parse_str(links[0]["id"].as_str().unwrap()).is_ok());
 
@@ -348,7 +348,7 @@ async fn store_book_with_link_url_over_2048_characters_returns_422() {
 
     let url = format!("https://a.co/{}", "b".repeat(2036));
     let mut body = TestApp::book_body(&refs);
-    body["links"] = serde_json::json!([{ "type": "track", "url": url }]);
+    body["links"] = serde_json::json!([{ "type": "Track", "url": url }]);
 
     assert_store_book_returns_422(&app, body).await;
 }
@@ -458,8 +458,8 @@ async fn update_book_with_valid_body_passes() {
 
     let mut body = TestApp::book_body(&refs);
     body["name"] = serde_json::json!("Berserk: Deluxe");
-    body["status"] = serde_json::json!("completed");
-    body["type"] = serde_json::json!("manhwa");
+    body["status"] = serde_json::json!("Completed");
+    body["type"] = serde_json::json!("Manhwa");
     body["publicationYear"] = serde_json::json!(1990);
 
     assert_eq!(put_book(&app, id, &body).await, StatusCode::NO_CONTENT);
@@ -473,8 +473,8 @@ async fn update_book_with_valid_body_passes() {
     .unwrap();
 
     assert_eq!(row.name, "Berserk: Deluxe");
-    assert_eq!(row.status, "completed");
-    assert_eq!(row.kind, "manhwa");
+    assert_eq!(row.status, "Completed");
+    assert_eq!(row.kind, "Manhwa");
     assert_eq!(row.publication_year, 1990);
     assert!(row.updated_at.is_some());
     assert_eq!(
@@ -493,8 +493,8 @@ async fn update_book_replaces_arrays_wholesale() {
     let mut body = TestApp::book_body(&refs);
     body["labelIds"] = serde_json::json!(label_ids);
     body["links"] = serde_json::json!([
-        { "type": "where_to_read", "url": "https://example.com/read" },
-        { "type": "track", "url": "https://example.com/track" },
+        { "type": "WhereToRead", "url": "https://example.com/read" },
+        { "type": "Track", "url": "https://example.com/track" },
     ]);
     body["titles"] = serde_json::json!([
         { "languageId": refs.language, "name": "First" },
@@ -506,7 +506,7 @@ async fn update_book_replaces_arrays_wholesale() {
     let mut replacement = TestApp::book_body(&refs);
     replacement["labelIds"] = serde_json::json!([label_ids[1]]);
     replacement["links"] = serde_json::json!([
-        { "type": "where_to_buy", "url": "https://example.com/buy" },
+        { "type": "WhereToBuy", "url": "https://example.com/buy" },
     ]);
     replacement["titles"] = serde_json::json!([
         { "languageId": refs.language, "name": "Only" },
@@ -528,7 +528,7 @@ async fn update_book_replaces_arrays_wholesale() {
         .await
         .unwrap();
     assert_eq!(links.len(), 1);
-    assert_eq!(links[0].kind, "where_to_buy");
+    assert_eq!(links[0].kind, "WhereToBuy");
 
     let titles = sqlx::query!("select name from book_titles where book_id = $1", id)
         .fetch_all(&app.pool)
@@ -546,7 +546,7 @@ async fn update_book_with_empty_arrays_detaches_everything() {
 
     let mut body = TestApp::book_body(&refs);
     body["labelIds"] = serde_json::json!(label_ids);
-    body["links"] = serde_json::json!([{ "type": "track", "url": "https://example.com/t" }]);
+    body["links"] = serde_json::json!([{ "type": "Track", "url": "https://example.com/t" }]);
     body["titles"] = serde_json::json!([{ "languageId": refs.language, "name": "Gone" }]);
     let id = app.insert_book(&body).await;
 
@@ -708,7 +708,7 @@ async fn delete_book_removes_its_attached_rows() {
 
     let mut body = TestApp::book_body(&refs);
     body["labelIds"] = serde_json::json!(label_ids);
-    body["links"] = serde_json::json!([{ "type": "track", "url": "https://example.com/t" }]);
+    body["links"] = serde_json::json!([{ "type": "Track", "url": "https://example.com/t" }]);
     body["titles"] = serde_json::json!([{ "languageId": refs.language, "name": "Gone" }]);
     let id = app.insert_book(&body).await;
 

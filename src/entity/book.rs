@@ -9,7 +9,6 @@ use crate::{entity::Label, error::EntityError};
 pub const MAX_TITLES: usize = 12;
 
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
 pub enum BookStatus {
     Ongoing,
     Completed,
@@ -22,10 +21,10 @@ impl FromStr for BookStatus {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "ongoing" => Ok(Self::Ongoing),
-            "completed" => Ok(Self::Completed),
-            "hiatus" => Ok(Self::Hiatus),
-            "cancelled" => Ok(Self::Cancelled),
+            "Ongoing" => Ok(Self::Ongoing),
+            "Completed" => Ok(Self::Completed),
+            "Hiatus" => Ok(Self::Hiatus),
+            "Cancelled" => Ok(Self::Cancelled),
             other => Err(EntityError::InvalidBookStatus(other.to_owned())),
         }
     }
@@ -34,16 +33,15 @@ impl FromStr for BookStatus {
 impl AsRef<str> for BookStatus {
     fn as_ref(&self) -> &str {
         match self {
-            Self::Ongoing => "ongoing",
-            Self::Completed => "completed",
-            Self::Hiatus => "hiatus",
-            Self::Cancelled => "cancelled",
+            Self::Ongoing => "Ongoing",
+            Self::Completed => "Completed",
+            Self::Hiatus => "Hiatus",
+            Self::Cancelled => "Cancelled",
         }
     }
 }
 
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
 pub enum BookKind {
     Manga,
     Manhwa,
@@ -55,9 +53,9 @@ impl FromStr for BookKind {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "manga" => Ok(Self::Manga),
-            "manhwa" => Ok(Self::Manhwa),
-            "manhua" => Ok(Self::Manhua),
+            "Manga" => Ok(Self::Manga),
+            "Manhwa" => Ok(Self::Manhwa),
+            "Manhua" => Ok(Self::Manhua),
             other => Err(EntityError::InvalidBookKind(other.to_owned())),
         }
     }
@@ -66,15 +64,14 @@ impl FromStr for BookKind {
 impl AsRef<str> for BookKind {
     fn as_ref(&self) -> &str {
         match self {
-            Self::Manga => "manga",
-            Self::Manhwa => "manhwa",
-            Self::Manhua => "manhua",
+            Self::Manga => "Manga",
+            Self::Manhwa => "Manhwa",
+            Self::Manhua => "Manhua",
         }
     }
 }
 
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
 pub enum BookLinkKind {
     WhereToRead,
     WhereToBuy,
@@ -86,9 +83,9 @@ impl FromStr for BookLinkKind {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "where_to_read" => Ok(Self::WhereToRead),
-            "where_to_buy" => Ok(Self::WhereToBuy),
-            "track" => Ok(Self::Track),
+            "WhereToRead" => Ok(Self::WhereToRead),
+            "WhereToBuy" => Ok(Self::WhereToBuy),
+            "Track" => Ok(Self::Track),
             other => Err(EntityError::InvalidBookLinkKind(other.to_owned())),
         }
     }
@@ -97,9 +94,9 @@ impl FromStr for BookLinkKind {
 impl AsRef<str> for BookLinkKind {
     fn as_ref(&self) -> &str {
         match self {
-            Self::WhereToRead => "where_to_read",
-            Self::WhereToBuy => "where_to_buy",
-            Self::Track => "track",
+            Self::WhereToRead => "WhereToRead",
+            Self::WhereToBuy => "WhereToBuy",
+            Self::Track => "Track",
         }
     }
 }

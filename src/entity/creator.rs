@@ -6,9 +6,7 @@ use uuid::Uuid;
 
 use crate::error::EntityError;
 
-#[derive(Debug, PartialEq, sqlx::Type, Deserialize, Serialize)]
-#[sqlx(type_name = "text", rename_all = "snake_case")]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, PartialEq, Deserialize, Serialize)]
 pub enum CreatorRole {
     Artist,
     Author,
@@ -19,8 +17,8 @@ impl FromStr for CreatorRole {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "artist" => Ok(Self::Artist),
-            "author" => Ok(Self::Author),
+            "Artist" => Ok(Self::Artist),
+            "Author" => Ok(Self::Author),
             other => Err(EntityError::InvalidCreatorRole(other.to_owned())),
         }
     }
@@ -29,8 +27,8 @@ impl FromStr for CreatorRole {
 impl AsRef<str> for CreatorRole {
     fn as_ref(&self) -> &str {
         match self {
-            Self::Artist => "artist",
-            Self::Author => "author",
+            Self::Artist => "Artist",
+            Self::Author => "Author",
         }
     }
 }

@@ -9,4 +9,4 @@
 - Use `CHECK` constraints instead of built-in enum types.
 - Don't use column `default` attributes — control defaults from the code instead.
 - Static queries go in `../queries/`; construct dynamic queries directly in code.
-- Use `snake_case` for enums.
+- Use `PascalCase` for enum values.
