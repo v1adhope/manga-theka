@@ -3,17 +3,17 @@ use uuid::Uuid;
 
 use crate::{
     database::Database,
-    entity::{Creator, CreatorRole, Name, Pagination},
+    entity::{Creator, CreatorRole, DEFAULT_LIMIT, Limit, Name, Pagination},
     error::DatabaseError,
 };
 
 #[derive(sqlx::FromRow)]
-struct CreatorRow {
-    id: Uuid,
-    first_name: String,
-    last_name: String,
-    role: String,
-    created_at: time::OffsetDateTime,
+pub(super) struct CreatorRow {
+    pub(super) id: Uuid,
+    pub(super) first_name: String,
+    pub(super) last_name: String,
+    pub(super) role: String,
+    pub(super) created_at: time::OffsetDateTime,
 }
 
 impl TryFrom<CreatorRow> for Creator {
@@ -39,9 +39,8 @@ impl TryFrom<CreatorRow> for Creator {
     }
 }
 
-// TODO: tune tracing
 impl Database {
-    pub async fn store_creator(&self, item: Creator) -> Result<(), DatabaseError> {
+    pub async fn store_creator(&self, item: &Creator) -> Result<(), DatabaseError> {
         sqlx::query_file!(
             "queries/store_creator.sql",
             item.id,
@@ -62,7 +61,7 @@ impl Database {
         Ok(())
     }
 
-    pub async fn update_creator(&self, item: Creator) -> Result<(), DatabaseError> {
+    pub async fn update_creator(&self, item: &Creator) -> Result<(), DatabaseError> {
         let row = sqlx::query_file!(
             "queries/update_creator.sql",
             item.id,
@@ -98,7 +97,7 @@ impl Database {
         match row {
             Some(row) => row.try_into().inspect_err(|e| {
                 if DatabaseError::is_internal(e) {
-                    tracing::error!("failed to convert CreatorRow: {e:?}");
+                    tracing::error!("failed to convert creator row: {e:?}");
                 }
             }),
             None => Err(DatabaseError::CreatorNotFound),
@@ -109,7 +108,7 @@ impl Database {
         &self,
         pagination: &Pagination,
     ) -> Result<(Vec<Creator>, Option<Uuid>), DatabaseError> {
-        let limit = pagination.limit.as_u32();
+        let limit = pagination.limit.map_or(DEFAULT_LIMIT, Limit::as_u32);
         let mut builder: QueryBuilder<Postgres> =
             QueryBuilder::new("select id, first_name, last_name, role, created_at from creators");
 
@@ -121,7 +120,7 @@ impl Database {
             .push(" order by id desc limit ")
             .push_bind((limit + 1) as i64);
 
-        let rows = builder
+        let mut rows = builder
             .build_query_as::<CreatorRow>()
             .fetch_all(&self.pool)
             .await
@@ -132,6 +131,12 @@ impl Database {
                 }
             })?;
 
+        let mut next_cursor = None;
+        if rows.len() > limit as usize {
+            rows.pop();
+            next_cursor = rows.last().map(|r| r.id);
+        }
+
         let mut creators: Vec<Creator> = Vec::with_capacity(rows.len());
         for row in rows {
             let creator = row.try_into().inspect_err(|e| {
@@ -140,12 +145,6 @@ impl Database {
                 }
             })?;
             creators.push(creator);
-        }
-
-        let mut next_cursor = None;
-        if creators.len() > limit as usize {
-            creators.pop();
-            next_cursor = creators.last().map(|c| c.id);
         }
 
         Ok((creators, next_cursor))

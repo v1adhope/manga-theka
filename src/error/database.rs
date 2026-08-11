@@ -133,7 +133,7 @@ impl From<sqlx::Error> for DatabaseError {
                 Some("check_length_book_links_url") => {
                     return Self::BookLinkUrlTooLong(err);
                 }
-                Some("unique_book_links_book_id_link_hash") => {
+                Some("pk_book_links_book_id_link_hash") => {
                     return Self::BookLinkUrlDuplication(err);
                 }
                 Some("fk_book_titles_languages_language_id") => {
@@ -142,7 +142,7 @@ impl From<sqlx::Error> for DatabaseError {
                 Some("check_length_book_titles_name") => {
                     return Self::BookTitleNameTooLong(err);
                 }
-                Some("unique_book_titles_book_id_language_id_name") => {
+                Some("pk_book_titles_book_id_language_id_name") => {
                     return Self::BookTitleNameDuplication(err);
                 }
                 _ => {}

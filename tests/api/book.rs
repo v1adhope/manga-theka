@@ -62,8 +62,8 @@ async fn store_book_attaches_labels_links_and_titles() {
     let mut body = TestApp::book_body(&refs);
     body["labelIds"] = serde_json::json!(label_ids);
     body["links"] = serde_json::json!([
-        { "type": "WhereToRead", "url": "https://example.com/read" },
-        { "type": "Track", "url": "https://example.com/track" },
+        { "kind": "WhereToRead", "url": "https://example.com/read" },
+        { "kind": "Track", "url": "https://example.com/track" },
     ]);
     body["titles"] = serde_json::json!([
         { "languageId": refs.language, "name": "ベルセルク" },
@@ -136,7 +136,7 @@ async fn get_book_embeds_labels_links_and_titles() {
     let mut body = TestApp::book_body(&refs);
     body["labelIds"] = serde_json::json!(label_ids);
     body["links"] = serde_json::json!([
-        { "type": "WhereToBuy", "url": "https://example.com/buy" },
+        { "kind": "WhereToBuy", "url": "https://example.com/buy" },
     ]);
     body["titles"] = serde_json::json!([
         { "languageId": refs.language, "name": "ベルセルク" },
@@ -158,26 +158,87 @@ async fn get_book_embeds_labels_links_and_titles() {
     assert_eq!(data["name"], "Berserk");
     assert_eq!(data["publicationYear"], 1989);
     assert_eq!(data["status"], "Ongoing");
-    assert_eq!(data["type"], "Manga");
+    assert_eq!(data["kind"], "Manga");
     assert_eq!(data["contentRating"], refs.content_rating.to_string());
     assert_eq!(data["publicationLanguage"], refs.language.to_string());
     assert!(data["updatedAt"].is_null());
 
+    let label_name = sqlx::query_scalar!("select name from labels where id = $1", label_ids[0])
+        .fetch_one(&app.pool)
+        .await
+        .unwrap();
+
     let labels = data["labels"].as_array().unwrap();
     assert_eq!(labels.len(), 1);
     assert_eq!(labels[0]["id"], label_ids[0].to_string());
+    assert_eq!(
+        labels[0]["name"], label_name,
+        "the id must come back as a whole label"
+    );
 
     let links = data["links"].as_array().unwrap();
     assert_eq!(links.len(), 1);
-    assert_eq!(links[0]["type"], "WhereToBuy");
+    assert_eq!(links[0]["kind"], "WhereToBuy");
     assert_eq!(links[0]["url"], "https://example.com/buy");
-    assert!(uuid::Uuid::parse_str(links[0]["id"].as_str().unwrap()).is_ok());
+    assert!(links[0].get("id").is_none());
 
     let titles = data["titles"].as_array().unwrap();
     assert_eq!(titles.len(), 1);
     assert_eq!(titles[0]["name"], "ベルセルク");
     assert_eq!(titles[0]["languageId"], refs.language.to_string());
-    assert!(uuid::Uuid::parse_str(titles[0]["id"].as_str().unwrap()).is_ok());
+    assert!(titles[0].get("id").is_none());
+}
+
+#[tokio::test]
+async fn get_books_embeds_each_books_own_arrays() {
+    let app = TestApp::new().await;
+    let refs = app.book_refs().await;
+    let label_ids = app.label_ids(1).await;
+
+    let bare_id = app.insert_book(&TestApp::book_body(&refs)).await;
+
+    let mut body = TestApp::book_body(&refs);
+    body["labelIds"] = serde_json::json!(label_ids);
+    body["links"] = serde_json::json!([{ "kind": "Track", "url": "https://example.com/track" }]);
+    body["titles"] = serde_json::json!([{ "languageId": refs.language, "name": "ベルセルク" }]);
+    let full_id = app.insert_book(&body).await;
+
+    let creator: Creator = CreatorFaker.fake();
+    app.insert_creator(&creator).await;
+    app.attach_creator(full_id, creator.id).await;
+
+    let req = Request::get("/books").body(Body::empty()).unwrap();
+    let resp = app.router.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let books = v["data"].as_array().unwrap();
+    assert_eq!(books.len(), 2);
+
+    let find = |id: uuid::Uuid| {
+        books
+            .iter()
+            .find(|b| b["id"] == id.to_string())
+            .unwrap()
+            .clone()
+    };
+
+    let full = find(full_id);
+    assert_eq!(full["labels"].as_array().unwrap().len(), 1);
+    assert_eq!(full["labels"][0]["id"], label_ids[0].to_string());
+    assert_eq!(full["links"].as_array().unwrap().len(), 1);
+    assert_eq!(full["links"][0]["url"], "https://example.com/track");
+    assert_eq!(full["titles"].as_array().unwrap().len(), 1);
+    assert_eq!(full["titles"][0]["name"], "ベルセルク");
+    assert_eq!(full["creators"].as_array().unwrap().len(), 1);
+    assert_eq!(full["creators"][0]["id"], creator.id.to_string());
+
+    let bare = find(bare_id);
+    assert!(bare["labels"].as_array().unwrap().is_empty());
+    assert!(bare["links"].as_array().unwrap().is_empty());
+    assert!(bare["titles"].as_array().unwrap().is_empty());
+    assert!(bare["creators"].as_array().unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -207,8 +268,6 @@ async fn get_book_embeds_attached_creators() {
     assert_eq!(creators[0]["role"], creator.role.as_ref());
 }
 
-/// The book endpoints only ever read `book_creators`, so a `PUT` must not
-/// detach the creators a separate write path attached.
 #[tokio::test]
 async fn update_book_leaves_attached_creators_alone() {
     let app = TestApp::new().await;
@@ -233,8 +292,6 @@ async fn update_book_leaves_attached_creators_alone() {
     assert_eq!(attached, vec![creator.id]);
 }
 
-/// The book endpoints never write `book_creators`, so the database detaches
-/// the rows itself when the book goes.
 #[tokio::test]
 async fn delete_book_cascades_to_its_creators() {
     let app = TestApp::new().await;
@@ -264,7 +321,6 @@ async fn delete_book_cascades_to_its_creators() {
     assert_eq!(creators, Some(1), "the creator itself must survive");
 }
 
-/// Posts `body` and asserts it is rejected as semantically invalid.
 async fn assert_store_book_returns_422(app: &TestApp, body: serde_json::Value) {
     let req = Request::post("/books")
         .header(header::CONTENT_TYPE, "application/json")
@@ -325,7 +381,7 @@ async fn store_book_with_unknown_type_returns_422() {
     let refs = app.book_refs().await;
 
     let mut body = TestApp::book_body(&refs);
-    body["type"] = serde_json::json!("webtoon");
+    body["kind"] = serde_json::json!("webtoon");
 
     assert_store_book_returns_422(&app, body).await;
 }
@@ -353,24 +409,24 @@ async fn store_book_with_description_over_2000_characters_returns_422() {
 }
 
 #[tokio::test]
-async fn store_book_with_more_than_12_titles_returns_422() {
+async fn store_book_takes_an_unbounded_titles_array() {
     let app = TestApp::new().await;
     let refs = app.book_refs().await;
 
-    let titles: Vec<serde_json::Value> = (0..13)
+    let titles: Vec<serde_json::Value> = (0..50)
         .map(|i| serde_json::json!({ "languageId": refs.language, "name": format!("Title {i}") }))
         .collect();
 
     let mut body = TestApp::book_body(&refs);
     body["titles"] = serde_json::json!(titles);
 
-    assert_store_book_returns_422(&app, body).await;
+    let id = app.insert_book(&body).await;
 
-    let count = sqlx::query_scalar!("select count(*) from books")
+    let count = sqlx::query_scalar!("select count(*) from book_titles where book_id = $1", id)
         .fetch_one(&app.pool)
         .await
         .unwrap();
-    assert_eq!(count, Some(0), "the book must not be written at all");
+    assert_eq!(count, Some(50));
 }
 
 #[tokio::test]
@@ -380,7 +436,7 @@ async fn store_book_with_unknown_link_type_returns_422() {
 
     let mut body = TestApp::book_body(&refs);
     body["links"] =
-        serde_json::json!([{ "type": "where_to_borrow", "url": "https://example.com" }]);
+        serde_json::json!([{ "kind": "where_to_borrow", "url": "https://example.com" }]);
 
     assert_store_book_returns_422(&app, body).await;
 }
@@ -392,7 +448,7 @@ async fn store_book_with_link_url_over_2048_characters_returns_422() {
 
     let url = format!("https://a.co/{}", "b".repeat(2036));
     let mut body = TestApp::book_body(&refs);
-    body["links"] = serde_json::json!([{ "type": "Track", "url": url }]);
+    body["links"] = serde_json::json!([{ "kind": "Track", "url": url }]);
 
     assert_store_book_returns_422(&app, body).await;
 }
@@ -492,7 +548,7 @@ async fn update_book_with_valid_body_passes() {
     let mut body = TestApp::book_body(&refs);
     body["name"] = serde_json::json!("Berserk: Deluxe");
     body["status"] = serde_json::json!("Completed");
-    body["type"] = serde_json::json!("Manhwa");
+    body["kind"] = serde_json::json!("Manhwa");
     body["publicationYear"] = serde_json::json!(1990);
 
     assert_eq!(put_book(&app, id, &body).await, StatusCode::NO_CONTENT);
@@ -526,8 +582,8 @@ async fn update_book_replaces_arrays_wholesale() {
     let mut body = TestApp::book_body(&refs);
     body["labelIds"] = serde_json::json!(label_ids);
     body["links"] = serde_json::json!([
-        { "type": "WhereToRead", "url": "https://example.com/read" },
-        { "type": "Track", "url": "https://example.com/track" },
+        { "kind": "WhereToRead", "url": "https://example.com/read" },
+        { "kind": "Track", "url": "https://example.com/track" },
     ]);
     body["titles"] = serde_json::json!([
         { "languageId": refs.language, "name": "First" },
@@ -535,11 +591,10 @@ async fn update_book_replaces_arrays_wholesale() {
     ]);
     let id = app.insert_book(&body).await;
 
-    // One of each replaces the two of each -- a merge would leave three.
     let mut replacement = TestApp::book_body(&refs);
     replacement["labelIds"] = serde_json::json!([label_ids[1]]);
     replacement["links"] = serde_json::json!([
-        { "type": "WhereToBuy", "url": "https://example.com/buy" },
+        { "kind": "WhereToBuy", "url": "https://example.com/buy" },
     ]);
     replacement["titles"] = serde_json::json!([
         { "languageId": refs.language, "name": "Only" },
@@ -579,7 +634,7 @@ async fn update_book_with_empty_arrays_detaches_everything() {
 
     let mut body = TestApp::book_body(&refs);
     body["labelIds"] = serde_json::json!(label_ids);
-    body["links"] = serde_json::json!([{ "type": "Track", "url": "https://example.com/t" }]);
+    body["links"] = serde_json::json!([{ "kind": "Track", "url": "https://example.com/t" }]);
     body["titles"] = serde_json::json!([{ "languageId": refs.language, "name": "Gone" }]);
     let id = app.insert_book(&body).await;
 
@@ -621,21 +676,24 @@ async fn update_book_leaves_other_books_untouched() {
 }
 
 #[tokio::test]
-async fn update_book_with_more_than_12_titles_returns_422() {
+async fn update_book_takes_an_unbounded_titles_array() {
     let app = TestApp::new().await;
     let refs = app.book_refs().await;
     let id = app.insert_book(&TestApp::book_body(&refs)).await;
 
-    let titles: Vec<serde_json::Value> = (0..13)
+    let titles: Vec<serde_json::Value> = (0..50)
         .map(|i| serde_json::json!({ "languageId": refs.language, "name": format!("Title {i}") }))
         .collect();
     let mut body = TestApp::book_body(&refs);
     body["titles"] = serde_json::json!(titles);
 
-    assert_eq!(
-        put_book(&app, id, &body).await,
-        StatusCode::UNPROCESSABLE_ENTITY
-    );
+    assert_eq!(put_book(&app, id, &body).await, StatusCode::NO_CONTENT);
+
+    let count = sqlx::query_scalar!("select count(*) from book_titles where book_id = $1", id)
+        .fetch_one(&app.pool)
+        .await
+        .unwrap();
+    assert_eq!(count, Some(50));
 }
 
 #[tokio::test]
@@ -741,7 +799,7 @@ async fn delete_book_removes_its_attached_rows() {
 
     let mut body = TestApp::book_body(&refs);
     body["labelIds"] = serde_json::json!(label_ids);
-    body["links"] = serde_json::json!([{ "type": "Track", "url": "https://example.com/t" }]);
+    body["links"] = serde_json::json!([{ "kind": "Track", "url": "https://example.com/t" }]);
     body["titles"] = serde_json::json!([{ "languageId": refs.language, "name": "Gone" }]);
     let id = app.insert_book(&body).await;
 

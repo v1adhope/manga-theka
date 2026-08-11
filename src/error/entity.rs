@@ -31,17 +31,20 @@ pub enum EntityError {
     #[error("'{0}' invalid book link type")]
     InvalidBookLinkKind(String),
 
+    #[error("Description can't be empty or whitespace")]
+    DescriptionIsEmptyOrWhitespace,
+
     #[error("Description exceeds the 2000-character limit")]
     DescriptionExceedsCharLimit,
 
     #[error("Link url exceeds the 2048-character limit")]
     LinkUrlExceedsCharLimit,
 
+    #[error("'{1}' is not a well-formed url")]
+    LinkUrlIsMalformed(#[source] url::ParseError, String),
+
     #[error("'{0}' must be an http or https url")]
     LinkUrlSchemeNotAllowed(String),
-
-    #[error("{0} alternative titles exceed the limit of {1}")]
-    TitlesExceedLimit(usize, usize),
 
     #[error("Limit {0} is out of range [1, {1}]")]
     LimitOutOfRange(u32, u32),

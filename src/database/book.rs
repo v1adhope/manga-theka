@@ -1,11 +1,13 @@
+use std::collections::HashMap;
+
 use sqlx::{PgConnection, Postgres, QueryBuilder};
 use uuid::Uuid;
 
 use crate::{
-    database::Database,
+    database::{Database, creator::CreatorRow, label::LabelRow},
     entity::{
-        AlternativeTitle, Book, BookDetails, BookKind, BookLink, BookLinkKind, BookName,
-        BookStatus, BookWrite, Creator, CreatorRole, Description, Label, LinkUrl, Name, Pagination,
+        AlternativeTitle, Book, BookKind, BookLink, BookLinkKind, BookName, BookStatus, Creator,
+        DEFAULT_LIMIT, Description, Label, Limit, LinkUrl, Pagination,
     },
     error::DatabaseError,
 };
@@ -24,10 +26,111 @@ struct BookRow {
     created_at: time::OffsetDateTime,
 }
 
-impl TryFrom<BookRow> for Book {
+struct BookLabelRow {
+    book_id: Uuid,
+    id: Uuid,
+    name: String,
+    kind: String,
+}
+
+impl TryFrom<BookLabelRow> for Label {
     type Error = DatabaseError;
 
-    fn try_from(row: BookRow) -> Result<Self, Self::Error> {
+    fn try_from(row: BookLabelRow) -> Result<Self, Self::Error> {
+        LabelRow {
+            id: row.id,
+            name: row.name,
+            kind: row.kind,
+        }
+        .try_into()
+    }
+}
+
+struct BookLinkRow {
+    book_id: Uuid,
+    kind: String,
+    url: String,
+}
+
+impl TryFrom<BookLinkRow> for BookLink {
+    type Error = DatabaseError;
+
+    fn try_from(row: BookLinkRow) -> Result<Self, Self::Error> {
+        let kind: BookLinkKind = row
+            .kind
+            .parse()
+            .map_err(|e| DatabaseError::invariant_corrupted("kind", e))?;
+        let url =
+            LinkUrl::try_from(row.url).map_err(|e| DatabaseError::invariant_corrupted("url", e))?;
+
+        Ok(BookLink { kind, url })
+    }
+}
+
+struct BookTitleRow {
+    book_id: Uuid,
+    language_id: Uuid,
+    name: String,
+}
+
+impl TryFrom<BookTitleRow> for AlternativeTitle {
+    type Error = DatabaseError;
+
+    fn try_from(row: BookTitleRow) -> Result<Self, Self::Error> {
+        let name = BookName::try_from(row.name)
+            .map_err(|e| DatabaseError::invariant_corrupted("name", e))?;
+
+        Ok(AlternativeTitle {
+            language_id: row.language_id,
+            name,
+        })
+    }
+}
+
+struct BookCreatorRow {
+    book_id: Uuid,
+    id: Uuid,
+    first_name: String,
+    last_name: String,
+    role: String,
+    created_at: time::OffsetDateTime,
+}
+
+impl TryFrom<BookCreatorRow> for Creator {
+    type Error = DatabaseError;
+
+    fn try_from(row: BookCreatorRow) -> Result<Self, Self::Error> {
+        CreatorRow {
+            id: row.id,
+            first_name: row.first_name,
+            last_name: row.last_name,
+            role: row.role,
+            created_at: row.created_at,
+        }
+        .try_into()
+    }
+}
+
+struct BookWithRelations {
+    row: BookRow,
+    labels: Vec<Label>,
+    links: Vec<BookLink>,
+    titles: Vec<AlternativeTitle>,
+    creators: Vec<Creator>,
+}
+
+impl TryFrom<BookWithRelations> for Book {
+    type Error = DatabaseError;
+
+    fn try_from(item: BookWithRelations) -> Result<Self, Self::Error> {
+        let BookWithRelations {
+            row,
+            labels,
+            links,
+            titles,
+            creators,
+        } = item;
+
         let name = BookName::try_from(row.name)
             .map_err(|e| DatabaseError::invariant_corrupted("name", e))?;
         let description = Description::try_from(row.description)
@@ -50,6 +153,10 @@ impl TryFrom<BookRow> for Book {
             status,
             kind,
             publication_language: row.publication_language,
+            labels,
+            links,
+            titles,
+            creators,
             updated_at: row.updated_at,
             created_at: row.created_at,
         })
@@ -57,61 +164,69 @@ impl TryFrom<BookRow> for Book {
 }
 
 impl Database {
-    pub async fn store_book(&self, item: BookWrite) -> Result<(), DatabaseError> {
-        self.store_book_inner(item).await.inspect_err(|e| {
-            if DatabaseError::is_internal(e) {
-                tracing::error!("failed to store new book in database: {e:?}");
-            }
-        })
+    pub async fn store_book(&self, item: &Book, label_ids: &[Uuid]) -> Result<(), DatabaseError> {
+        self.store_book_inner(item, label_ids)
+            .await
+            .inspect_err(|e| {
+                if DatabaseError::is_internal(e) {
+                    tracing::error!("failed to store new book in database: {e:?}");
+                }
+            })
     }
 
-    async fn store_book_inner(&self, item: BookWrite) -> Result<(), DatabaseError> {
+    async fn store_book_inner(&self, item: &Book, label_ids: &[Uuid]) -> Result<(), DatabaseError> {
         let mut tx = self.pool.begin().await?;
 
         sqlx::query_file!(
             "queries/store_book.sql",
-            item.book.id,
-            item.book.name.as_ref(),
-            item.book.description.as_ref(),
-            item.book.publication_year,
-            item.book.content_rating,
-            item.book.status.as_ref(),
-            item.book.kind.as_ref(),
-            item.book.publication_language,
-            item.book.updated_at,
-            item.book.created_at,
+            item.id,
+            item.name.as_ref(),
+            item.description.as_ref(),
+            item.publication_year,
+            item.content_rating,
+            item.status.as_ref(),
+            item.kind.as_ref(),
+            item.publication_language,
+            item.updated_at,
+            item.created_at,
         )
         .execute(&mut *tx)
         .await?;
 
-        store_book_relations(&mut tx, &item).await?;
+        Self::store_book_relations(&mut tx, item, label_ids).await?;
 
         tx.commit().await?;
         Ok(())
     }
 
-    pub async fn update_book(&self, item: BookWrite) -> Result<(), DatabaseError> {
-        self.update_book_inner(item).await.inspect_err(|e| {
-            if DatabaseError::is_internal(e) {
-                tracing::error!("failed to update book in database: {e:?}");
-            }
-        })
+    pub async fn update_book(&self, item: &Book, label_ids: &[Uuid]) -> Result<(), DatabaseError> {
+        self.update_book_inner(item, label_ids)
+            .await
+            .inspect_err(|e| {
+                if DatabaseError::is_internal(e) {
+                    tracing::error!("failed to update book in database: {e:?}");
+                }
+            })
     }
 
-    async fn update_book_inner(&self, item: BookWrite) -> Result<(), DatabaseError> {
+    async fn update_book_inner(
+        &self,
+        item: &Book,
+        label_ids: &[Uuid],
+    ) -> Result<(), DatabaseError> {
         let mut tx = self.pool.begin().await?;
 
         let row = sqlx::query_file!(
             "queries/update_book.sql",
-            item.book.id,
-            item.book.name.as_ref(),
-            item.book.description.as_ref(),
-            item.book.publication_year,
-            item.book.content_rating,
-            item.book.status.as_ref(),
-            item.book.kind.as_ref(),
-            item.book.publication_language,
-            item.book.updated_at,
+            item.id,
+            item.name.as_ref(),
+            item.description.as_ref(),
+            item.publication_year,
+            item.content_rating,
+            item.status.as_ref(),
+            item.kind.as_ref(),
+            item.publication_language,
+            item.updated_at,
         )
         .fetch_optional(&mut *tx)
         .await?;
@@ -120,15 +235,14 @@ impl Database {
             return Err(DatabaseError::BookNotFound);
         }
 
-        // The arrays are replaced wholesale, never diffed (ADR-0005).
-        delete_book_relations(&mut tx, item.book.id).await?;
-        store_book_relations(&mut tx, &item).await?;
+        Self::delete_book_relations(&mut tx, item.id).await?;
+        Self::store_book_relations(&mut tx, item, label_ids).await?;
 
         tx.commit().await?;
         Ok(())
     }
 
-    pub async fn get_book(&self, id: Uuid) -> Result<BookDetails, DatabaseError> {
+    pub async fn get_book(&self, id: Uuid) -> Result<Book, DatabaseError> {
         self.get_book_inner(id).await.inspect_err(|e| {
             if DatabaseError::is_internal(e) {
                 tracing::error!("failed to get book from database: {e:?}");
@@ -136,7 +250,7 @@ impl Database {
         })
     }
 
-    async fn get_book_inner(&self, id: Uuid) -> Result<BookDetails, DatabaseError> {
+    async fn get_book_inner(&self, id: Uuid) -> Result<Book, DatabaseError> {
         let row = sqlx::query_file_as!(BookRow, "queries/get_book.sql", id)
             .fetch_optional(&self.pool)
             .await?;
@@ -144,84 +258,25 @@ impl Database {
         let Some(row) = row else {
             return Err(DatabaseError::BookNotFound);
         };
-        let book = Book::try_from(row)?;
 
-        let label_rows = sqlx::query_file!("queries/get_book_labels.sql", id)
-            .fetch_all(&self.pool)
-            .await?;
-        let mut labels = Vec::with_capacity(label_rows.len());
-        for row in label_rows {
-            let kind = row
-                .kind
-                .parse()
-                .map_err(|e| DatabaseError::invariant_corrupted("kind", e))?;
-            labels.push(Label {
-                id: row.id,
-                name: row.name,
-                kind,
-            });
+        let ids = [id];
+        let mut labels = self.get_books_labels(&ids).await?;
+        let mut links = self.get_books_links(&ids).await?;
+        let mut titles = self.get_books_titles(&ids).await?;
+        let mut creators = self.get_books_creators(&ids).await?;
+
+        BookWithRelations {
+            row,
+            labels: labels.remove(&id).unwrap_or_default(),
+            links: links.remove(&id).unwrap_or_default(),
+            titles: titles.remove(&id).unwrap_or_default(),
+            creators: creators.remove(&id).unwrap_or_default(),
         }
-
-        let link_rows = sqlx::query_file!("queries/get_book_links.sql", id)
-            .fetch_all(&self.pool)
-            .await?;
-        let mut links = Vec::with_capacity(link_rows.len());
-        for row in link_rows {
-            let kind: BookLinkKind = row
-                .kind
-                .parse()
-                .map_err(|e| DatabaseError::invariant_corrupted("kind", e))?;
-            let url = LinkUrl::try_from(row.url)
-                .map_err(|e| DatabaseError::invariant_corrupted("url", e))?;
-            links.push(BookLink {
-                id: row.id,
-                kind,
-                url,
-            });
-        }
-
-        let title_rows = sqlx::query_file!("queries/get_book_titles.sql", id)
-            .fetch_all(&self.pool)
-            .await?;
-        let mut titles = Vec::with_capacity(title_rows.len());
-        for row in title_rows {
-            let name = BookName::try_from(row.name)
-                .map_err(|e| DatabaseError::invariant_corrupted("name", e))?;
-            titles.push(AlternativeTitle {
-                id: row.id,
-                language_id: row.language_id,
-                name,
-            });
-        }
-
-        let creator_rows = sqlx::query_file!("queries/get_book_creators.sql", id)
-            .fetch_all(&self.pool)
-            .await?;
-        let mut creators = Vec::with_capacity(creator_rows.len());
-        for row in creator_rows {
-            let role: CreatorRole = row
-                .role
-                .parse()
-                .map_err(|e| DatabaseError::invariant_corrupted("role", e))?;
-            let first_name = Name::try_from(row.first_name)
-                .map_err(|e| DatabaseError::invariant_corrupted("first_name", e))?;
-            let last_name = Name::try_from(row.last_name)
-                .map_err(|e| DatabaseError::invariant_corrupted("last_name", e))?;
-            creators.push(Creator {
-                id: row.id,
-                first_name,
-                last_name,
-                role,
-                created_at: row.created_at,
-            });
-        }
-
-        Ok(BookDetails {
-            book,
-            labels,
-            links,
-            titles,
-            creators,
+        .try_into()
+        .inspect_err(|e| {
+            if DatabaseError::is_internal(e) {
+                tracing::error!("failed to convert book row with relations: {e:?}");
+            }
         })
     }
 
@@ -229,10 +284,22 @@ impl Database {
         &self,
         pagination: &Pagination,
     ) -> Result<(Vec<Book>, Option<Uuid>), DatabaseError> {
-        let limit = pagination.limit.as_u32();
+        self.get_books_inner(pagination).await.inspect_err(|e| {
+            if DatabaseError::is_internal(e) {
+                tracing::error!("failed to get books from database: {e:?}");
+            }
+        })
+    }
+
+    async fn get_books_inner(
+        &self,
+        pagination: &Pagination,
+    ) -> Result<(Vec<Book>, Option<Uuid>), DatabaseError> {
+        let limit = pagination.limit.map_or(DEFAULT_LIMIT, Limit::as_u32);
         let mut builder: QueryBuilder<Postgres> = QueryBuilder::new(
-            "select id, name, description, publication_year, content_rating, status, kind, \
-             publication_language, updated_at, created_at from books",
+            r"select id, name, description, publication_year, content_rating, status, kind,
+                     publication_language, updated_at, created_at
+              from books",
         );
 
         if let Some(id) = pagination.after {
@@ -243,126 +310,209 @@ impl Database {
             .push(" order by id desc limit ")
             .push_bind((limit + 1) as i64);
 
-        let rows = builder
+        let mut rows = builder
             .build_query_as::<BookRow>()
             .fetch_all(&self.pool)
-            .await
-            .map_err(DatabaseError::from)
-            .inspect_err(|e| {
-                if DatabaseError::is_internal(e) {
-                    tracing::error!("failed to get books from database: {e:?}");
-                }
-            })?;
+            .await?;
 
-        let mut books: Vec<Book> = Vec::with_capacity(rows.len());
-        for row in rows {
-            let book = row.try_into().inspect_err(|e| {
-                if DatabaseError::is_internal(e) {
-                    tracing::error!("failed to convert book row: {e:?}");
-                }
-            })?;
-            books.push(book);
+        if rows.is_empty() {
+            return Ok((Vec::new(), None));
         }
 
         let mut next_cursor = None;
-        if books.len() > limit as usize {
-            books.pop();
-            next_cursor = books.last().map(|b| b.id);
+        if rows.len() > limit as usize {
+            rows.pop();
+            next_cursor = rows.last().map(|r| r.id);
+        }
+
+        let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
+        let mut labels = self.get_books_labels(&ids).await?;
+        let mut links = self.get_books_links(&ids).await?;
+        let mut titles = self.get_books_titles(&ids).await?;
+        let mut creators = self.get_books_creators(&ids).await?;
+
+        let mut books: Vec<Book> = Vec::with_capacity(rows.len());
+        for row in rows {
+            let id = row.id;
+            let book: Book = BookWithRelations {
+                row,
+                labels: labels.remove(&id).unwrap_or_default(),
+                links: links.remove(&id).unwrap_or_default(),
+                titles: titles.remove(&id).unwrap_or_default(),
+                creators: creators.remove(&id).unwrap_or_default(),
+            }
+            .try_into()
+            .inspect_err(|e| {
+                if DatabaseError::is_internal(e) {
+                    tracing::error!("failed to convert book row with relations: {e:?}");
+                }
+            })?;
+            books.push(book);
         }
 
         Ok((books, next_cursor))
     }
 
     pub async fn delete_book(&self, id: Uuid) -> Result<(), DatabaseError> {
-        self.delete_book_inner(id).await.inspect_err(|e| {
-            if DatabaseError::is_internal(e) {
-                tracing::error!("failed to delete book from database: {e:?}");
-            }
-        })
-    }
-
-    async fn delete_book_inner(&self, id: Uuid) -> Result<(), DatabaseError> {
-        let mut tx = self.pool.begin().await?;
-
-        // The three payload arrays are cleared here rather than by ON DELETE
-        // CASCADE, so the ordering stays visible in the application layer.
-        // book_creators is the exception: no book write touches it, so the
-        // database cascades it instead.
-        delete_book_relations(&mut tx, id).await?;
-
         let row = sqlx::query_file!("queries/delete_book.sql", id)
-            .fetch_optional(&mut *tx)
-            .await?;
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(DatabaseError::from)
+            .inspect_err(|e| {
+                if DatabaseError::is_internal(e) {
+                    tracing::error!("failed to delete book from database: {e:?}");
+                }
+            })?;
 
         if row.is_none() {
             return Err(DatabaseError::BookNotFound);
         }
 
-        tx.commit().await?;
         Ok(())
     }
-}
 
-async fn store_book_relations(
-    conn: &mut PgConnection,
-    item: &BookWrite,
-) -> Result<(), DatabaseError> {
-    sqlx::query_file!(
-        "queries/store_book_labels.sql",
-        item.book.id,
-        &item.label_ids
-    )
-    .execute(&mut *conn)
-    .await?;
+    async fn get_books_labels(
+        &self,
+        book_ids: &[Uuid],
+    ) -> Result<HashMap<Uuid, Vec<Label>>, DatabaseError> {
+        let rows = sqlx::query_file_as!(BookLabelRow, "queries/get_books_labels.sql", book_ids)
+            .fetch_all(&self.pool)
+            .await?;
 
-    let link_ids: Vec<Uuid> = item.links.iter().map(|l| l.id).collect();
-    let link_kinds: Vec<String> = item
-        .links
-        .iter()
-        .map(|l| l.kind.as_ref().to_owned())
-        .collect();
-    let link_urls: Vec<String> = item
-        .links
-        .iter()
-        .map(|l| l.url.as_ref().to_owned())
-        .collect();
-    sqlx::query_file!(
-        "queries/store_book_links.sql",
-        item.book.id,
-        &link_ids,
-        &link_kinds,
-        &link_urls
-    )
-    .execute(&mut *conn)
-    .await?;
+        let mut labels: HashMap<Uuid, Vec<Label>> = HashMap::with_capacity(book_ids.len());
+        for row in rows {
+            let book_id = row.book_id;
+            let label: Label = row.try_into().inspect_err(|e| {
+                if DatabaseError::is_internal(e) {
+                    tracing::error!("failed to convert book label row: {e:?}");
+                }
+            })?;
+            labels.entry(book_id).or_default().push(label);
+        }
 
-    let titles = item.titles.as_slice();
-    let title_ids: Vec<Uuid> = titles.iter().map(|t| t.id).collect();
-    let title_language_ids: Vec<Uuid> = titles.iter().map(|t| t.language_id).collect();
-    let title_names: Vec<String> = titles.iter().map(|t| t.name.as_ref().to_owned()).collect();
-    sqlx::query_file!(
-        "queries/store_book_titles.sql",
-        item.book.id,
-        &title_ids,
-        &title_language_ids,
-        &title_names
-    )
-    .execute(&mut *conn)
-    .await?;
+        Ok(labels)
+    }
 
-    Ok(())
-}
+    async fn get_books_links(
+        &self,
+        book_ids: &[Uuid],
+    ) -> Result<HashMap<Uuid, Vec<BookLink>>, DatabaseError> {
+        let rows = sqlx::query_file_as!(BookLinkRow, "queries/get_books_links.sql", book_ids)
+            .fetch_all(&self.pool)
+            .await?;
 
-async fn delete_book_relations(conn: &mut PgConnection, id: Uuid) -> Result<(), DatabaseError> {
-    sqlx::query_file!("queries/delete_book_labels.sql", id)
+        let mut links: HashMap<Uuid, Vec<BookLink>> = HashMap::with_capacity(book_ids.len());
+        for row in rows {
+            let book_id = row.book_id;
+            let link: BookLink = row.try_into().inspect_err(|e| {
+                if DatabaseError::is_internal(e) {
+                    tracing::error!("failed to convert book link row: {e:?}");
+                }
+            })?;
+            links.entry(book_id).or_default().push(link);
+        }
+
+        Ok(links)
+    }
+
+    async fn get_books_titles(
+        &self,
+        book_ids: &[Uuid],
+    ) -> Result<HashMap<Uuid, Vec<AlternativeTitle>>, DatabaseError> {
+        let rows = sqlx::query_file_as!(BookTitleRow, "queries/get_books_titles.sql", book_ids)
+            .fetch_all(&self.pool)
+            .await?;
+
+        let mut titles: HashMap<Uuid, Vec<AlternativeTitle>> =
+            HashMap::with_capacity(book_ids.len());
+        for row in rows {
+            let book_id = row.book_id;
+            let title: AlternativeTitle = row.try_into().inspect_err(|e| {
+                if DatabaseError::is_internal(e) {
+                    tracing::error!("failed to convert book title row: {e:?}");
+                }
+            })?;
+            titles.entry(book_id).or_default().push(title);
+        }
+
+        Ok(titles)
+    }
+
+    async fn get_books_creators(
+        &self,
+        book_ids: &[Uuid],
+    ) -> Result<HashMap<Uuid, Vec<Creator>>, DatabaseError> {
+        let rows = sqlx::query_file_as!(BookCreatorRow, "queries/get_books_creators.sql", book_ids)
+            .fetch_all(&self.pool)
+            .await?;
+
+        let mut creators: HashMap<Uuid, Vec<Creator>> = HashMap::with_capacity(book_ids.len());
+        for row in rows {
+            let book_id = row.book_id;
+            let creator: Creator = row.try_into().inspect_err(|e| {
+                if DatabaseError::is_internal(e) {
+                    tracing::error!("failed to convert book creator row: {e:?}");
+                }
+            })?;
+            creators.entry(book_id).or_default().push(creator);
+        }
+
+        Ok(creators)
+    }
+
+    async fn store_book_relations(
+        conn: &mut PgConnection,
+        item: &Book,
+        label_ids: &[Uuid],
+    ) -> Result<(), DatabaseError> {
+        sqlx::query_file!("queries/store_book_labels.sql", item.id, label_ids)
+            .execute(&mut *conn)
+            .await?;
+
+        let mut link_kinds: Vec<String> = Vec::with_capacity(item.links.len());
+        let mut link_urls: Vec<String> = Vec::with_capacity(item.links.len());
+        for link in &item.links {
+            link_kinds.push(link.kind.as_ref().to_owned());
+            link_urls.push(link.url.as_ref().to_owned());
+        }
+        sqlx::query_file!(
+            "queries/store_book_links.sql",
+            item.id,
+            &link_kinds,
+            &link_urls
+        )
         .execute(&mut *conn)
         .await?;
-    sqlx::query_file!("queries/delete_book_links.sql", id)
-        .execute(&mut *conn)
-        .await?;
-    sqlx::query_file!("queries/delete_book_titles.sql", id)
+
+        let mut title_language_ids: Vec<Uuid> = Vec::with_capacity(item.titles.len());
+        let mut title_names: Vec<String> = Vec::with_capacity(item.titles.len());
+        for title in &item.titles {
+            title_language_ids.push(title.language_id);
+            title_names.push(title.name.as_ref().to_owned());
+        }
+        sqlx::query_file!(
+            "queries/store_book_titles.sql",
+            item.id,
+            &title_language_ids,
+            &title_names
+        )
         .execute(&mut *conn)
         .await?;
 
-    Ok(())
+        Ok(())
+    }
+
+    async fn delete_book_relations(conn: &mut PgConnection, id: Uuid) -> Result<(), DatabaseError> {
+        sqlx::query_file!("queries/delete_book_labels.sql", id)
+            .execute(&mut *conn)
+            .await?;
+        sqlx::query_file!("queries/delete_book_links.sql", id)
+            .execute(&mut *conn)
+            .await?;
+        sqlx::query_file!("queries/delete_book_titles.sql", id)
+            .execute(&mut *conn)
+            .await?;
+
+        Ok(())
+    }
 }

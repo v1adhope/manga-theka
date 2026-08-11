@@ -10,18 +10,17 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        AlternativeTitle, Book, BookKind, BookLink, BookLinkKind, BookName, BookStatus, BookWrite,
-        DEFAULT_LIMIT, Description, Limit, LinkUrl, Pagination, Titles,
+        AlternativeTitle, Book, BookKind, BookLink, BookLinkKind, BookName, BookStatus,
+        Description, LinkUrl, Pagination,
     },
     error::{AppError, EntityError},
-    route::{StoreResp, json_data_response, json_response},
+    route::{PaginationQuery, StoreResp, json_data_response, json_response},
     service::Service,
 };
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BookLinkReq {
-    #[serde(rename = "type")]
     pub kind: BookLinkKind,
     pub url: String,
 }
@@ -41,7 +40,6 @@ pub struct BookReq {
     pub publication_year: i16,
     pub content_rating: Uuid,
     pub status: BookStatus,
-    #[serde(rename = "type")]
     pub kind: BookKind,
     pub publication_language: Uuid,
     #[serde(default)]
@@ -52,51 +50,71 @@ pub struct BookReq {
     pub titles: Vec<AlternativeTitleReq>,
 }
 
-impl TryFrom<(BookReq, Uuid, Option<OffsetDateTime>, OffsetDateTime)> for BookWrite {
+struct BookWithRelations {
+    req: BookReq,
+    id: Uuid,
+    updated_at: Option<OffsetDateTime>,
+    created_at: OffsetDateTime,
+}
+
+impl TryFrom<BookWithRelations> for (Book, Vec<Uuid>) {
     type Error = EntityError;
 
-    fn try_from(
-        ctx: (BookReq, Uuid, Option<OffsetDateTime>, OffsetDateTime),
-    ) -> Result<Self, Self::Error> {
-        let (req, id, updated_at, created_at) = ctx;
-
-        let book = Book {
+    fn try_from(item: BookWithRelations) -> Result<Self, Self::Error> {
+        let BookWithRelations {
+            req,
             id,
-            name: BookName::try_from(req.name)?,
-            description: Description::try_from(req.description)?,
-            publication_year: req.publication_year,
-            content_rating: req.content_rating,
-            status: req.status,
-            kind: req.kind,
-            publication_language: req.publication_language,
             updated_at,
             created_at,
-        };
+        } = item;
 
-        let mut links = Vec::with_capacity(req.links.len());
-        for link in req.links {
+        let BookReq {
+            name,
+            description,
+            publication_year,
+            content_rating,
+            status,
+            kind,
+            publication_language,
+            label_ids,
+            links: link_reqs,
+            titles: title_reqs,
+        } = req;
+
+        let mut links = Vec::with_capacity(link_reqs.len());
+        for link in link_reqs {
             links.push(BookLink {
-                id: Uuid::now_v7(),
                 kind: link.kind,
                 url: LinkUrl::try_from(link.url)?,
             });
         }
 
-        let mut titles = Vec::with_capacity(req.titles.len());
-        for title in req.titles {
+        let mut titles = Vec::with_capacity(title_reqs.len());
+        for title in title_reqs {
             titles.push(AlternativeTitle {
-                id: Uuid::now_v7(),
                 language_id: title.language_id,
                 name: BookName::try_from(title.name)?,
             });
         }
 
-        Ok(Self {
-            book,
-            label_ids: req.label_ids,
+        let book = Book {
+            id,
+            name: BookName::try_from(name)?,
+            description: Description::try_from(description)?,
+            publication_year,
+            content_rating,
+            status,
+            kind,
+            publication_language,
+            labels: Vec::new(),
             links,
-            titles: Titles::try_from(titles)?,
-        })
+            titles,
+            creators: Vec::new(),
+            updated_at,
+            created_at,
+        };
+
+        Ok((book, label_ids))
     }
 }
 
@@ -106,9 +124,15 @@ pub async fn store_book(
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let id = Uuid::now_v7();
     let created_at = OffsetDateTime::now_utc();
-    let book: BookWrite = (req, id, None, created_at).try_into()?;
+    let (book, label_ids): (Book, Vec<Uuid>) = BookWithRelations {
+        req,
+        id,
+        updated_at: None,
+        created_at,
+    }
+    .try_into()?;
 
-    service.store_book(book).await?;
+    service.store_book(book, label_ids).await?;
 
     Ok(json_data_response(StatusCode::CREATED, StoreResp { id }))
 }
@@ -119,30 +143,17 @@ pub async fn update_book(
     Json(req): Json<BookReq>,
 ) -> Result<StatusCode, AppError> {
     let updated_at = OffsetDateTime::now_utc();
-    let book: BookWrite = (req, id, Some(updated_at), OffsetDateTime::UNIX_EPOCH).try_into()?;
+    let (book, label_ids): (Book, Vec<Uuid>) = BookWithRelations {
+        req,
+        id,
+        updated_at: Some(updated_at),
+        created_at: OffsetDateTime::UNIX_EPOCH,
+    }
+    .try_into()?;
 
-    service.update_book(book).await?;
+    service.update_book(book, label_ids).await?;
 
     Ok(StatusCode::NO_CONTENT)
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GetBooksQuery {
-    pub after: Option<Uuid>,
-    pub limit: Option<u32>,
-}
-
-impl TryFrom<GetBooksQuery> for Pagination {
-    type Error = EntityError;
-
-    fn try_from(q: GetBooksQuery) -> Result<Self, Self::Error> {
-        let limit = Limit::try_from(q.limit.unwrap_or(DEFAULT_LIMIT))?;
-        Ok(Self {
-            after: q.after,
-            limit,
-        })
-    }
 }
 
 #[derive(Debug, Serialize)]
@@ -154,7 +165,7 @@ pub struct GetBooksResp {
 
 pub async fn get_books(
     State(service): State<Service>,
-    Query(query): Query<GetBooksQuery>,
+    Query(query): Query<PaginationQuery>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let pg: Pagination = query.try_into()?;
 

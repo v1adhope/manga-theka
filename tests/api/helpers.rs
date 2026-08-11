@@ -30,7 +30,7 @@ pub struct RespWrapper<T> {
 }
 
 static TRACING: LazyLock<()> = LazyLock::new(|| {
-    telemetry::init_subscriber("info".into());
+    telemetry::init_subscriber("info");
 });
 
 pub struct TestApp {
@@ -96,7 +96,6 @@ impl TestApp {
         pool
     }
 
-    /// Seeds the rows a book must reference and hands back their ids.
     pub async fn book_refs(&self) -> BookRefs {
         let content_rating = sqlx::query_scalar!("select id from content_ratings order by name")
             .fetch_one(&self.pool)
@@ -114,7 +113,6 @@ impl TestApp {
         }
     }
 
-    /// Returns `n` ids from the label catalog seeded by the migrations.
     pub async fn label_ids(&self, n: i64) -> Vec<Uuid> {
         sqlx::query_scalar!("select id from labels order by name limit $1", n)
             .fetch_all(&self.pool)
@@ -122,7 +120,6 @@ impl TestApp {
             .expect("failed to pick seeded labels")
     }
 
-    /// The minimal valid `POST /books` body, with no attached arrays.
     pub fn book_body(refs: &BookRefs) -> serde_json::Value {
         serde_json::json!({
             "name": "Berserk",
@@ -130,13 +127,11 @@ impl TestApp {
             "publicationYear": 1989,
             "contentRating": refs.content_rating,
             "status": "Ongoing",
-            "type": "Manga",
+            "kind": "Manga",
             "publicationLanguage": refs.language,
         })
     }
 
-    /// Attaches `creator` to `book_id` directly, standing in for the write path
-    /// that `book_creators` does not have yet.
     pub async fn attach_creator(&self, book_id: Uuid, creator_id: Uuid) {
         sqlx::query!(
             "insert into book_creators(book_id, creator_id) values($1, $2)",
@@ -148,8 +143,6 @@ impl TestApp {
         .expect("failed to attach creator to book");
     }
 
-    /// Row counts of the three tables a book write replaces wholesale, as
-    /// `(labels, links, titles)`.
     pub async fn count_book_relations(&self, id: Uuid) -> (i64, i64, i64) {
         let labels = sqlx::query_scalar!("select count(*) from book_labels where book_id = $1", id)
             .fetch_one(&self.pool)
@@ -171,7 +164,6 @@ impl TestApp {
         )
     }
 
-    /// Stores a book through the API and returns its id.
     pub async fn insert_book(&self, body: &serde_json::Value) -> Uuid {
         let req = Request::post("/books")
             .header(header::CONTENT_TYPE, "application/json")

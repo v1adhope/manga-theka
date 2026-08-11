@@ -10,7 +10,7 @@ impl Service {
         label_kind: Option<LabelKind>,
     ) -> Result<Vec<Label>, ServiceError> {
         self.database
-            .get_labels(label_kind)
+            .get_labels(label_kind.as_ref())
             .await
             .map_err(Into::into)
     }

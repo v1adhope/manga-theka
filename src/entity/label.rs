@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::error::EntityError;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum LabelKind {
     Genre,
     Tag,
@@ -31,7 +31,7 @@ impl AsRef<str> for LabelKind {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Label {
     pub id: Uuid,

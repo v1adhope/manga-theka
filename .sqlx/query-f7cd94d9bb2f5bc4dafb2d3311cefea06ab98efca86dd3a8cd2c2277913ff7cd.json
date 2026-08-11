@@ -1,45 +1,45 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select l.id, l.name, l.kind\nfrom labels l\njoin book_labels bl on bl.label_id = l.id\nwhere bl.book_id = $1\norder by l.name;\n",
+  "query": "select book_id, language_id, name\nfrom book_titles\nwhere book_id = any($1::uuid[])\norder by book_id, language_id, name;\n",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "id",
+        "name": "book_id",
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "labels",
-            "name": "id"
+            "table": "book_titles",
+            "name": "book_id"
           }
         }
       },
       {
         "ordinal": 1,
-        "name": "name",
-        "type_info": "Text",
+        "name": "language_id",
+        "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "labels",
-            "name": "name"
+            "table": "book_titles",
+            "name": "language_id"
           }
         }
       },
       {
         "ordinal": 2,
-        "name": "kind",
+        "name": "name",
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "labels",
-            "name": "kind"
+            "table": "book_titles",
+            "name": "name"
           }
         }
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "UuidArray"
       ]
     },
     "nullable": [
@@ -48,5 +48,5 @@
       false
     ]
   },
-  "hash": "f620e56e06384df962379c270c841f1b8a8c1317026e262d57af0828a1212ca0"
+  "hash": "f7cd94d9bb2f5bc4dafb2d3311cefea06ab98efca86dd3a8cd2c2277913ff7cd"
 }

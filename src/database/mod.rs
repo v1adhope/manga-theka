@@ -6,9 +6,10 @@ mod language;
 
 #[derive(Debug, Clone)]
 pub struct Database {
-    pub pool: sqlx::PgPool,
+    pool: sqlx::PgPool,
 }
 
+// TODO: tune tracing (internal errors handling)
 impl Database {
     pub fn new(pool: sqlx::PgPool) -> Self {
         Self { pool }

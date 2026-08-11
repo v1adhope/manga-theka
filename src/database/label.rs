@@ -8,10 +8,10 @@ use crate::{
 };
 
 #[derive(sqlx::FromRow)]
-struct LabelRow {
-    id: Uuid,
-    name: String,
-    kind: String,
+pub(super) struct LabelRow {
+    pub(super) id: Uuid,
+    pub(super) name: String,
+    pub(super) kind: String,
 }
 
 impl TryFrom<LabelRow> for Label {
@@ -34,7 +34,7 @@ impl TryFrom<LabelRow> for Label {
 impl Database {
     pub async fn get_labels(
         &self,
-        label_kind: Option<LabelKind>,
+        label_kind: Option<&LabelKind>,
     ) -> Result<Vec<Label>, DatabaseError> {
         let mut builder: QueryBuilder<Postgres> =
             QueryBuilder::new("select id, name, kind from labels");

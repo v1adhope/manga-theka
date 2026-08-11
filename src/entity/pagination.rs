@@ -28,7 +28,7 @@ impl Limit {
 #[derive(Debug)]
 pub struct Pagination {
     pub after: Option<Uuid>,
-    pub limit: Limit,
+    pub limit: Option<Limit>,
 }
 
 #[cfg(test)]

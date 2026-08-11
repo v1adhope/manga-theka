@@ -1,45 +1,45 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select id, language_id, name\nfrom book_titles\nwhere book_id = $1\norder by id;\n",
+  "query": "select book_id, kind, url\nfrom book_links\nwhere book_id = any($1::uuid[])\norder by book_id, kind, url;\n",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "id",
+        "name": "book_id",
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "book_titles",
-            "name": "id"
+            "table": "book_links",
+            "name": "book_id"
           }
         }
       },
       {
         "ordinal": 1,
-        "name": "language_id",
-        "type_info": "Uuid",
+        "name": "kind",
+        "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "book_titles",
-            "name": "language_id"
+            "table": "book_links",
+            "name": "kind"
           }
         }
       },
       {
         "ordinal": 2,
-        "name": "name",
+        "name": "url",
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "book_titles",
-            "name": "name"
+            "table": "book_links",
+            "name": "url"
           }
         }
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "UuidArray"
       ]
     },
     "nullable": [
@@ -48,5 +48,5 @@
       false
     ]
   },
-  "hash": "95bf4607ec3c70ac4aec433184f3e6b0737d767a4b9f577686e6c8b055b1978a"
+  "hash": "0f9f2105f73d646f9625c71c18a240466e90ae0c80ab98e00363a8d8f08f4717"
 }

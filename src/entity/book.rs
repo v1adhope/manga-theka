@@ -2,14 +2,13 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use time::OffsetDateTime;
 use unicode_segmentation::UnicodeSegmentation;
+use url::Url;
 use uuid::Uuid;
 
 use crate::{
     entity::{Creator, Label},
     error::EntityError,
 };
-
-pub const MAX_TITLES: usize = 12;
 
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
 pub enum BookStatus {
@@ -104,8 +103,6 @@ impl AsRef<str> for BookLinkKind {
     }
 }
 
-/// A `Book Name` or an `Alternative Title`: both are free-form names of a book
-/// under the same rules, unlike a `Creator`'s letters-only `Name`.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct BookName(String);
@@ -138,6 +135,9 @@ impl TryFrom<String> for Description {
     type Error = EntityError;
 
     fn try_from(s: String) -> Result<Self, Self::Error> {
+        if s.trim().is_empty() {
+            return Err(EntityError::DescriptionIsEmptyOrWhitespace);
+        }
         if s.graphemes(true).count() > 2000 {
             return Err(EntityError::DescriptionExceedsCharLimit);
         }
@@ -153,7 +153,7 @@ impl AsRef<str> for Description {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct LinkUrl(String);
+pub struct LinkUrl(Url);
 
 impl TryFrom<String> for LinkUrl {
     type Error = EntityError;
@@ -162,18 +162,20 @@ impl TryFrom<String> for LinkUrl {
         if s.graphemes(true).count() > 2048 {
             return Err(EntityError::LinkUrlExceedsCharLimit);
         }
-        // Allow-list the schemes a client can safely render as a link, per
-        // docs/security.md.
-        if !s.starts_with("http://") && !s.starts_with("https://") {
+        let url = match Url::parse(&s) {
+            Ok(url) => url,
+            Err(e) => return Err(EntityError::LinkUrlIsMalformed(e, s)),
+        };
+        if !matches!(url.scheme(), "http" | "https") {
             return Err(EntityError::LinkUrlSchemeNotAllowed(s));
         }
-        Ok(Self(s))
+        Ok(Self(url))
     }
 }
 
 impl AsRef<str> for LinkUrl {
     fn as_ref(&self) -> &str {
-        &self.0
+        self.0.as_ref()
     }
 }
 
@@ -186,9 +188,12 @@ pub struct Book {
     pub publication_year: i16,
     pub content_rating: Uuid,
     pub status: BookStatus,
-    #[serde(rename = "type")]
     pub kind: BookKind,
     pub publication_language: Uuid,
+    pub labels: Vec<Label>,
+    pub links: Vec<BookLink>,
+    pub titles: Vec<AlternativeTitle>,
+    pub creators: Vec<Creator>,
     #[serde(with = "time::serde::rfc3339::option")]
     pub updated_at: Option<OffsetDateTime>,
     #[serde(with = "time::serde::rfc3339")]
@@ -198,8 +203,6 @@ pub struct Book {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BookLink {
-    pub id: Uuid,
-    #[serde(rename = "type")]
     pub kind: BookLinkKind,
     pub url: LinkUrl,
 }
@@ -207,80 +210,13 @@ pub struct BookLink {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AlternativeTitle {
-    pub id: Uuid,
     pub language_id: Uuid,
     pub name: BookName,
 }
 
-#[derive(Debug)]
-pub struct Titles(Vec<AlternativeTitle>);
-
-impl TryFrom<Vec<AlternativeTitle>> for Titles {
-    type Error = EntityError;
-
-    fn try_from(titles: Vec<AlternativeTitle>) -> Result<Self, Self::Error> {
-        if titles.len() > MAX_TITLES {
-            return Err(EntityError::TitlesExceedLimit(titles.len(), MAX_TITLES));
-        }
-        Ok(Self(titles))
-    }
-}
-
-impl Titles {
-    pub fn as_slice(&self) -> &[AlternativeTitle] {
-        &self.0
-    }
-}
-
-/// A book together with the arrays a write replaces wholesale (ADR-0005).
-#[derive(Debug)]
-pub struct BookWrite {
-    pub book: Book,
-    pub label_ids: Vec<Uuid>,
-    pub links: Vec<BookLink>,
-    pub titles: Titles,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BookDetails {
-    #[serde(flatten)]
-    pub book: Book,
-    pub labels: Vec<Label>,
-    pub links: Vec<BookLink>,
-    pub titles: Vec<AlternativeTitle>,
-    /// Read-only: no book write touches `book_creators`, so this array stays
-    /// empty until a separate write path fills it.
-    pub creators: Vec<Creator>,
-}
-
 #[cfg(test)]
 mod tests {
-    use uuid::Uuid;
-
-    use crate::entity::{AlternativeTitle, BookName, Description, LinkUrl, MAX_TITLES, Titles};
-
-    fn title() -> AlternativeTitle {
-        AlternativeTitle {
-            id: Uuid::now_v7(),
-            language_id: Uuid::now_v7(),
-            name: BookName::try_from("Alt".to_owned()).unwrap(),
-        }
-    }
-
-    #[test]
-    fn titles_at_the_limit_are_valid() {
-        let titles: Vec<AlternativeTitle> = (0..MAX_TITLES).map(|_| title()).collect();
-        let res = Titles::try_from(titles);
-        assert!(res.is_ok());
-    }
-
-    #[test]
-    fn titles_above_the_limit_are_rejected() {
-        let titles: Vec<AlternativeTitle> = (0..MAX_TITLES + 1).map(|_| title()).collect();
-        let res = Titles::try_from(titles);
-        assert!(res.is_err());
-    }
+    use crate::entity::{BookName, Description, LinkUrl};
 
     #[test]
     fn book_name_255_graphemes_is_valid() {
@@ -319,6 +255,18 @@ mod tests {
     }
 
     #[test]
+    fn whitespace_only_description_is_rejected() {
+        let res = Description::try_from(" ".to_owned());
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn empty_description_is_rejected() {
+        let res = Description::try_from(String::new());
+        assert!(res.is_err());
+    }
+
+    #[test]
     fn link_url_2048_graphemes_is_valid() {
         let url = format!("https://a.co/{}", "b".repeat(2035));
         assert_eq!(url.len(), 2048);
@@ -343,5 +291,17 @@ mod tests {
     fn link_url_with_http_scheme_is_valid() {
         let res = LinkUrl::try_from("http://example.com/read".to_owned());
         assert!(res.is_ok());
+    }
+
+    #[test]
+    fn malformed_link_url_is_rejected() {
+        let res = LinkUrl::try_from("https://".to_owned());
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn relative_link_url_is_rejected() {
+        let res = LinkUrl::try_from("/read/1".to_owned());
+        assert!(res.is_err());
     }
 }

@@ -1,3 +1,3 @@
-insert into book_links(id, book_id, kind, url)
-select link.id, $1, link.kind, link.url
-from unnest($2::uuid[], $3::text[], $4::text[]) as link(id, kind, url);
+insert into book_links(book_id, kind, url)
+select $1, link.kind, link.url
+from unnest($2::text[], $3::text[]) as link(kind, url);

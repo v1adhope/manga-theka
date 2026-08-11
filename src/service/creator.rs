@@ -8,7 +8,7 @@ use crate::{
 
 impl Service {
     pub async fn store_creator(&self, item: Creator) -> Result<(), ServiceError> {
-        self.database.store_creator(item).await.map_err(Into::into)
+        self.database.store_creator(&item).await.map_err(Into::into)
     }
 
     pub async fn get_creator(&self, id: Uuid) -> Result<Creator, ServiceError> {
@@ -26,7 +26,10 @@ impl Service {
     }
 
     pub async fn update_creator(&self, item: Creator) -> Result<(), ServiceError> {
-        self.database.update_creator(item).await.map_err(Into::into)
+        self.database
+            .update_creator(&item)
+            .await
+            .map_err(Into::into)
     }
 
     pub async fn delete_creator(&self, id: Uuid) -> Result<(), ServiceError> {
