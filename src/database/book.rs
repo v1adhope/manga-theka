@@ -465,38 +465,67 @@ impl Database {
         item: &Book,
         label_ids: &[Uuid],
     ) -> Result<(), DatabaseError> {
-        sqlx::query_file!("queries/store_book_labels.sql", item.id, label_ids)
-            .execute(&mut *conn)
+        Self::store_book_labels(&mut *conn, item.id, label_ids).await?;
+        Self::store_book_links(&mut *conn, item).await?;
+        Self::store_book_titles(&mut *conn, item).await?;
+
+        Ok(())
+    }
+
+    async fn store_book_labels(
+        conn: &mut PgConnection,
+        book_id: Uuid,
+        label_ids: &[Uuid],
+    ) -> Result<(), DatabaseError> {
+        if label_ids.is_empty() {
+            return Ok(());
+        }
+
+        sqlx::query_file!("queries/store_book_labels.sql", book_id, label_ids)
+            .execute(conn)
             .await?;
 
-        let mut link_kinds: Vec<String> = Vec::with_capacity(item.links.len());
-        let mut link_urls: Vec<String> = Vec::with_capacity(item.links.len());
-        for link in &item.links {
-            link_kinds.push(link.kind.as_ref().to_owned());
-            link_urls.push(link.url.as_ref().to_owned());
-        }
-        sqlx::query_file!(
-            "queries/store_book_links.sql",
-            item.id,
-            &link_kinds,
-            &link_urls
-        )
-        .execute(&mut *conn)
-        .await?;
+        Ok(())
+    }
 
-        let mut title_language_ids: Vec<Uuid> = Vec::with_capacity(item.titles.len());
-        let mut title_names: Vec<String> = Vec::with_capacity(item.titles.len());
-        for title in &item.titles {
-            title_language_ids.push(title.language_id);
-            title_names.push(title.name.as_ref().to_owned());
+    async fn store_book_links(conn: &mut PgConnection, item: &Book) -> Result<(), DatabaseError> {
+        if item.links.is_empty() {
+            return Ok(());
         }
+
+        let mut kinds: Vec<String> = Vec::with_capacity(item.links.len());
+        let mut urls: Vec<String> = Vec::with_capacity(item.links.len());
+        for link in &item.links {
+            kinds.push(link.kind.as_ref().to_owned());
+            urls.push(link.url.as_ref().to_owned());
+        }
+
+        sqlx::query_file!("queries/store_book_links.sql", item.id, &kinds, &urls)
+            .execute(conn)
+            .await?;
+
+        Ok(())
+    }
+
+    async fn store_book_titles(conn: &mut PgConnection, item: &Book) -> Result<(), DatabaseError> {
+        if item.titles.is_empty() {
+            return Ok(());
+        }
+
+        let mut language_ids: Vec<Uuid> = Vec::with_capacity(item.titles.len());
+        let mut names: Vec<String> = Vec::with_capacity(item.titles.len());
+        for title in &item.titles {
+            language_ids.push(title.language_id);
+            names.push(title.name.as_ref().to_owned());
+        }
+
         sqlx::query_file!(
             "queries/store_book_titles.sql",
             item.id,
-            &title_language_ids,
-            &title_names
+            &language_ids,
+            &names
         )
-        .execute(&mut *conn)
+        .execute(conn)
         .await?;
 
         Ok(())
