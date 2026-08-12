@@ -10,25 +10,25 @@ pub enum EntityError {
     #[error("'{0}' can't be empty or whitespace")]
     NameIsEmptyOrWhitespace(String),
 
-    #[error("'{0}' exceeds character limit")]
+    #[error("'{0}' exceeds the 255-character limit")]
     NameExceedsCharLimit(String),
 
     #[error("'{0}' can only contain letters")]
     NameContainsNotLetters(String),
 
-    #[error("'{0}' invalid creator role")]
+    #[error("'{0}' is not a valid creator role")]
     InvalidCreatorRole(String),
 
-    #[error("'{0}' invalid label kind")]
+    #[error("'{0}' is not a valid label kind")]
     InvalidLabelKind(String),
 
-    #[error("'{0}' invalid book status")]
+    #[error("'{0}' is not a valid book status")]
     InvalidBookStatus(String),
 
-    #[error("'{0}' invalid book type")]
+    #[error("'{0}' is not a valid book kind")]
     InvalidBookKind(String),
 
-    #[error("'{0}' invalid book link type")]
+    #[error("'{0}' is not a valid book link kind")]
     InvalidBookLinkKind(String),
 
     #[error("Description can't be empty or whitespace")]
@@ -37,8 +37,8 @@ pub enum EntityError {
     #[error("Description exceeds the 2000-character limit")]
     DescriptionExceedsCharLimit,
 
-    #[error("Link url exceeds the 2048-character limit")]
-    LinkUrlExceedsCharLimit,
+    #[error("Link url '{0}...' exceeds the 2048-character limit")]
+    LinkUrlExceedsCharLimit(String),
 
     #[error("'{1}' is not a well-formed url")]
     LinkUrlIsMalformed(#[source] url::ParseError, String),

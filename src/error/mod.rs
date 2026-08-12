@@ -25,6 +25,5 @@ impl IntoResponse for AppError {
             Self::EntityError(e) => e.into_response(),
             Self::ServiceError(e) => e.into_response(),
         }
-        .into_response()
     }
 }

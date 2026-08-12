@@ -160,7 +160,9 @@ impl TryFrom<String> for LinkUrl {
 
     fn try_from(s: String) -> Result<Self, Self::Error> {
         if s.graphemes(true).count() > 2048 {
-            return Err(EntityError::LinkUrlExceedsCharLimit);
+            return Err(EntityError::LinkUrlExceedsCharLimit(
+                s.graphemes(true).take(64).collect(),
+            ));
         }
         let url = match Url::parse(&s) {
             Ok(url) => url,

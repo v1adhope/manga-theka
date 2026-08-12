@@ -19,6 +19,9 @@ pub enum DatabaseError {
     #[error("Creator full name already exists")]
     CreatorFullNameDuplication(#[source] sqlx::Error),
 
+    #[error("Creator is attached to one or more books")]
+    CreatorInUse(#[source] sqlx::Error),
+
     #[error("Creator not found")]
     CreatorNotFound,
 
@@ -31,7 +34,7 @@ pub enum DatabaseError {
     #[error("Book status doesn't exist")]
     BookStatusDoesNotExist(#[source] sqlx::Error),
 
-    #[error("Book type doesn't exist")]
+    #[error("Book kind doesn't exist")]
     BookKindDoesNotExist(#[source] sqlx::Error),
 
     #[error("Book content rating doesn't exist")]
@@ -46,7 +49,7 @@ pub enum DatabaseError {
     #[error("Book label is attached more than once")]
     BookLabelDuplication(#[source] sqlx::Error),
 
-    #[error("Book link type doesn't exist")]
+    #[error("Book link kind doesn't exist")]
     BookLinkKindDoesNotExist(#[source] sqlx::Error),
 
     #[error("Book link url exceeds the 2048-character limit")]
@@ -102,6 +105,9 @@ impl From<sqlx::Error> for DatabaseError {
                 }
                 Some("unique_creators_first_name_last_name") => {
                     return Self::CreatorFullNameDuplication(err);
+                }
+                Some("fk_book_creators_creators_creator_id") => {
+                    return Self::CreatorInUse(err);
                 }
                 Some("check_length_books_name") => {
                     return Self::BookNameTooLong(err);
@@ -160,6 +166,7 @@ impl IntoResponse for DatabaseError {
                 "Something went wrong".to_string(),
             ),
             Self::CreatorNotFound | Self::BookNotFound => (StatusCode::NOT_FOUND, self.to_string()),
+            Self::CreatorInUse(_) => (StatusCode::CONFLICT, self.to_string()),
             e => (StatusCode::UNPROCESSABLE_ENTITY, e.to_string()),
         }
         .into_response()
