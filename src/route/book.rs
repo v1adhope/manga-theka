@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::{
     entity::{
         AlternativeTitle, Book, BookKind, BookLink, BookLinkKind, BookName, BookStatus,
-        Description, LinkUrl, Pagination,
+        ContentRating, Description, Language, LinkUrl, Pagination,
     },
     error::{AppError, EntityError},
     route::{PaginationQuery, StoreResp, json_data_response, json_response},
@@ -102,10 +102,16 @@ impl TryFrom<BookWithRelations> for (Book, Vec<Uuid>) {
             name: BookName::try_from(name)?,
             description: Description::try_from(description)?,
             publication_year,
-            content_rating,
+            content_rating: ContentRating {
+                id: content_rating,
+                ..Default::default()
+            },
             status,
             kind,
-            publication_language,
+            publication_language: Language {
+                id: publication_language,
+                ..Default::default()
+            },
             labels: Vec::new(),
             links,
             titles,

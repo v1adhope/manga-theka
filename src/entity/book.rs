@@ -6,7 +6,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
-    entity::{Creator, Label},
+    entity::{ContentRating, Creator, Label, Language},
     error::EntityError,
 };
 
@@ -186,10 +186,10 @@ pub struct Book {
     pub name: BookName,
     pub description: Description,
     pub publication_year: i16,
-    pub content_rating: Uuid,
+    pub content_rating: ContentRating,
     pub status: BookStatus,
     pub kind: BookKind,
-    pub publication_language: Uuid,
+    pub publication_language: Language,
     pub labels: Vec<Label>,
     pub links: Vec<BookLink>,
     pub titles: Vec<AlternativeTitle>,

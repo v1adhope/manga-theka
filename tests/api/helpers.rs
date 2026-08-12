@@ -41,6 +41,7 @@ pub struct TestApp {
 #[derive(Debug)]
 pub struct BookRefs {
     pub content_rating: Uuid,
+    pub other_content_rating: Uuid,
     pub language: Uuid,
     pub other_language: Uuid,
 }
@@ -97,17 +98,18 @@ impl TestApp {
     }
 
     pub async fn book_refs(&self) -> BookRefs {
-        let content_rating = sqlx::query_scalar!("select id from content_ratings order by name")
-            .fetch_one(&self.pool)
+        let content_ratings = sqlx::query_scalar!("select id from content_ratings order by name")
+            .fetch_all(&self.pool)
             .await
-            .expect("failed to pick a seeded content rating");
+            .expect("failed to pick seeded content ratings");
         let languages = sqlx::query_scalar!("select id from languages order by name")
             .fetch_all(&self.pool)
             .await
             .expect("failed to pick seeded languages");
 
         BookRefs {
-            content_rating,
+            content_rating: content_ratings[0],
+            other_content_rating: content_ratings[1],
             language: languages[0],
             other_language: languages[1],
         }

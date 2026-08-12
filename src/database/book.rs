@@ -6,8 +6,9 @@ use uuid::Uuid;
 use crate::{
     database::{Database, creator::CreatorRow, label::LabelRow},
     entity::{
-        AlternativeTitle, Book, BookKind, BookLink, BookLinkKind, BookName, BookStatus, Creator,
-        DEFAULT_LIMIT, Description, Label, Limit, LinkUrl, Pagination,
+        AlternativeTitle, Book, BookKind, BookLink, BookLinkKind, BookName, BookStatus,
+        ContentRating, Creator, DEFAULT_LIMIT, Description, Label, Language, Limit, LinkUrl,
+        Pagination,
     },
     error::DatabaseError,
 };
@@ -18,10 +19,14 @@ struct BookRow {
     name: String,
     description: String,
     publication_year: i16,
-    content_rating: Uuid,
+    content_rating_id: Uuid,
+    content_rating_name: String,
+    content_rating_code: String,
     status: String,
     kind: String,
-    publication_language: Uuid,
+    publication_language_id: Uuid,
+    publication_language_code: String,
+    publication_language_name: String,
     updated_at: Option<time::OffsetDateTime>,
     created_at: time::OffsetDateTime,
 }
@@ -149,10 +154,18 @@ impl TryFrom<BookWithRelations> for Book {
             name,
             description,
             publication_year: row.publication_year,
-            content_rating: row.content_rating,
+            content_rating: ContentRating {
+                id: row.content_rating_id,
+                name: row.content_rating_name,
+                code: row.content_rating_code,
+            },
             status,
             kind,
-            publication_language: row.publication_language,
+            publication_language: Language {
+                id: row.publication_language_id,
+                code: row.publication_language_code,
+                name: row.publication_language_name,
+            },
             labels,
             links,
             titles,
@@ -183,10 +196,10 @@ impl Database {
             item.name.as_ref(),
             item.description.as_ref(),
             item.publication_year,
-            item.content_rating,
+            item.content_rating.id,
             item.status.as_ref(),
             item.kind.as_ref(),
-            item.publication_language,
+            item.publication_language.id,
             item.updated_at,
             item.created_at,
         )
@@ -222,10 +235,10 @@ impl Database {
             item.name.as_ref(),
             item.description.as_ref(),
             item.publication_year,
-            item.content_rating,
+            item.content_rating.id,
             item.status.as_ref(),
             item.kind.as_ref(),
-            item.publication_language,
+            item.publication_language.id,
             item.updated_at,
         )
         .fetch_optional(&mut *tx)
@@ -297,17 +310,22 @@ impl Database {
     ) -> Result<(Vec<Book>, Option<Uuid>), DatabaseError> {
         let limit = pagination.limit.map_or(DEFAULT_LIMIT, Limit::as_u32);
         let mut builder: QueryBuilder<Postgres> = QueryBuilder::new(
-            r"select id, name, description, publication_year, content_rating, status, kind,
-                     publication_language, updated_at, created_at
-              from books",
+            r"select b.id, b.name, b.description, b.publication_year,
+                     cr.id as content_rating_id, cr.name as content_rating_name,
+                     cr.code as content_rating_code, b.status, b.kind,
+                     l.id as publication_language_id, l.code as publication_language_code,
+                     l.name as publication_language_name, b.updated_at, b.created_at
+              from books b
+              join content_ratings cr on cr.id = b.content_rating
+              join languages l on l.id = b.publication_language",
         );
 
         if let Some(id) = pagination.after {
-            builder.push(" where id < ").push_bind(id);
+            builder.push(" where b.id < ").push_bind(id);
         }
 
         builder
-            .push(" order by id desc limit ")
+            .push(" order by b.id desc limit ")
             .push_bind((limit + 1) as i64);
 
         let mut rows = builder

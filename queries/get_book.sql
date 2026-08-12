@@ -1,4 +1,8 @@
-select id, name, description, publication_year, content_rating, status, kind,
-       publication_language, updated_at, created_at
-from books
-where id = $1;
+select b.id, b.name, b.description, b.publication_year, cr.id as content_rating_id,
+       cr.name as content_rating_name, cr.code as content_rating_code, b.status, b.kind,
+       l.id as publication_language_id, l.code as publication_language_code,
+       l.name as publication_language_name, b.updated_at, b.created_at
+from books b
+join content_ratings cr on cr.id = b.content_rating
+join languages l on l.id = b.publication_language
+where b.id = $1;

@@ -159,9 +159,37 @@ async fn get_book_embeds_labels_links_and_titles() {
     assert_eq!(data["publicationYear"], 1989);
     assert_eq!(data["status"], "Ongoing");
     assert_eq!(data["kind"], "Manga");
-    assert_eq!(data["contentRating"], refs.content_rating.to_string());
-    assert_eq!(data["publicationLanguage"], refs.language.to_string());
     assert!(data["updatedAt"].is_null());
+
+    let content_rating = sqlx::query!(
+        "select name, code from content_ratings where id = $1",
+        refs.content_rating
+    )
+    .fetch_one(&app.pool)
+    .await
+    .unwrap();
+
+    assert_eq!(data["contentRating"]["id"], refs.content_rating.to_string());
+    assert_eq!(
+        data["contentRating"]["name"], content_rating.name,
+        "the id must come back as a whole content rating"
+    );
+    assert_eq!(data["contentRating"]["code"], content_rating.code);
+
+    let language = sqlx::query!(
+        "select code, name from languages where id = $1",
+        refs.language
+    )
+    .fetch_one(&app.pool)
+    .await
+    .unwrap();
+
+    assert_eq!(data["publicationLanguage"]["id"], refs.language.to_string());
+    assert_eq!(
+        data["publicationLanguage"]["code"], language.code,
+        "the id must come back as a whole language"
+    );
+    assert_eq!(data["publicationLanguage"]["name"], language.name);
 
     let label_name = sqlx::query_scalar!("select name from labels where id = $1", label_ids[0])
         .fetch_one(&app.pool)
@@ -234,7 +262,29 @@ async fn get_books_embeds_each_books_own_arrays() {
     assert_eq!(full["creators"].as_array().unwrap().len(), 1);
     assert_eq!(full["creators"][0]["id"], creator.id.to_string());
 
+    let language = sqlx::query!(
+        "select code, name from languages where id = $1",
+        refs.language
+    )
+    .fetch_one(&app.pool)
+    .await
+    .unwrap();
+
+    let content_rating = sqlx::query!(
+        "select name, code from content_ratings where id = $1",
+        refs.content_rating
+    )
+    .fetch_one(&app.pool)
+    .await
+    .unwrap();
+
     let bare = find(bare_id);
+    assert_eq!(bare["publicationLanguage"]["id"], refs.language.to_string());
+    assert_eq!(bare["publicationLanguage"]["code"], language.code);
+    assert_eq!(bare["publicationLanguage"]["name"], language.name);
+    assert_eq!(bare["contentRating"]["id"], refs.content_rating.to_string());
+    assert_eq!(bare["contentRating"]["name"], content_rating.name);
+    assert_eq!(bare["contentRating"]["code"], content_rating.code);
     assert!(bare["labels"].as_array().unwrap().is_empty());
     assert!(bare["links"].as_array().unwrap().is_empty());
     assert!(bare["titles"].as_array().unwrap().is_empty());
@@ -476,6 +526,17 @@ async fn store_book_with_unknown_content_rating_returns_422() {
 }
 
 #[tokio::test]
+async fn store_book_with_unknown_publication_language_returns_422() {
+    let app = TestApp::new().await;
+    let refs = app.book_refs().await;
+
+    let mut body = TestApp::book_body(&refs);
+    body["publicationLanguage"] = serde_json::json!(uuid::Uuid::now_v7());
+
+    assert_store_book_returns_422(&app, body).await;
+}
+
+#[tokio::test]
 async fn store_book_with_unknown_label_id_returns_422() {
     let app = TestApp::new().await;
     let refs = app.book_refs().await;
@@ -571,6 +632,74 @@ async fn update_book_with_valid_body_passes() {
         created_at.unix_timestamp(),
         "created_at must stay immutable"
     );
+}
+
+#[tokio::test]
+async fn update_book_swaps_the_publication_language() {
+    let app = TestApp::new().await;
+    let refs = app.book_refs().await;
+    let id = app.insert_book(&TestApp::book_body(&refs)).await;
+
+    let mut body = TestApp::book_body(&refs);
+    body["publicationLanguage"] = serde_json::json!(refs.other_language);
+
+    assert_eq!(put_book(&app, id, &body).await, StatusCode::NO_CONTENT);
+
+    let req = Request::get(format!("/books/{id}"))
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.router.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+
+    let language = sqlx::query!(
+        "select code, name from languages where id = $1",
+        refs.other_language
+    )
+    .fetch_one(&app.pool)
+    .await
+    .unwrap();
+
+    let publication_language = &v["data"]["publicationLanguage"];
+    assert_eq!(publication_language["id"], refs.other_language.to_string());
+    assert_eq!(publication_language["code"], language.code);
+    assert_eq!(publication_language["name"], language.name);
+}
+
+#[tokio::test]
+async fn update_book_swaps_the_content_rating() {
+    let app = TestApp::new().await;
+    let refs = app.book_refs().await;
+    let id = app.insert_book(&TestApp::book_body(&refs)).await;
+
+    let mut body = TestApp::book_body(&refs);
+    body["contentRating"] = serde_json::json!(refs.other_content_rating);
+
+    assert_eq!(put_book(&app, id, &body).await, StatusCode::NO_CONTENT);
+
+    let req = Request::get(format!("/books/{id}"))
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.router.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+
+    let expected = sqlx::query!(
+        "select name, code from content_ratings where id = $1",
+        refs.other_content_rating
+    )
+    .fetch_one(&app.pool)
+    .await
+    .unwrap();
+
+    let content_rating = &v["data"]["contentRating"];
+    assert_eq!(content_rating["id"], refs.other_content_rating.to_string());
+    assert_eq!(content_rating["name"], expected.name);
+    assert_eq!(content_rating["code"], expected.code);
 }
 
 #[tokio::test]
