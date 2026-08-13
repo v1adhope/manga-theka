@@ -255,7 +255,6 @@ select (select b.name from books b where b.id = $1) as "name?",
         }
     }
 
-    // TODO: check
     pub async fn fetch_book(&self, id: Uuid) -> Book {
         let row = sqlx::query!(
             r#"

@@ -168,8 +168,28 @@ impl IntoResponse for DatabaseError {
                 "Something went wrong".to_string(),
             ),
             Self::CreatorNotFound | Self::BookNotFound => (StatusCode::NOT_FOUND, self.to_string()),
-            Self::CreatorInUse(_) => (StatusCode::CONFLICT, self.to_string()),
-            e => (StatusCode::UNPROCESSABLE_ENTITY, e.to_string()),
+            Self::CreatorInUse(_) | Self::CreatorFullNameDuplication(_) => {
+                (StatusCode::CONFLICT, self.to_string())
+            }
+            Self::CreatorFirstNameTooLong(_)
+            | Self::CreatorLastNameTooLong(_)
+            | Self::CreatorRoleDoesNotExist(_)
+            | Self::BookNameTooLong(_)
+            | Self::BookDescriptionTooLong(_)
+            | Self::BookStatusDoesNotExist(_)
+            | Self::BookKindDoesNotExist(_)
+            | Self::BookContentRatingDoesNotExist(_)
+            | Self::BookPublicationLanguageDoesNotExist(_)
+            | Self::BookLabelDoesNotExist(_)
+            | Self::BookLabelDuplication(_)
+            | Self::BookLinkKindDoesNotExist(_)
+            | Self::BookLinkUrlTooLong(_)
+            | Self::BookLinkUrlDuplication(_)
+            | Self::BookTitleLanguageDoesNotExist(_)
+            | Self::BookTitleNameTooLong(_)
+            | Self::BookTitleNameDuplication(_) => {
+                (StatusCode::UNPROCESSABLE_ENTITY, self.to_string())
+            }
         }
         .into_response()
     }

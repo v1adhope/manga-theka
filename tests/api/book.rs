@@ -27,10 +27,10 @@ async fn store_book_with_valid_body_passes() {
         "name": book.name.as_ref(),
         "description": book.description.as_ref(),
         "publicationYear": book.publication_year,
-        "contentRating": book.content_rating.id,
+        "contentRatingId": book.content_rating.id,
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
-        "publicationLanguage": book.publication_language.id,
+        "publicationLanguageId": book.publication_language.id,
         "labelIds": book.labels.iter().map(|l| l.id).collect::<Vec<_>>(),
         "links": &book.links,
         "titles": &book.titles,
@@ -71,10 +71,10 @@ async fn store_book_without_relations_passes() {
         "name": book.name.as_ref(),
         "description": book.description.as_ref(),
         "publicationYear": book.publication_year,
-        "contentRating": book.content_rating.id,
+        "contentRatingId": book.content_rating.id,
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
-        "publicationLanguage": book.publication_language.id,
+        "publicationLanguageId": book.publication_language.id,
     })
     .to_string();
 
@@ -115,10 +115,10 @@ async fn store_book_with_missing_name_returns_422() {
     let body = serde_json::json!({
         "description": book.description.as_ref(),
         "publicationYear": book.publication_year,
-        "contentRating": book.content_rating.id,
+        "contentRatingId": book.content_rating.id,
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
-        "publicationLanguage": book.publication_language.id,
+        "publicationLanguageId": book.publication_language.id,
     })
     .to_string();
 
@@ -140,10 +140,10 @@ async fn store_book_with_unknown_status_returns_422() {
         "name": book.name.as_ref(),
         "description": book.description.as_ref(),
         "publicationYear": book.publication_year,
-        "contentRating": book.content_rating.id,
+        "contentRatingId": book.content_rating.id,
         "status": "abandoned",
         "kind": book.kind.as_ref(),
-        "publicationLanguage": book.publication_language.id,
+        "publicationLanguageId": book.publication_language.id,
     })
     .to_string();
 
@@ -165,10 +165,10 @@ async fn store_book_with_unknown_label_id_returns_422() {
         "name": book.name.as_ref(),
         "description": book.description.as_ref(),
         "publicationYear": book.publication_year,
-        "contentRating": book.content_rating.id,
+        "contentRatingId": book.content_rating.id,
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
-        "publicationLanguage": book.publication_language.id,
+        "publicationLanguageId": book.publication_language.id,
         "labelIds": [uuid::Uuid::now_v7()],
     })
     .to_string();
@@ -431,10 +431,10 @@ async fn update_book_with_valid_body_passes() {
         "name": updated.name.as_ref(),
         "description": updated.description.as_ref(),
         "publicationYear": updated.publication_year,
-        "contentRating": updated.content_rating.id,
+        "contentRatingId": updated.content_rating.id,
         "status": updated.status.as_ref(),
         "kind": updated.kind.as_ref(),
-        "publicationLanguage": updated.publication_language.id,
+        "publicationLanguageId": updated.publication_language.id,
         "labelIds": updated.labels.iter().map(|l| l.id).collect::<Vec<_>>(),
         "links": &updated.links,
         "titles": &updated.titles,
@@ -501,10 +501,10 @@ async fn update_book_swaps_the_content_rating() {
         "name": book.name.as_ref(),
         "description": book.description.as_ref(),
         "publicationYear": book.publication_year,
-        "contentRating": other.id,
+        "contentRatingId": other.id,
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
-        "publicationLanguage": book.publication_language.id,
+        "publicationLanguageId": book.publication_language.id,
     })
     .to_string();
 
@@ -537,10 +537,10 @@ async fn update_book_with_empty_arrays_detaches_everything() {
         "name": book.name.as_ref(),
         "description": book.description.as_ref(),
         "publicationYear": book.publication_year,
-        "contentRating": book.content_rating.id,
+        "contentRatingId": book.content_rating.id,
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
-        "publicationLanguage": book.publication_language.id,
+        "publicationLanguageId": book.publication_language.id,
         "labelIds": [],
         "links": [],
         "titles": [],
@@ -575,10 +575,10 @@ async fn update_book_leaves_other_books_untouched() {
         "name": renamed.name.as_ref(),
         "description": book.description.as_ref(),
         "publicationYear": book.publication_year,
-        "contentRating": book.content_rating.id,
+        "contentRatingId": book.content_rating.id,
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
-        "publicationLanguage": book.publication_language.id,
+        "publicationLanguageId": book.publication_language.id,
     })
     .to_string();
 
@@ -607,10 +607,10 @@ async fn update_book_with_unknown_id_returns_404() {
         "name": book.name.as_ref(),
         "description": book.description.as_ref(),
         "publicationYear": book.publication_year,
-        "contentRating": book.content_rating.id,
+        "contentRatingId": book.content_rating.id,
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
-        "publicationLanguage": book.publication_language.id,
+        "publicationLanguageId": book.publication_language.id,
     })
     .to_string();
 

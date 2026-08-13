@@ -38,10 +38,10 @@ pub struct BookReq {
     pub name: String,
     pub description: String,
     pub publication_year: i16,
-    pub content_rating: Uuid,
+    pub content_rating_id: Uuid,
     pub status: BookStatus,
     pub kind: BookKind,
-    pub publication_language: Uuid,
+    pub publication_language_id: Uuid,
     #[serde(default)]
     pub label_ids: Vec<Uuid>,
     #[serde(default)]
@@ -72,10 +72,10 @@ impl TryFrom<BookWithRelations> for (Book, Vec<Uuid>) {
             name,
             description,
             publication_year,
-            content_rating,
+            content_rating_id,
             status,
             kind,
-            publication_language,
+            publication_language_id,
             label_ids,
             links: link_reqs,
             titles: title_reqs,
@@ -103,13 +103,13 @@ impl TryFrom<BookWithRelations> for (Book, Vec<Uuid>) {
             description: Description::try_from(description)?,
             publication_year,
             content_rating: ContentRating {
-                id: content_rating,
+                id: content_rating_id,
                 ..Default::default()
             },
             status,
             kind,
             publication_language: Language {
-                id: publication_language,
+                id: publication_language_id,
                 ..Default::default()
             },
             labels: Vec::new(),

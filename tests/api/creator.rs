@@ -167,7 +167,7 @@ async fn update_creator_with_unknown_id_returns_404() {
 }
 
 #[tokio::test]
-async fn update_creator_fullname_duplication_returns_422() {
+async fn update_creator_fullname_duplication_returns_409() {
     let app = TestApp::new().await;
     let creator = CreatorFaker.fake();
     let another_creator = CreatorFaker.fake();
@@ -187,7 +187,7 @@ async fn update_creator_fullname_duplication_returns_422() {
         .unwrap();
 
     let resp = app.router.oneshot(req).await.unwrap();
-    assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
+    assert_error(resp, StatusCode::CONFLICT).await;
 }
 
 #[tokio::test]
