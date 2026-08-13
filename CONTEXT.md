@@ -9,7 +9,7 @@ A person who operates an account. Holds a set of `Role`s, signs in with email + 
 _Avoid_: Account, member, profile
 
 **Creator**:
-The author or artist of a manga title -- a metadata subject, not an account operator. Referenced by books in the `creators` table; cannot log in. A `User` uploads content on behalf of a `Creator`.
+The author or artist of a manga title -- a metadata subject, not an account operator. Credited on any number of `Book`s, and a `Book` may credit several; cannot log in. A `User` uploads content on behalf of a `Creator`.
 _Avoid_: Author (when used to encompass artists), contributor
 
 **Guest**:
@@ -53,6 +53,22 @@ _Avoid_: Title, Localized name
 **Alternative Title**:
 A supplementary name for a `Book` in any language -- the original non-English title or an official translation. Unlike `Chapter Title`, a `Book` may have many `Alternative Title`s in the same language.
 _Avoid_: Translation, Localization
+
+**Book Kind**:
+The publication format of a `Book` -- `Manga`, `Manhwa`, or `Manhua`. A closed, fixed set; exactly one per `Book`.
+_Avoid_: Type, Format, Origin, Demographic
+
+**Book Status**:
+The publication state of the work behind a `Book` -- `Ongoing`, `Completed`, `Hiatus`, or `Cancelled`. A closed, fixed set; exactly one per `Book`. Describes the work's own progress, not the catalog record's moderation or visibility state.
+_Avoid_: State, Availability, Progress
+
+**Content Rating**:
+The audience-suitability rating a `Book` carries, exactly one per Book. Unlike `Book Kind` and `Book Status`, an open set -- currently `Everyone` (E), `Teen` (T), `Teen Plus` (T+), and `Mature` (M), extensible because rating systems vary by country.
+_Avoid_: Age rating, Maturity, Audience
+
+**Publication Language**:
+The language a `Book` was originally published in, exactly one per Book, drawn from the shared language catalog (ISO 639-1) that `Alternative Title` and `Chapter Release` also draw from. No `Chapter Release` may use its Book's Publication Language -- releases are always translations.
+_Avoid_: Original language, Source language, Locale
 
 **Chapter**:
 An abstract, numbered slot belonging to a `Book`. Carries no language and no page images of its own -- those live on its `Chapter Release`s.
