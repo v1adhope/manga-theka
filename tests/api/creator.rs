@@ -6,7 +6,8 @@ use http_body_util::BodyExt;
 use time::OffsetDateTime;
 use tower::ServiceExt;
 
-use crate::helpers::{CreatorFaker, RespWrapper, TestApp};
+use crate::fakers::CreatorFaker;
+use crate::helpers::{RespWrapper, TestApp, assert_error, assert_stored};
 use fake::Fake;
 use manga_theka::entity::Creator;
 
@@ -25,12 +26,7 @@ async fn store_creator_with_valid_body_passes() {
         .unwrap();
 
     let resp = app.router.oneshot(req).await.unwrap();
-
-    assert_eq!(resp.status(), StatusCode::CREATED);
-
-    let body = resp.into_body().collect().await.unwrap().to_bytes();
-    let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    let id = uuid::Uuid::parse_str(v["data"]["id"].as_str().unwrap()).unwrap();
+    let id = assert_stored(resp).await;
 
     let row = sqlx::query!("select id, first_name, last_name, role, created_at from creators",)
         .fetch_one(&app.pool)
@@ -54,16 +50,7 @@ async fn store_creator_with_broken_json_returns_400() {
 
     let resp = app.router.oneshot(req).await.unwrap();
 
-    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-    assert!(
-        !resp
-            .into_body()
-            .collect()
-            .await
-            .unwrap()
-            .to_bytes()
-            .is_empty()
-    );
+    assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
 
 #[tokio::test]
@@ -81,16 +68,7 @@ async fn store_creator_with_missing_first_name_returns_422() {
 
     let resp = app.router.oneshot(req).await.unwrap();
 
-    assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
-    assert!(
-        !resp
-            .into_body()
-            .collect()
-            .await
-            .unwrap()
-            .to_bytes()
-            .is_empty()
-    );
+    assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
 
 #[tokio::test]
@@ -185,16 +163,7 @@ async fn update_creator_with_unknown_id_returns_404() {
         .unwrap();
 
     let resp = app.router.oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
-    assert!(
-        !resp
-            .into_body()
-            .collect()
-            .await
-            .unwrap()
-            .to_bytes()
-            .is_empty()
-    );
+    assert_error(resp, StatusCode::NOT_FOUND).await;
 }
 
 #[tokio::test]
@@ -218,16 +187,7 @@ async fn update_creator_fullname_duplication_returns_422() {
         .unwrap();
 
     let resp = app.router.oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
-    assert!(
-        !resp
-            .into_body()
-            .collect()
-            .await
-            .unwrap()
-            .to_bytes()
-            .is_empty()
-    );
+    assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
 
 #[tokio::test]
@@ -250,16 +210,7 @@ async fn update_creator_name_validation_failure_returns_422() {
         .unwrap();
 
     let resp = app.router.oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
-    assert!(
-        !resp
-            .into_body()
-            .collect()
-            .await
-            .unwrap()
-            .to_bytes()
-            .is_empty()
-    );
+    assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
 
 #[tokio::test]
@@ -298,17 +249,7 @@ async fn get_creator_with_unknown_id_returns_404() {
         .unwrap();
 
     let resp = app.router.oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
-
-    assert!(
-        !resp
-            .into_body()
-            .collect()
-            .await
-            .unwrap()
-            .to_bytes()
-            .is_empty()
-    );
+    assert_error(resp, StatusCode::NOT_FOUND).await;
 }
 
 #[tokio::test]
@@ -412,16 +353,7 @@ async fn get_creators_invalid_limit_returns_400() {
         .unwrap();
 
     let resp = app.router.oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-    assert!(
-        !resp
-            .into_body()
-            .collect()
-            .await
-            .unwrap()
-            .to_bytes()
-            .is_empty()
-    );
+    assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
 
 #[tokio::test]
@@ -433,16 +365,7 @@ async fn get_creators_zero_limit_returns_422() {
         .unwrap();
 
     let resp = app.router.oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
-    assert!(
-        !resp
-            .into_body()
-            .collect()
-            .await
-            .unwrap()
-            .to_bytes()
-            .is_empty()
-    );
+    assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
 
 #[tokio::test]
@@ -454,16 +377,7 @@ async fn get_creators_invalid_after_returns_400() {
         .unwrap();
 
     let resp = app.router.oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-    assert!(
-        !resp
-            .into_body()
-            .collect()
-            .await
-            .unwrap()
-            .to_bytes()
-            .is_empty()
-    );
+    assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
 
 #[tokio::test]
@@ -496,16 +410,7 @@ async fn delete_creator_with_unknown_id_returns_404() {
         .unwrap();
 
     let resp = app.router.oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
-    assert!(
-        !resp
-            .into_body()
-            .collect()
-            .await
-            .unwrap()
-            .to_bytes()
-            .is_empty()
-    );
+    assert_error(resp, StatusCode::NOT_FOUND).await;
 }
 
 #[tokio::test]

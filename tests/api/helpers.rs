@@ -2,31 +2,93 @@ use std::sync::LazyLock;
 use std::time::Duration;
 
 use axum::Router;
-use axum::body::Body;
-use axum::http::{Request, StatusCode, header};
-use fake::Dummy;
-use fake::Fake;
-use fake::faker::name::en::FirstName;
-use fake::rand::RngExt;
+use axum::http::StatusCode;
+use axum::response::Response;
 use http_body_util::BodyExt;
 use manga_theka::{
     config::{Config, Database},
-    entity::{Creator, CreatorRole, Name},
+    entity::{
+        AlternativeTitle, Book, BookLink, BookName, ContentRating, Creator, Description, Label,
+        Language, LinkUrl, Name,
+    },
     startup::App,
     telemetry,
 };
 use serde::Deserialize;
 use sqlx::{AssertSqlSafe, ConnectOptions, Connection, Executor, PgConnection, PgPool};
-use time::OffsetDateTime;
-use tower::ServiceExt;
 use tracing_log::log::LevelFilter;
 use uuid::Uuid;
+
+#[derive(Debug)]
+pub struct BookSample {
+    pub name: Option<String>,
+    pub updated_at: Option<time::OffsetDateTime>,
+    pub labels: i64,
+    pub links: i64,
+    pub titles: i64,
+}
 
 #[derive(Deserialize, Debug)]
 pub struct RespWrapper<T> {
     pub data: T,
     #[serde(rename = "nextCursor", default)]
     pub next_cursor: Option<uuid::Uuid>,
+}
+
+pub async fn assert_error(resp: Response, expected: StatusCode) {
+    assert_eq!(resp.status(), expected);
+    assert!(
+        !resp
+            .into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes()
+            .is_empty(),
+        "error response must carry a body"
+    );
+}
+
+pub async fn assert_stored(resp: Response) -> Uuid {
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let id = v["data"]["id"]
+        .as_str()
+        .expect("created response must carry data.id");
+
+    Uuid::parse_str(id).expect("data.id must be a uuid")
+}
+
+pub fn label_keys(labels: &[Label]) -> Vec<(Uuid, &str, &str)> {
+    let mut keys: Vec<(Uuid, &str, &str)> = labels
+        .iter()
+        .map(|l| (l.id, l.name.as_str(), l.kind.as_ref()))
+        .collect();
+    keys.sort();
+
+    keys
+}
+
+pub fn link_keys(links: &[BookLink]) -> Vec<(&str, &str)> {
+    let mut keys: Vec<(&str, &str)> = links
+        .iter()
+        .map(|l| (l.kind.as_ref(), l.url.as_ref()))
+        .collect();
+    keys.sort();
+
+    keys
+}
+
+pub fn title_keys(titles: &[AlternativeTitle]) -> Vec<(Uuid, &str)> {
+    let mut keys: Vec<(Uuid, &str)> = titles
+        .iter()
+        .map(|t| (t.language_id, t.name.as_ref()))
+        .collect();
+    keys.sort();
+
+    keys
 }
 
 static TRACING: LazyLock<()> = LazyLock::new(|| {
@@ -36,14 +98,6 @@ static TRACING: LazyLock<()> = LazyLock::new(|| {
 pub struct TestApp {
     pub pool: PgPool,
     pub router: Router,
-}
-
-#[derive(Debug)]
-pub struct BookRefs {
-    pub content_rating: Uuid,
-    pub other_content_rating: Uuid,
-    pub language: Uuid,
-    pub other_language: Uuid,
 }
 
 impl TestApp {
@@ -97,87 +151,235 @@ impl TestApp {
         pool
     }
 
-    pub async fn book_refs(&self) -> BookRefs {
-        let content_ratings = sqlx::query_scalar!("select id from content_ratings order by name")
-            .fetch_all(&self.pool)
-            .await
-            .expect("failed to pick seeded content ratings");
-        let languages = sqlx::query_scalar!("select id from languages order by name")
-            .fetch_all(&self.pool)
-            .await
-            .expect("failed to pick seeded languages");
-
-        BookRefs {
-            content_rating: content_ratings[0],
-            other_content_rating: content_ratings[1],
-            language: languages[0],
-            other_language: languages[1],
-        }
-    }
-
-    pub async fn label_ids(&self, n: i64) -> Vec<Uuid> {
-        sqlx::query_scalar!("select id from labels order by name limit $1", n)
-            .fetch_all(&self.pool)
-            .await
-            .expect("failed to pick seeded labels")
-    }
-
-    pub fn book_body(refs: &BookRefs) -> serde_json::Value {
-        serde_json::json!({
-            "name": "Berserk",
-            "description": "A wandering swordsman and his enormous sword.",
-            "publicationYear": 1989,
-            "contentRating": refs.content_rating,
-            "status": "Ongoing",
-            "kind": "Manga",
-            "publicationLanguage": refs.language,
-        })
-    }
-
-    pub async fn attach_creator(&self, book_id: Uuid, creator_id: Uuid) {
+    pub async fn insert_book(&self, b: &Book) {
         sqlx::query!(
-            "insert into book_creators(book_id, creator_id) values($1, $2)",
-            book_id,
-            creator_id
+            r#"
+insert into books(id, name, description, publication_year, content_rating, status, kind,
+                  publication_language, updated_at, created_at)
+values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
+        "#,
+            b.id,
+            b.name.as_ref(),
+            b.description.as_ref(),
+            b.publication_year,
+            b.content_rating.id,
+            b.status.as_ref() as _,
+            b.kind.as_ref() as _,
+            b.publication_language.id,
+            b.updated_at,
+            b.created_at
         )
         .execute(&self.pool)
         .await
-        .expect("failed to attach creator to book");
-    }
+        .expect("failed to insert factory book");
 
-    pub async fn count_book_relations(&self, id: Uuid) -> (i64, i64, i64) {
-        let labels = sqlx::query_scalar!("select count(*) from book_labels where book_id = $1", id)
-            .fetch_one(&self.pool)
-            .await
-            .expect("failed to count book labels");
-        let links = sqlx::query_scalar!("select count(*) from book_links where book_id = $1", id)
-            .fetch_one(&self.pool)
-            .await
-            .expect("failed to count book links");
-        let titles = sqlx::query_scalar!("select count(*) from book_titles where book_id = $1", id)
-            .fetch_one(&self.pool)
-            .await
-            .expect("failed to count book titles");
-
-        (
-            labels.unwrap_or_default(),
-            links.unwrap_or_default(),
-            titles.unwrap_or_default(),
+        let mut label_ids: Vec<Uuid> = Vec::with_capacity(b.labels.len());
+        for l in &b.labels {
+            label_ids.push(l.id);
+        }
+        sqlx::query!(
+            r#"
+insert into book_labels(book_id, label_id)
+select $1, label_id
+from unnest($2::uuid[]) as label_id;
+        "#,
+            b.id,
+            &label_ids
         )
+        .execute(&self.pool)
+        .await
+        .expect("failed to insert factory book labels");
+
+        let mut link_kinds: Vec<String> = Vec::with_capacity(b.links.len());
+        let mut link_urls: Vec<String> = Vec::with_capacity(b.links.len());
+        for l in &b.links {
+            link_kinds.push(l.kind.as_ref().to_owned());
+            link_urls.push(l.url.as_ref().to_owned());
+        }
+        sqlx::query!(
+            r#"
+insert into book_links(book_id, kind, url)
+select $1, link.kind, link.url
+from unnest($2::text[], $3::text[]) as link(kind, url);
+        "#,
+            b.id,
+            &link_kinds,
+            &link_urls
+        )
+        .execute(&self.pool)
+        .await
+        .expect("failed to insert factory book links");
+
+        let mut title_language_ids: Vec<Uuid> = Vec::with_capacity(b.titles.len());
+        let mut title_names: Vec<String> = Vec::with_capacity(b.titles.len());
+        for t in &b.titles {
+            title_language_ids.push(t.language_id);
+            title_names.push(t.name.as_ref().to_owned());
+        }
+        sqlx::query!(
+            r#"
+insert into book_titles(book_id, language_id, name)
+select $1, title.language_id, title.name
+from unnest($2::uuid[], $3::text[]) as title(language_id, name);
+        "#,
+            b.id,
+            &title_language_ids,
+            &title_names
+        )
+        .execute(&self.pool)
+        .await
+        .expect("failed to insert factory book titles");
     }
 
-    pub async fn insert_book(&self, body: &serde_json::Value) -> Uuid {
-        let req = Request::post("/books")
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(body.to_string()))
-            .unwrap();
+    pub async fn fetch_book_sample(&self, id: Uuid) -> BookSample {
+        let row = sqlx::query!(
+            r#"
+select (select b.name from books b where b.id = $1) as "name?",
+       (select b.updated_at from books b where b.id = $1) as "updated_at?",
+       (select count(*) from book_labels bl where bl.book_id = $1) as "labels!",
+       (select count(*) from book_links blk where blk.book_id = $1) as "links!",
+       (select count(*) from book_titles bt where bt.book_id = $1) as "titles!";
+        "#,
+            id
+        )
+        .fetch_one(&self.pool)
+        .await
+        .expect("failed to read book sample");
 
-        let resp = self.router.clone().oneshot(req).await.unwrap();
-        assert_eq!(resp.status(), StatusCode::CREATED, "failed to insert book");
+        BookSample {
+            name: row.name,
+            updated_at: row.updated_at,
+            labels: row.labels,
+            links: row.links,
+            titles: row.titles,
+        }
+    }
 
-        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-        let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-        Uuid::parse_str(v["data"]["id"].as_str().unwrap()).unwrap()
+    // TODO: check
+    pub async fn fetch_book(&self, id: Uuid) -> Book {
+        let row = sqlx::query!(
+            r#"
+select b.name, b.description, b.publication_year, b.status, b.kind, b.updated_at, b.created_at,
+       cr.id as content_rating_id, cr.name as content_rating_name, cr.code as content_rating_code,
+       l.id as language_id, l.code as language_code, l.name as language_name
+from books b
+join content_ratings cr on cr.id = b.content_rating
+join languages l on l.id = b.publication_language
+where b.id = $1;
+        "#,
+            id
+        )
+        .fetch_one(&self.pool)
+        .await
+        .expect("failed to read book");
+
+        let labels = sqlx::query!(
+            r#"
+select l.id, l.name, l.kind
+from labels l
+join book_labels bl on bl.label_id = l.id
+where bl.book_id = $1
+order by l.name;
+        "#,
+            id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .expect("failed to read book labels")
+        .into_iter()
+        .map(|r| Label {
+            id: r.id,
+            name: r.name,
+            kind: r.kind.parse().expect("stored label kind must be valid"),
+        })
+        .collect();
+
+        let links = sqlx::query!(
+            r#"
+select kind, url
+from book_links
+where book_id = $1
+order by kind, url;
+        "#,
+            id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .expect("failed to read book links")
+        .into_iter()
+        .map(|r| BookLink {
+            kind: r.kind.parse().expect("stored link kind must be valid"),
+            url: LinkUrl::try_from(r.url).expect("stored link url must be valid"),
+        })
+        .collect();
+
+        let titles = sqlx::query!(
+            r#"
+select language_id, name
+from book_titles
+where book_id = $1
+order by language_id, name;
+        "#,
+            id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .expect("failed to read book titles")
+        .into_iter()
+        .map(|r| AlternativeTitle {
+            language_id: r.language_id,
+            name: BookName::try_from(r.name).expect("stored title name must be valid"),
+        })
+        .collect();
+
+        let creators = sqlx::query!(
+            r#"
+select c.id, c.first_name, c.last_name, c.role, c.created_at
+from creators c
+join book_creators bc on bc.creator_id = c.id
+where bc.book_id = $1
+order by c.id;
+        "#,
+            id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .expect("failed to read book creators")
+        .into_iter()
+        .map(|r| Creator {
+            id: r.id,
+            first_name: Name::try_from(r.first_name).expect("stored first name must be valid"),
+            last_name: Name::try_from(r.last_name).expect("stored last name must be valid"),
+            role: r.role.parse().expect("stored creator role must be valid"),
+            created_at: r.created_at,
+        })
+        .collect();
+
+        Book {
+            id,
+            name: BookName::try_from(row.name).expect("stored name must be valid"),
+            description: Description::try_from(row.description)
+                .expect("stored description must be valid"),
+            publication_year: row.publication_year,
+            content_rating: ContentRating {
+                id: row.content_rating_id,
+                name: row.content_rating_name,
+                code: row.content_rating_code,
+            },
+            status: row.status.parse().expect("stored status must be valid"),
+            kind: row.kind.parse().expect("stored kind must be valid"),
+            publication_language: Language {
+                id: row.language_id,
+                code: row.language_code,
+                name: row.language_name,
+            },
+            labels,
+            links,
+            titles,
+            creators,
+            updated_at: row.updated_at,
+            created_at: row.created_at,
+        }
     }
 
     pub async fn insert_creator(&self, c: &Creator) {
@@ -195,40 +397,5 @@ values($1, $2, $3, $4, $5);
         .execute(&self.pool)
         .await
         .expect("failed to insert factory creator");
-    }
-}
-
-pub struct CreatorRoleFaker;
-
-impl Dummy<CreatorRoleFaker> for CreatorRole {
-    fn dummy_with_rng<R: RngExt + ?Sized>(_config: &CreatorRoleFaker, rng: &mut R) -> Self {
-        if rng.random() {
-            CreatorRole::Artist
-        } else {
-            CreatorRole::Author
-        }
-    }
-}
-
-pub struct NameFaker;
-
-impl Dummy<NameFaker> for Name {
-    fn dummy_with_rng<R: RngExt + ?Sized>(_config: &NameFaker, rng: &mut R) -> Self {
-        let name = FirstName().fake_with_rng::<String, R>(rng);
-        Name::try_from(name).unwrap()
-    }
-}
-
-pub struct CreatorFaker;
-
-impl Dummy<CreatorFaker> for Creator {
-    fn dummy_with_rng<R: RngExt + ?Sized>(_config: &CreatorFaker, rng: &mut R) -> Self {
-        Creator {
-            id: Uuid::now_v7(),
-            first_name: NameFaker.fake_with_rng(rng),
-            last_name: NameFaker.fake_with_rng(rng),
-            role: CreatorRoleFaker.fake_with_rng(rng),
-            created_at: OffsetDateTime::now_utc(),
-        }
     }
 }
