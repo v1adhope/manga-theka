@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use sqlx::{PgConnection, Postgres, QueryBuilder};
+use tracing::{Level, instrument};
 use uuid::Uuid;
 
 use crate::{
@@ -177,14 +178,11 @@ impl TryFrom<BookWithRelations> for Book {
 }
 
 impl Database {
+    #[instrument(name = "db.book.store", skip_all, fields(book.id = %item.id))]
     pub async fn store_book(&self, item: &Book, label_ids: &[Uuid]) -> Result<(), DatabaseError> {
         self.store_book_inner(item, label_ids)
             .await
-            .inspect_err(|e| {
-                if DatabaseError::is_internal(e) {
-                    tracing::error!("failed to store new book in database: {e:?}");
-                }
-            })
+            .inspect_err(DatabaseError::log_internal)
     }
 
     async fn store_book_inner(&self, item: &Book, label_ids: &[Uuid]) -> Result<(), DatabaseError> {
@@ -212,14 +210,11 @@ impl Database {
         Ok(())
     }
 
+    #[instrument(name = "db.book.update", skip_all, fields(book.id = %item.id))]
     pub async fn update_book(&self, item: &Book, label_ids: &[Uuid]) -> Result<(), DatabaseError> {
         self.update_book_inner(item, label_ids)
             .await
-            .inspect_err(|e| {
-                if DatabaseError::is_internal(e) {
-                    tracing::error!("failed to update book in database: {e:?}");
-                }
-            })
+            .inspect_err(DatabaseError::log_internal)
     }
 
     async fn update_book_inner(
@@ -255,12 +250,11 @@ impl Database {
         Ok(())
     }
 
+    #[instrument(name = "db.book.get", skip_all, fields(book.id = %id))]
     pub async fn get_book(&self, id: Uuid) -> Result<Book, DatabaseError> {
-        self.get_book_inner(id).await.inspect_err(|e| {
-            if DatabaseError::is_internal(e) {
-                tracing::error!("failed to get book from database: {e:?}");
-            }
-        })
+        self.get_book_inner(id)
+            .await
+            .inspect_err(DatabaseError::log_internal)
     }
 
     async fn get_book_inner(&self, id: Uuid) -> Result<Book, DatabaseError> {
@@ -286,22 +280,20 @@ impl Database {
             creators: creators.remove(&id).unwrap_or_default(),
         }
         .try_into()
-        .inspect_err(|e| {
-            if DatabaseError::is_internal(e) {
-                tracing::error!("failed to convert book row with relations: {e:?}");
-            }
-        })
     }
 
+    #[instrument(
+        name = "db.book.list",
+        skip_all,
+        fields(after = ?pagination.after, limit = ?pagination.limit)
+    )]
     pub async fn get_books(
         &self,
         pagination: &Pagination,
     ) -> Result<(Vec<Book>, Option<Uuid>), DatabaseError> {
-        self.get_books_inner(pagination).await.inspect_err(|e| {
-            if DatabaseError::is_internal(e) {
-                tracing::error!("failed to get books from database: {e:?}");
-            }
-        })
+        self.get_books_inner(pagination)
+            .await
+            .inspect_err(DatabaseError::log_internal)
     }
 
     async fn get_books_inner(
@@ -359,28 +351,24 @@ impl Database {
                 titles: titles.remove(&id).unwrap_or_default(),
                 creators: creators.remove(&id).unwrap_or_default(),
             }
-            .try_into()
-            .inspect_err(|e| {
-                if DatabaseError::is_internal(e) {
-                    tracing::error!("failed to convert book row with relations: {e:?}");
-                }
-            })?;
+            .try_into()?;
             books.push(book);
         }
 
         Ok((books, next_cursor))
     }
 
+    #[instrument(name = "db.book.delete", skip_all, fields(book.id = %id))]
     pub async fn delete_book(&self, id: Uuid) -> Result<(), DatabaseError> {
+        self.delete_book_inner(id)
+            .await
+            .inspect_err(DatabaseError::log_internal)
+    }
+
+    async fn delete_book_inner(&self, id: Uuid) -> Result<(), DatabaseError> {
         let row = sqlx::query_file!("queries/delete_book.sql", id)
             .fetch_optional(&self.pool)
-            .await
-            .map_err(DatabaseError::from)
-            .inspect_err(|e| {
-                if DatabaseError::is_internal(e) {
-                    tracing::error!("failed to delete book from database: {e:?}");
-                }
-            })?;
+            .await?;
 
         if row.is_none() {
             return Err(DatabaseError::BookNotFound);
@@ -389,6 +377,7 @@ impl Database {
         Ok(())
     }
 
+    #[instrument(name = "db.book.labels", skip_all, level = Level::DEBUG, fields(books = book_ids.len()))]
     async fn get_books_labels(
         &self,
         book_ids: &[Uuid],
@@ -400,17 +389,14 @@ impl Database {
         let mut labels: HashMap<Uuid, Vec<Label>> = HashMap::with_capacity(book_ids.len());
         for row in rows {
             let book_id = row.book_id;
-            let label: Label = row.try_into().inspect_err(|e| {
-                if DatabaseError::is_internal(e) {
-                    tracing::error!("failed to convert book label row: {e:?}");
-                }
-            })?;
+            let label: Label = row.try_into()?;
             labels.entry(book_id).or_default().push(label);
         }
 
         Ok(labels)
     }
 
+    #[instrument(name = "db.book.links", skip_all, level = Level::DEBUG, fields(books = book_ids.len()))]
     async fn get_books_links(
         &self,
         book_ids: &[Uuid],
@@ -422,17 +408,14 @@ impl Database {
         let mut links: HashMap<Uuid, Vec<BookLink>> = HashMap::with_capacity(book_ids.len());
         for row in rows {
             let book_id = row.book_id;
-            let link: BookLink = row.try_into().inspect_err(|e| {
-                if DatabaseError::is_internal(e) {
-                    tracing::error!("failed to convert book link row: {e:?}");
-                }
-            })?;
+            let link: BookLink = row.try_into()?;
             links.entry(book_id).or_default().push(link);
         }
 
         Ok(links)
     }
 
+    #[instrument(name = "db.book.titles", skip_all, level = Level::DEBUG, fields(books = book_ids.len()))]
     async fn get_books_titles(
         &self,
         book_ids: &[Uuid],
@@ -445,17 +428,14 @@ impl Database {
             HashMap::with_capacity(book_ids.len());
         for row in rows {
             let book_id = row.book_id;
-            let title: AlternativeTitle = row.try_into().inspect_err(|e| {
-                if DatabaseError::is_internal(e) {
-                    tracing::error!("failed to convert book title row: {e:?}");
-                }
-            })?;
+            let title: AlternativeTitle = row.try_into()?;
             titles.entry(book_id).or_default().push(title);
         }
 
         Ok(titles)
     }
 
+    #[instrument(name = "db.book.creators", skip_all, level = Level::DEBUG, fields(books = book_ids.len()))]
     async fn get_books_creators(
         &self,
         book_ids: &[Uuid],
@@ -467,11 +447,7 @@ impl Database {
         let mut creators: HashMap<Uuid, Vec<Creator>> = HashMap::with_capacity(book_ids.len());
         for row in rows {
             let book_id = row.book_id;
-            let creator: Creator = row.try_into().inspect_err(|e| {
-                if DatabaseError::is_internal(e) {
-                    tracing::error!("failed to convert book creator row: {e:?}");
-                }
-            })?;
+            let creator: Creator = row.try_into()?;
             creators.entry(book_id).or_default().push(creator);
         }
 

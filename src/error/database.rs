@@ -78,8 +78,10 @@ pub enum DatabaseError {
 }
 
 impl DatabaseError {
-    pub fn is_internal(&self) -> bool {
-        matches!(self, Self::Unknown(_) | Self::InvariantCorrupted { .. })
+    pub fn log_internal(&self) {
+        if matches!(self, Self::Unknown(_) | Self::InvariantCorrupted { .. }) {
+            tracing::error!(error = ?self, "internal database error");
+        }
     }
 
     pub fn invariant_corrupted(field: &str, message: impl std::error::Error) -> Self {
