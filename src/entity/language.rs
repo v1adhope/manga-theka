@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Debug, sqlx::FromRow, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, sqlx::FromRow, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Language {
     pub id: Uuid,

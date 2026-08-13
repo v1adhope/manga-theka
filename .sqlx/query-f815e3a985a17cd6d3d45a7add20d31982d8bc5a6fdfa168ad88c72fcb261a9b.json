@@ -1,0 +1,184 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select b.id, b.name, b.description, b.publication_year, cr.id as content_rating_id,\n       cr.name as content_rating_name, cr.code as content_rating_code, b.status, b.kind,\n       l.id as publication_language_id, l.code as publication_language_code,\n       l.name as publication_language_name, b.updated_at, b.created_at\nfrom books b\njoin content_ratings cr on cr.id = b.content_rating\njoin languages l on l.id = b.publication_language\nwhere b.id = $1;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "books",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "books",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "description",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "books",
+            "name": "description"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "publication_year",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "books",
+            "name": "publication_year"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "content_rating_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "content_ratings",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "content_rating_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "content_ratings",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "content_rating_code",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "content_ratings",
+            "name": "code"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "books",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "books",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "publication_language_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "languages",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "publication_language_code",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "languages",
+            "name": "code"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "publication_language_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "languages",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "books",
+            "name": "updated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "books",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "f815e3a985a17cd6d3d45a7add20d31982d8bc5a6fdfa168ad88c72fcb261a9b"
+}

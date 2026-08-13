@@ -19,8 +19,56 @@ pub enum DatabaseError {
     #[error("Creator full name already exists")]
     CreatorFullNameDuplication(#[source] sqlx::Error),
 
+    #[error("Creator is attached to one or more books")]
+    CreatorInUse(#[source] sqlx::Error),
+
     #[error("Creator not found")]
     CreatorNotFound,
+
+    #[error("Book name exceeds the 255-character limit")]
+    BookNameTooLong(#[source] sqlx::Error),
+
+    #[error("Book description exceeds the 2000-character limit")]
+    BookDescriptionTooLong(#[source] sqlx::Error),
+
+    #[error("Book status doesn't exist")]
+    BookStatusDoesNotExist(#[source] sqlx::Error),
+
+    #[error("Book kind doesn't exist")]
+    BookKindDoesNotExist(#[source] sqlx::Error),
+
+    #[error("Book content rating doesn't exist")]
+    BookContentRatingDoesNotExist(#[source] sqlx::Error),
+
+    #[error("Book publication language doesn't exist")]
+    BookPublicationLanguageDoesNotExist(#[source] sqlx::Error),
+
+    #[error("Book label doesn't exist")]
+    BookLabelDoesNotExist(#[source] sqlx::Error),
+
+    #[error("Book label is attached more than once")]
+    BookLabelDuplication(#[source] sqlx::Error),
+
+    #[error("Book link kind doesn't exist")]
+    BookLinkKindDoesNotExist(#[source] sqlx::Error),
+
+    #[error("Book link url exceeds the 2048-character limit")]
+    BookLinkUrlTooLong(#[source] sqlx::Error),
+
+    #[error("Book link url is attached more than once")]
+    BookLinkUrlDuplication(#[source] sqlx::Error),
+
+    #[error("Alternative title language doesn't exist")]
+    BookTitleLanguageDoesNotExist(#[source] sqlx::Error),
+
+    #[error("Alternative title exceeds the 255-character limit")]
+    BookTitleNameTooLong(#[source] sqlx::Error),
+
+    #[error("Alternative title is attached more than once")]
+    BookTitleNameDuplication(#[source] sqlx::Error),
+
+    #[error("Book not found")]
+    BookNotFound,
 
     #[error("Database invariant corrupted on field '{field}': {message}")]
     InvariantCorrupted { field: String, message: String },
@@ -30,8 +78,10 @@ pub enum DatabaseError {
 }
 
 impl DatabaseError {
-    pub fn is_internal(&self) -> bool {
-        matches!(self, Self::Unknown(_) | Self::InvariantCorrupted { .. })
+    pub fn log_internal(&self) {
+        if matches!(self, Self::Unknown(_) | Self::InvariantCorrupted { .. }) {
+            tracing::error!(error = ?self, "internal database error");
+        }
     }
 
     pub fn invariant_corrupted(field: &str, message: impl std::error::Error) -> Self {
@@ -58,6 +108,51 @@ impl From<sqlx::Error> for DatabaseError {
                 Some("unique_creators_first_name_last_name") => {
                     return Self::CreatorFullNameDuplication(err);
                 }
+                Some("fk_book_creators_creators_creator_id") => {
+                    return Self::CreatorInUse(err);
+                }
+                Some("check_length_books_name") => {
+                    return Self::BookNameTooLong(err);
+                }
+                Some("check_length_books_description") => {
+                    return Self::BookDescriptionTooLong(err);
+                }
+                Some("enum_books_status") => {
+                    return Self::BookStatusDoesNotExist(err);
+                }
+                Some("enum_books_kind") => {
+                    return Self::BookKindDoesNotExist(err);
+                }
+                Some("fk_books_content_ratings_content_rating") => {
+                    return Self::BookContentRatingDoesNotExist(err);
+                }
+                Some("fk_books_languages_publication_language") => {
+                    return Self::BookPublicationLanguageDoesNotExist(err);
+                }
+                Some("fk_book_labels_labels_label_id") => {
+                    return Self::BookLabelDoesNotExist(err);
+                }
+                Some("pk_book_labels_book_id_label_id") => {
+                    return Self::BookLabelDuplication(err);
+                }
+                Some("enum_book_links_kind") => {
+                    return Self::BookLinkKindDoesNotExist(err);
+                }
+                Some("check_length_book_links_url") => {
+                    return Self::BookLinkUrlTooLong(err);
+                }
+                Some("pk_book_links_book_id_link_hash") => {
+                    return Self::BookLinkUrlDuplication(err);
+                }
+                Some("fk_book_titles_languages_language_id") => {
+                    return Self::BookTitleLanguageDoesNotExist(err);
+                }
+                Some("check_length_book_titles_name") => {
+                    return Self::BookTitleNameTooLong(err);
+                }
+                Some("pk_book_titles_book_id_language_id_name") => {
+                    return Self::BookTitleNameDuplication(err);
+                }
                 _ => {}
             }
         }
@@ -72,8 +167,29 @@ impl IntoResponse for DatabaseError {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Something went wrong".to_string(),
             ),
-            Self::CreatorNotFound => (StatusCode::NOT_FOUND, self.to_string()),
-            e => (StatusCode::UNPROCESSABLE_ENTITY, e.to_string()),
+            Self::CreatorNotFound | Self::BookNotFound => (StatusCode::NOT_FOUND, self.to_string()),
+            Self::CreatorInUse(_) | Self::CreatorFullNameDuplication(_) => {
+                (StatusCode::CONFLICT, self.to_string())
+            }
+            Self::CreatorFirstNameTooLong(_)
+            | Self::CreatorLastNameTooLong(_)
+            | Self::CreatorRoleDoesNotExist(_)
+            | Self::BookNameTooLong(_)
+            | Self::BookDescriptionTooLong(_)
+            | Self::BookStatusDoesNotExist(_)
+            | Self::BookKindDoesNotExist(_)
+            | Self::BookContentRatingDoesNotExist(_)
+            | Self::BookPublicationLanguageDoesNotExist(_)
+            | Self::BookLabelDoesNotExist(_)
+            | Self::BookLabelDuplication(_)
+            | Self::BookLinkKindDoesNotExist(_)
+            | Self::BookLinkUrlTooLong(_)
+            | Self::BookLinkUrlDuplication(_)
+            | Self::BookTitleLanguageDoesNotExist(_)
+            | Self::BookTitleNameTooLong(_)
+            | Self::BookTitleNameDuplication(_) => {
+                (StatusCode::UNPROCESSABLE_ENTITY, self.to_string())
+            }
         }
         .into_response()
     }

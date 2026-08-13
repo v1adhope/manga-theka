@@ -4,8 +4,7 @@ use uuid::Uuid;
 
 use crate::error::EntityError;
 
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 pub enum LabelKind {
     Genre,
     Tag,
@@ -16,8 +15,8 @@ impl FromStr for LabelKind {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "genre" => Ok(Self::Genre),
-            "tag" => Ok(Self::Tag),
+            "Genre" => Ok(Self::Genre),
+            "Tag" => Ok(Self::Tag),
             other => Err(EntityError::InvalidLabelKind(other.to_owned())),
         }
     }
@@ -26,13 +25,13 @@ impl FromStr for LabelKind {
 impl AsRef<str> for LabelKind {
     fn as_ref(&self) -> &str {
         match self {
-            Self::Genre => "genre",
-            Self::Tag => "tag",
+            Self::Genre => "Genre",
+            Self::Tag => "Tag",
         }
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Label {
     pub id: Uuid,

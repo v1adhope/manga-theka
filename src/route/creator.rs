@@ -9,9 +9,9 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
-    entity::{Creator, CreatorRole, DEFAULT_LIMIT, Limit, Name, Pagination},
+    entity::{Creator, CreatorRole, Name, Pagination},
     error::{AppError, EntityError},
-    route::{StoreResp, json_data_response, json_response},
+    route::{PaginationQuery, StoreResp, json_data_response, json_response},
     service::Service,
 };
 
@@ -65,25 +65,6 @@ pub async fn update_creator(
     Ok(StatusCode::NO_CONTENT)
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GetCreatorsQuery {
-    pub after: Option<Uuid>,
-    pub limit: Option<u32>,
-}
-
-impl TryFrom<GetCreatorsQuery> for Pagination {
-    type Error = EntityError;
-
-    fn try_from(q: GetCreatorsQuery) -> Result<Self, Self::Error> {
-        let limit = Limit::try_from(q.limit.unwrap_or(DEFAULT_LIMIT))?;
-        Ok(Self {
-            after: q.after,
-            limit,
-        })
-    }
-}
-
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetCreatorsResp {
@@ -93,7 +74,7 @@ pub struct GetCreatorsResp {
 
 pub async fn get_creators(
     State(service): State<Service>,
-    Query(query): Query<GetCreatorsQuery>,
+    Query(query): Query<PaginationQuery>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let pg: Pagination = query.try_into()?;
 

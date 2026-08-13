@@ -8,10 +8,10 @@ use crate::{
 };
 
 #[derive(sqlx::FromRow)]
-struct LabelRow {
-    id: Uuid,
-    name: String,
-    kind: String,
+pub(super) struct LabelRow {
+    pub(super) id: Uuid,
+    pub(super) name: String,
+    pub(super) kind: String,
 }
 
 impl TryFrom<LabelRow> for Label {
@@ -32,9 +32,10 @@ impl TryFrom<LabelRow> for Label {
 }
 
 impl Database {
+    #[tracing::instrument(name = "db.label.list", skip_all, fields(label.kind = ?label_kind))]
     pub async fn get_labels(
         &self,
-        label_kind: Option<LabelKind>,
+        label_kind: Option<&LabelKind>,
     ) -> Result<Vec<Label>, DatabaseError> {
         let mut builder: QueryBuilder<Postgres> =
             QueryBuilder::new("select id, name, kind from labels");
@@ -47,27 +48,12 @@ impl Database {
 
         builder.push(" order by name");
 
-        let rows = builder
+        builder
             .build_query_as::<LabelRow>()
             .fetch_all(&self.pool)
             .await
             .map_err(DatabaseError::from)
-            .inspect_err(|e| {
-                if DatabaseError::is_internal(e) {
-                    tracing::error!("failed to get labels from database: {e:?}");
-                }
-            })?;
-
-        let mut labels: Vec<Label> = Vec::with_capacity(rows.len());
-        for row in rows {
-            let label = row.try_into().inspect_err(|e| {
-                if DatabaseError::is_internal(e) {
-                    tracing::error!("failed to convert label row: {e:?}");
-                }
-            })?;
-            labels.push(label);
-        }
-
-        Ok(labels)
+            .and_then(|rows| rows.into_iter().map(Label::try_from).collect())
+            .inspect_err(DatabaseError::log_internal)
     }
 }

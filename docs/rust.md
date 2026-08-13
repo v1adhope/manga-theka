@@ -3,7 +3,7 @@
 ## Conventions
 
 - Don't write unsafe code.
-- Use `camelCase` for JSON keys and `snake_case` for enum JSON values in router contracts.
+- Use `camelCase` for JSON keys and `PascalCase` for enum JSON values in router contracts.
 - Follow Guard Clause / Early Return Pattern.
 - Log internal errors immediately at the point of failure.
 - Time format is `RFC3339`.
@@ -12,6 +12,9 @@
 - Avoid chained conversions like `value.as_ref().to_string()` — implement the target conversion directly on value's type instead of composing it from intermediate ones.
 - Traits such as `From`, `TryFrom`, `Display`, and `Debug` represent structural behavior and syntax guarantees, not execution side-effects.
 - Flag if expected to use raw identifier syntax like `r#type`.
+- One canonical entity object per domain layer — no operation-specific aliases (`WriteBook`, `BookDetails`, `BookDto` → `Book`).
+- A repository owns its own transaction boundary by default. Put begin/commit in the application layer when the atomic unit spans more than one repository or depends on a business decision; in that case give the repository methods involved a `&mut PgConnection` parameter so they can join the caller's transaction.
+- Don't add comments unless asked.
 
 ## Dependencies & Versioning
 

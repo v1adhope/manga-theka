@@ -5,7 +5,7 @@ use axum::{
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
-use crate::helpers::{RespWrapper, TestApp};
+use crate::helpers::{RespWrapper, TestApp, assert_error};
 use manga_theka::entity::Label;
 
 const GENRE_NAMES: [&str; 5] = ["Action", "Adventure", "Comedy", "Crime", "Drama"];
@@ -37,7 +37,7 @@ async fn get_labels_with_no_filter_returns_seeded_labels() {
 async fn get_labels_filtered_by_genre_returns_only_genre_labels() {
     let app = TestApp::new().await;
 
-    let req = Request::get("/labels?kind=genre")
+    let req = Request::get("/labels?kind=Genre")
         .body(Body::empty())
         .unwrap();
     let resp = app.router.oneshot(req).await.unwrap();
@@ -66,7 +66,7 @@ async fn get_labels_filtered_by_genre_returns_only_genre_labels() {
 async fn get_labels_filtered_by_tag_returns_only_tag_labels() {
     let app = TestApp::new().await;
 
-    let req = Request::get("/labels?kind=tag")
+    let req = Request::get("/labels?kind=Tag")
         .body(Body::empty())
         .unwrap();
     let resp = app.router.oneshot(req).await.unwrap();
@@ -99,14 +99,5 @@ async fn get_labels_with_invalid_kind_returns_400() {
         .body(Body::empty())
         .unwrap();
     let resp = app.router.oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-    assert!(
-        !resp
-            .into_body()
-            .collect()
-            .await
-            .unwrap()
-            .to_bytes()
-            .is_empty()
-    );
+    assert_error(resp, StatusCode::BAD_REQUEST).await;
 }

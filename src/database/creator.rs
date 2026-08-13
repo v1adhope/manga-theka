@@ -1,19 +1,20 @@
 use sqlx::{Postgres, QueryBuilder};
+use tracing::instrument;
 use uuid::Uuid;
 
 use crate::{
     database::Database,
-    entity::{Creator, CreatorRole, Name, Pagination},
+    entity::{Creator, CreatorRole, DEFAULT_LIMIT, Limit, Name, Pagination},
     error::DatabaseError,
 };
 
 #[derive(sqlx::FromRow)]
-struct CreatorRow {
-    id: Uuid,
-    first_name: String,
-    last_name: String,
-    role: String,
-    created_at: time::OffsetDateTime,
+pub(super) struct CreatorRow {
+    pub(super) id: Uuid,
+    pub(super) first_name: String,
+    pub(super) last_name: String,
+    pub(super) role: String,
+    pub(super) created_at: time::OffsetDateTime,
 }
 
 impl TryFrom<CreatorRow> for Creator {
@@ -39,9 +40,9 @@ impl TryFrom<CreatorRow> for Creator {
     }
 }
 
-// TODO: tune tracing
 impl Database {
-    pub async fn store_creator(&self, item: Creator) -> Result<(), DatabaseError> {
+    #[instrument(name = "db.creator.store", skip_all, fields(creator.id = %item.id))]
+    pub async fn store_creator(&self, item: &Creator) -> Result<(), DatabaseError> {
         sqlx::query_file!(
             "queries/store_creator.sql",
             item.id,
@@ -53,16 +54,13 @@ impl Database {
         .execute(&self.pool)
         .await
         .map_err(DatabaseError::from)
-        .inspect_err(|e| {
-            if DatabaseError::is_internal(e) {
-                tracing::error!("failed to store new creator in database: {e:?}");
-            }
-        })?;
+        .inspect_err(DatabaseError::log_internal)?;
 
         Ok(())
     }
 
-    pub async fn update_creator(&self, item: Creator) -> Result<(), DatabaseError> {
+    #[instrument(name = "db.creator.update", skip_all, fields(creator.id = %item.id))]
+    pub async fn update_creator(&self, item: &Creator) -> Result<(), DatabaseError> {
         let row = sqlx::query_file!(
             "queries/update_creator.sql",
             item.id,
@@ -73,43 +71,48 @@ impl Database {
         .fetch_optional(&self.pool)
         .await
         .map_err(DatabaseError::from)
-        .inspect_err(|e| {
-            if DatabaseError::is_internal(e) {
-                tracing::error!("failed to update creator in database: {e:?}");
-            }
-        })?;
+        .inspect_err(DatabaseError::log_internal)?;
 
         if row.is_none() {
             return Err(DatabaseError::CreatorNotFound);
         }
+
         Ok(())
     }
+
+    #[instrument(name = "db.creator.get", skip_all, fields(creator.id = %id))]
     pub async fn get_creator(&self, id: Uuid) -> Result<Creator, DatabaseError> {
+        self.get_creator_inner(id)
+            .await
+            .inspect_err(DatabaseError::log_internal)
+    }
+
+    async fn get_creator_inner(&self, id: Uuid) -> Result<Creator, DatabaseError> {
         let row = sqlx::query_file_as!(CreatorRow, "queries/get_creator.sql", id)
             .fetch_optional(&self.pool)
-            .await
-            .map_err(DatabaseError::from)
-            .inspect_err(|e| {
-                if DatabaseError::is_internal(e) {
-                    tracing::error!("failed to get creator from database: {e:?}");
-                }
-            })?;
+            .await?;
 
         match row {
-            Some(row) => row.try_into().inspect_err(|e| {
-                if DatabaseError::is_internal(e) {
-                    tracing::error!("failed to convert CreatorRow: {e:?}");
-                }
-            }),
+            Some(row) => Creator::try_from(row),
             None => Err(DatabaseError::CreatorNotFound),
         }
     }
 
+    #[instrument(name = "db.creator.list", skip_all, fields(after = ?pagination.after))]
     pub async fn get_creators(
         &self,
         pagination: &Pagination,
     ) -> Result<(Vec<Creator>, Option<Uuid>), DatabaseError> {
-        let limit = pagination.limit.as_u32();
+        self.get_creators_inner(pagination)
+            .await
+            .inspect_err(DatabaseError::log_internal)
+    }
+
+    async fn get_creators_inner(
+        &self,
+        pagination: &Pagination,
+    ) -> Result<(Vec<Creator>, Option<Uuid>), DatabaseError> {
+        let limit = pagination.limit.map_or(DEFAULT_LIMIT, Limit::as_u32);
         let mut builder: QueryBuilder<Postgres> =
             QueryBuilder::new("select id, first_name, last_name, role, created_at from creators");
 
@@ -121,50 +124,38 @@ impl Database {
             .push(" order by id desc limit ")
             .push_bind((limit + 1) as i64);
 
-        let rows = builder
+        let mut rows = builder
             .build_query_as::<CreatorRow>()
             .fetch_all(&self.pool)
-            .await
-            .map_err(DatabaseError::from)
-            .inspect_err(|e| {
-                if DatabaseError::is_internal(e) {
-                    tracing::error!("failed to get creators from database: {e:?}");
-                }
-            })?;
+            .await?;
+
+        let mut next_cursor = None;
+        if rows.len() > limit as usize {
+            rows.pop();
+            next_cursor = rows.last().map(|r| r.id);
+        }
 
         let mut creators: Vec<Creator> = Vec::with_capacity(rows.len());
         for row in rows {
-            let creator = row.try_into().inspect_err(|e| {
-                if DatabaseError::is_internal(e) {
-                    tracing::error!("failed to convert creator row: {e:?}");
-                }
-            })?;
+            let creator = row.try_into()?;
             creators.push(creator);
-        }
-
-        let mut next_cursor = None;
-        if creators.len() > limit as usize {
-            creators.pop();
-            next_cursor = creators.last().map(|c| c.id);
         }
 
         Ok((creators, next_cursor))
     }
 
+    #[instrument(name = "db.creator.delete", skip_all, fields(creator.id = %id))]
     pub async fn delete_creator(&self, id: Uuid) -> Result<(), DatabaseError> {
         let row = sqlx::query_file!("queries/delete_creator.sql", id)
             .fetch_optional(&self.pool)
             .await
             .map_err(DatabaseError::from)
-            .inspect_err(|e| {
-                if DatabaseError::is_internal(e) {
-                    tracing::error!("failed to delete creator from database: {e:?}");
-                }
-            })?;
+            .inspect_err(DatabaseError::log_internal)?;
 
         if row.is_none() {
             return Err(DatabaseError::CreatorNotFound);
         }
+
         Ok(())
     }
 }
