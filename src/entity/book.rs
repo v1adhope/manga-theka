@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use time::OffsetDateTime;
-use unicode_segmentation::UnicodeSegmentation;
 use url::Url;
 use uuid::Uuid;
 
@@ -112,9 +111,9 @@ impl TryFrom<String> for BookName {
 
     fn try_from(s: String) -> Result<Self, Self::Error> {
         if s.trim().is_empty() {
-            return Err(EntityError::NameIsEmptyOrWhitespace(s));
+            return Err(EntityError::NameIsEmptyOrWhitespace);
         }
-        if s.graphemes(true).count() > 255 {
+        if s.chars().count() > 255 {
             return Err(EntityError::NameExceedsCharLimit(s));
         }
         Ok(Self(s))
@@ -138,7 +137,7 @@ impl TryFrom<String> for Description {
         if s.trim().is_empty() {
             return Err(EntityError::DescriptionIsEmptyOrWhitespace);
         }
-        if s.graphemes(true).count() > 2000 {
+        if s.chars().count() > 2000 {
             return Err(EntityError::DescriptionExceedsCharLimit);
         }
         Ok(Self(s))
@@ -159,15 +158,15 @@ impl TryFrom<String> for LinkUrl {
     type Error = EntityError;
 
     fn try_from(s: String) -> Result<Self, Self::Error> {
-        if s.graphemes(true).count() > 2048 {
-            return Err(EntityError::LinkUrlExceedsCharLimit(
-                s.graphemes(true).take(64).collect(),
-            ));
-        }
         let url = match Url::parse(&s) {
             Ok(url) => url,
             Err(e) => return Err(EntityError::LinkUrlIsMalformed(e, s)),
         };
+        if url.as_str().chars().count() > 2048 {
+            return Err(EntityError::LinkUrlExceedsCharLimit(
+                url.as_str().chars().take(64).collect(),
+            ));
+        }
         if !matches!(url.scheme(), "http" | "https") {
             return Err(EntityError::LinkUrlSchemeNotAllowed(s));
         }
@@ -221,14 +220,26 @@ mod tests {
     use crate::entity::{BookName, Description, LinkUrl};
 
     #[test]
-    fn book_name_255_graphemes_is_valid() {
+    fn book_name_255_chars_is_valid() {
         let res = BookName::try_from("ё".repeat(255));
         assert!(res.is_ok());
     }
 
     #[test]
-    fn book_name_longer_256_graphemes_is_rejected() {
+    fn book_name_longer_256_chars_is_rejected() {
         let res = BookName::try_from("ё".repeat(256));
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn book_name_255_decomposed_letters_is_rejected() {
+        let res = BookName::try_from("е\u{0308}".repeat(255));
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn book_name_255_zwj_sequences_is_rejected() {
+        let res = BookName::try_from("👨‍👩‍👧‍👦".repeat(255));
         assert!(res.is_err());
     }
 
@@ -245,13 +256,13 @@ mod tests {
     }
 
     #[test]
-    fn description_2000_graphemes_is_valid() {
+    fn description_2000_chars_is_valid() {
         let res = Description::try_from("ё".repeat(2000));
         assert!(res.is_ok());
     }
 
     #[test]
-    fn description_longer_2001_graphemes_is_rejected() {
+    fn description_longer_2001_chars_is_rejected() {
         let res = Description::try_from("ё".repeat(2001));
         assert!(res.is_err());
     }
@@ -269,7 +280,7 @@ mod tests {
     }
 
     #[test]
-    fn link_url_2048_graphemes_is_valid() {
+    fn link_url_2048_chars_is_valid() {
         let url = format!("https://a.co/{}", "b".repeat(2035));
         assert_eq!(url.len(), 2048);
         let res = LinkUrl::try_from(url);
@@ -277,10 +288,34 @@ mod tests {
     }
 
     #[test]
-    fn link_url_longer_2049_graphemes_is_rejected() {
+    fn link_url_longer_2049_chars_is_rejected() {
         let url = format!("https://a.co/{}", "b".repeat(2036));
         let res = LinkUrl::try_from(url);
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn link_url_over_limit_once_percent_encoded_is_rejected() {
+        let url = format!("https://a.co/{}", "日".repeat(679));
+        assert_eq!(url.chars().count(), 692);
+        let res = LinkUrl::try_from(url);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn link_url_at_limit_gaining_a_trailing_slash_is_rejected() {
+        let url = format!("https://{}.co", "a".repeat(2037));
+        assert_eq!(url.len(), 2048);
+        let res = LinkUrl::try_from(url);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn link_url_over_limit_before_normalization_is_valid() {
+        let url = format!("https://a.co:443/{}", "b".repeat(2032));
+        assert_eq!(url.len(), 2049);
+        let res = LinkUrl::try_from(url);
+        assert!(res.is_ok());
     }
 
     #[test]

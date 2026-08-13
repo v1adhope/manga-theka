@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use time::OffsetDateTime;
-use unicode_segmentation::UnicodeSegmentation;
 use uuid::Uuid;
 
 use crate::error::EntityError;
@@ -53,9 +52,9 @@ impl TryFrom<String> for Name {
 
     fn try_from(s: String) -> Result<Self, Self::Error> {
         if s.trim().is_empty() {
-            return Err(EntityError::NameIsEmptyOrWhitespace(s));
+            return Err(EntityError::NameIsEmptyOrWhitespace);
         }
-        if s.graphemes(true).count() > 255 {
+        if s.chars().count() > 255 {
             return Err(EntityError::NameExceedsCharLimit(s));
         }
         if !s.chars().all(|c| c.is_alphabetic()) {
@@ -88,13 +87,13 @@ mod tests {
     }
 
     #[test]
-    fn name_255_graphemes_is_valid() {
+    fn name_255_chars_is_valid() {
         let res = Name::try_from("ё".repeat(255));
         assert!(res.is_ok());
     }
 
     #[test]
-    fn name_longer_256_graphemes_is_rejected() {
+    fn name_longer_256_chars_is_rejected() {
         let res = Name::try_from("ё".repeat(256));
         assert!(res.is_err());
     }

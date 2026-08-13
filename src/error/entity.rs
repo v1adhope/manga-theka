@@ -7,8 +7,8 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum EntityError {
-    #[error("'{0}' can't be empty or whitespace")]
-    NameIsEmptyOrWhitespace(String),
+    #[error("Name can't be empty or whitespace")]
+    NameIsEmptyOrWhitespace,
 
     #[error("'{0}' exceeds the 255-character limit")]
     NameExceedsCharLimit(String),
