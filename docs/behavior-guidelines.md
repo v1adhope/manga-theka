@@ -1,4 +1,4 @@
-# behavior-guidelines.md
+# Behavior guidelines context
 
 ## 1. Think Before Coding
 

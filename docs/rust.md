@@ -1,4 +1,4 @@
-# rust.md
+# Rust context
 
 ## Conventions
 

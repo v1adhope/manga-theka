@@ -1,4 +1,4 @@
-# security.md
+# Security context
 
 Core practices for keeping this API and its data safe.
 

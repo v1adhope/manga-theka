@@ -1,4 +1,4 @@
-# issue-tracker.md
+# Issue tracker context
 
 Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
 

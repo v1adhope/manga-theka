@@ -1,4 +1,4 @@
-# git.md
+# Git context
 
 ## Conventions
 
