@@ -97,11 +97,11 @@ _Avoid_: External link, Reference
 ## Media
 
 **Cover**:
-The `Book`'s gallery image with the lowest `Sort Order` -- not a separate flag, a derived read. Reordering the gallery can change which image is the Cover.
+The `Book`'s designated gallery image -- the one flagged as main, or, when none is flagged, the oldest image in the gallery. At most one image per `Book` carries the flag. Promoting a different image changes which one is the Cover; the rest of the gallery has no meaningful order.
 _Avoid_: Thumbnail, Primary image
 
 **Sort Order**:
-The physical position of a Book Cover or `Chapter Page` within its parent, starting at 1. Determines display sequence.
+The physical position of a `Chapter Page` within its `Chapter Release`, starting at 1. Determines display sequence.
 _Avoid_: Number, Position, Rank (see `Chapter Number` for the semantic counterpart)
 
 **Chapter Release**:
