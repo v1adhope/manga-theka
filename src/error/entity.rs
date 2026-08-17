@@ -31,6 +31,12 @@ pub enum EntityError {
     #[error("'{0}' is not a valid book link kind")]
     InvalidBookLinkKind(String),
 
+    #[error("'{0}' is not a valid cover extension")]
+    InvalidCoverExtension(String),
+
+    #[error("Image must be JPEG, PNG, or WebP")]
+    UnsupportedImageFormat,
+
     #[error("Description can't be empty or whitespace")]
     DescriptionIsEmptyOrWhitespace,
 
@@ -52,6 +58,10 @@ pub enum EntityError {
 
 impl IntoResponse for EntityError {
     fn into_response(self) -> Response {
-        (StatusCode::UNPROCESSABLE_ENTITY, self.to_string()).into_response()
+        match self {
+            Self::UnsupportedImageFormat => (StatusCode::UNSUPPORTED_MEDIA_TYPE, self.to_string()),
+            _ => (StatusCode::UNPROCESSABLE_ENTITY, self.to_string()),
+        }
+        .into_response()
     }
 }

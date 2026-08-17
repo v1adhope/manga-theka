@@ -1,4 +1,5 @@
 mod book;
+mod book_cover;
 mod content_rating;
 mod creator;
 mod fakers;

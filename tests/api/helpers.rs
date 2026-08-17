@@ -11,11 +11,13 @@ use manga_theka::{
         AlternativeTitle, Book, BookLink, BookName, ContentRating, Creator, Description, Label,
         Language, LinkUrl, Name,
     },
+    object_storage,
     startup::App,
     telemetry,
 };
 use serde::Deserialize;
 use sqlx::{AssertSqlSafe, ConnectOptions, Connection, Executor, PgConnection, PgPool};
+use tokio::sync::Mutex;
 use tracing_log::log::LevelFilter;
 use uuid::Uuid;
 
@@ -95,9 +97,13 @@ static TRACING: LazyLock<()> = LazyLock::new(|| {
     telemetry::init_subscriber("info");
 });
 
+static BUCKET_CREATION: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
 pub struct TestApp {
     pub pool: PgPool,
     pub router: Router,
+    pub s3: aws_sdk_s3::Client,
+    pub covers_bucket: String,
 }
 
 impl TestApp {
@@ -105,23 +111,68 @@ impl TestApp {
         LazyLock::force(&TRACING);
 
         let db_name = Uuid::now_v7().to_string();
+        let covers_bucket = format!("covers-{}", Uuid::now_v7());
         let cfg = Config::from_env_pairs([
             ("APP_DATABASE__USERNAME", "postgres"),
             ("APP_DATABASE__PASSWORD", "postgres"),
             ("APP_DATABASE__HOST", "localhost"),
             ("APP_DATABASE__PORT", "5432"),
             ("APP_DATABASE__DATABASE_NAME", db_name.as_str()),
+            ("APP_OBJECT_STORAGE__ENDPOINT", "http://localhost:9000"),
+            ("APP_OBJECT_STORAGE__ACCESS_KEY", "rustfsadmin"),
+            ("APP_OBJECT_STORAGE__SECRET_KEY", "rustfsadmin"),
+            ("APP_OBJECT_STORAGE__COVERS_BUCKET", covers_bucket.as_str()),
             // Ignored pairs
             ("APP_ADDR", "0.0.0.0:0"),
             ("APP_LOG_LEVEL", "info"),
         ]);
         let pool = Self::configure_db(&cfg.database).await;
-        let app = App::build(&cfg).await;
+        let s3 = object_storage::client(&cfg.object_storage);
+        let app = {
+            let _guard = BUCKET_CREATION.lock().await;
+            App::build(&cfg).await
+        };
 
         TestApp {
             pool,
             router: app.router(),
+            s3,
+            covers_bucket,
         }
+    }
+
+    pub async fn object_exists(&self, key: Uuid) -> bool {
+        self.s3
+            .head_object()
+            .bucket(&self.covers_bucket)
+            .key(key.to_string())
+            .send()
+            .await
+            .is_ok()
+    }
+
+    pub async fn object_content_type(&self, key: Uuid) -> String {
+        self.s3
+            .head_object()
+            .bucket(&self.covers_bucket)
+            .key(key.to_string())
+            .send()
+            .await
+            .expect("stored object must exist")
+            .content_type()
+            .expect("stored object must carry a content type")
+            .to_owned()
+    }
+
+    pub async fn objects_count(&self) -> usize {
+        self.s3
+            .list_objects_v2()
+            .bucket(&self.covers_bucket)
+            .send()
+            .await
+            .expect("failed to list the covers bucket")
+            .contents()
+            .len()
     }
 
     async fn configure_db(cfg: &Database) -> PgPool {

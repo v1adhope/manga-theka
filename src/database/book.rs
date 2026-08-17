@@ -7,9 +7,9 @@ use uuid::Uuid;
 use crate::{
     database::{Database, creator::CreatorRow, label::LabelRow},
     entity::{
-        AlternativeTitle, Book, BookKind, BookLink, BookLinkKind, BookName, BookStatus,
-        ContentRating, Creator, DEFAULT_LIMIT, Description, Label, Language, Limit, LinkUrl,
-        Pagination,
+        AlternativeTitle, Book, BookCover, BookKind, BookLink, BookLinkKind, BookName, BookStatus,
+        ContentRating, CoverExtension, Creator, DEFAULT_LIMIT, Description, Label, Language, Limit,
+        LinkUrl, Pagination,
     },
     error::DatabaseError,
 };
@@ -374,6 +374,179 @@ impl Database {
             return Err(DatabaseError::BookNotFound);
         }
 
+        Ok(())
+    }
+
+    #[instrument(name = "db.book.exists", skip_all, fields(book.id = %id))]
+    pub async fn book_exists(&self, id: Uuid) -> Result<(), DatabaseError> {
+        self.book_exists_inner(id)
+            .await
+            .inspect_err(DatabaseError::log_internal)
+    }
+
+    async fn book_exists_inner(&self, id: Uuid) -> Result<(), DatabaseError> {
+        let row = sqlx::query_file!("queries/get_book_id.sql", id)
+            .fetch_optional(&self.pool)
+            .await?;
+
+        if row.is_none() {
+            return Err(DatabaseError::BookNotFound);
+        }
+
+        Ok(())
+    }
+
+    #[instrument(name = "db.book_cover.store", skip_all, fields(book.id = %book_id, cover.id = %item.id))]
+    pub async fn store_book_cover(
+        &self,
+        book_id: Uuid,
+        item: &BookCover,
+    ) -> Result<(), DatabaseError> {
+        self.store_book_cover_inner(book_id, item)
+            .await
+            .inspect_err(DatabaseError::log_internal)
+    }
+
+    async fn store_book_cover_inner(
+        &self,
+        book_id: Uuid,
+        item: &BookCover,
+    ) -> Result<(), DatabaseError> {
+        sqlx::query_file!(
+            "queries/store_book_cover.sql",
+            item.id,
+            book_id,
+            item.extension.as_ref(),
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    #[instrument(name = "db.book_cover.list", skip_all, fields(book.id = %book_id))]
+    pub async fn get_book_covers(&self, book_id: Uuid) -> Result<Vec<BookCover>, DatabaseError> {
+        self.get_book_covers_inner(book_id)
+            .await
+            .inspect_err(DatabaseError::log_internal)
+    }
+
+    async fn get_book_covers_inner(&self, book_id: Uuid) -> Result<Vec<BookCover>, DatabaseError> {
+        let rows = sqlx::query_file!("queries/get_book_covers.sql", book_id)
+            .fetch_all(&self.pool)
+            .await?;
+
+        if rows.is_empty() {
+            return Err(DatabaseError::BookNotFound);
+        }
+
+        let mut covers: Vec<BookCover> = Vec::with_capacity(rows.len());
+        for row in rows {
+            let (Some(id), Some(extension), Some(is_main)) = (row.id, row.extension, row.is_main)
+            else {
+                continue;
+            };
+
+            let extension: CoverExtension = extension
+                .parse()
+                .map_err(|e| DatabaseError::invariant_corrupted("extension", e))?;
+
+            covers.push(BookCover {
+                id,
+                extension,
+                is_main,
+            });
+        }
+
+        Ok(covers)
+    }
+
+    #[instrument(name = "db.book_cover.get", skip_all, fields(book.id = %book_id, cover.id = %id))]
+    pub async fn get_book_cover(
+        &self,
+        book_id: Uuid,
+        id: Uuid,
+    ) -> Result<CoverExtension, DatabaseError> {
+        self.get_book_cover_inner(book_id, id)
+            .await
+            .inspect_err(DatabaseError::log_internal)
+    }
+
+    async fn get_book_cover_inner(
+        &self,
+        book_id: Uuid,
+        id: Uuid,
+    ) -> Result<CoverExtension, DatabaseError> {
+        let row = sqlx::query_file!("queries/get_book_cover.sql", id, book_id)
+            .fetch_optional(&self.pool)
+            .await?;
+
+        let Some(row) = row else {
+            return Err(DatabaseError::BookCoverNotFound);
+        };
+
+        row.extension
+            .parse()
+            .map_err(|e| DatabaseError::invariant_corrupted("extension", e))
+    }
+
+    #[instrument(name = "db.book_cover.ids", skip_all, fields(book.id = %book_id))]
+    pub async fn get_book_cover_ids(&self, book_id: Uuid) -> Result<Vec<Uuid>, DatabaseError> {
+        self.get_book_cover_ids_inner(book_id)
+            .await
+            .inspect_err(DatabaseError::log_internal)
+    }
+
+    async fn get_book_cover_ids_inner(&self, book_id: Uuid) -> Result<Vec<Uuid>, DatabaseError> {
+        let rows = sqlx::query_file!("queries/get_book_cover_ids.sql", book_id)
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(rows.into_iter().map(|r| r.id).collect())
+    }
+
+    #[instrument(name = "db.book_cover.delete", skip_all, fields(book.id = %book_id, cover.id = %id))]
+    pub async fn delete_book_cover(&self, book_id: Uuid, id: Uuid) -> Result<(), DatabaseError> {
+        self.delete_book_cover_inner(book_id, id)
+            .await
+            .inspect_err(DatabaseError::log_internal)
+    }
+
+    async fn delete_book_cover_inner(&self, book_id: Uuid, id: Uuid) -> Result<(), DatabaseError> {
+        let row = sqlx::query_file!("queries/delete_book_cover.sql", id, book_id)
+            .fetch_optional(&self.pool)
+            .await?;
+
+        if row.is_none() {
+            return Err(DatabaseError::BookCoverNotFound);
+        }
+
+        Ok(())
+    }
+
+    #[instrument(name = "db.book_cover.promote", skip_all, fields(book.id = %book_id, cover.id = %id))]
+    pub async fn promote_book_cover(&self, book_id: Uuid, id: Uuid) -> Result<(), DatabaseError> {
+        self.promote_book_cover_inner(book_id, id)
+            .await
+            .inspect_err(DatabaseError::log_internal)
+    }
+
+    async fn promote_book_cover_inner(&self, book_id: Uuid, id: Uuid) -> Result<(), DatabaseError> {
+        let mut tx = self.pool.begin().await?;
+
+        sqlx::query_file!("queries/demote_book_covers.sql", book_id)
+            .execute(&mut *tx)
+            .await?;
+
+        let row = sqlx::query_file!("queries/promote_book_cover.sql", book_id, id)
+            .fetch_optional(&mut *tx)
+            .await?;
+
+        if row.is_none() {
+            return Err(DatabaseError::BookCoverNotFound);
+        }
+
+        tx.commit().await?;
         Ok(())
     }
 

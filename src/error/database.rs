@@ -70,6 +70,12 @@ pub enum DatabaseError {
     #[error("Book not found")]
     BookNotFound,
 
+    #[error("Another cover was promoted concurrently")]
+    BookCoverMainConflict(#[source] sqlx::Error),
+
+    #[error("Book cover not found")]
+    BookCoverNotFound,
+
     #[error("Database invariant corrupted on field '{field}': {message}")]
     InvariantCorrupted { field: String, message: String },
 
@@ -153,6 +159,12 @@ impl From<sqlx::Error> for DatabaseError {
                 Some("pk_book_titles_book_id_language_id_name") => {
                     return Self::BookTitleNameDuplication(err);
                 }
+                Some("unique_book_covers_book_id_is_main") => {
+                    return Self::BookCoverMainConflict(err);
+                }
+                Some("fk_book_covers_books_book_id") => {
+                    return Self::BookNotFound;
+                }
                 _ => {}
             }
         }
@@ -167,10 +179,12 @@ impl IntoResponse for DatabaseError {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Something went wrong".to_string(),
             ),
-            Self::CreatorNotFound | Self::BookNotFound => (StatusCode::NOT_FOUND, self.to_string()),
-            Self::CreatorInUse(_) | Self::CreatorFullNameDuplication(_) => {
-                (StatusCode::CONFLICT, self.to_string())
+            Self::CreatorNotFound | Self::BookNotFound | Self::BookCoverNotFound => {
+                (StatusCode::NOT_FOUND, self.to_string())
             }
+            Self::CreatorInUse(_)
+            | Self::CreatorFullNameDuplication(_)
+            | Self::BookCoverMainConflict(_) => (StatusCode::CONFLICT, self.to_string()),
             Self::CreatorFirstNameTooLong(_)
             | Self::CreatorLastNameTooLong(_)
             | Self::CreatorRoleDoesNotExist(_)

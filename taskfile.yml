@@ -77,10 +77,12 @@ tasks:
       - task: up
 
   clean:
-    desc: "[DANGEROUS] Stop services and delete the postgres data volume (irreversible)"
+    desc: "[DANGEROUS] Stop services and delete the postgres and rustfs data volumes (irreversible)"
     cmds:
       - task: down
       - cmd: docker volume rm manga-theka_pgdata
+        ignore_error: true
+      - cmd: docker volume rm manga-theka_rustfsdata
         ignore_error: true
 
   migration-add:

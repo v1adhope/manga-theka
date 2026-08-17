@@ -6,6 +6,7 @@ use sqlx::postgres::PgConnectOptions;
 pub struct Config {
     pub addr: String,
     pub database: Database,
+    pub object_storage: ObjectStorage,
     pub log_level: String,
 }
 
@@ -51,4 +52,12 @@ impl Database {
             .host(&self.host)
             .port(self.port)
     }
+}
+
+#[derive(Deserialize, Debug)]
+pub struct ObjectStorage {
+    pub endpoint: String,
+    pub access_key: String,
+    pub secret_key: SecretString,
+    pub covers_bucket: String,
 }

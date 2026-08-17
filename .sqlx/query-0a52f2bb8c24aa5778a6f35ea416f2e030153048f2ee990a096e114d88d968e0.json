@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select extension\nfrom book_covers\nwhere id = $1 and book_id = $2;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "extension",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "book_covers",
+            "name": "extension"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0a52f2bb8c24aa5778a6f35ea416f2e030153048f2ee990a096e114d88d968e0"
+}

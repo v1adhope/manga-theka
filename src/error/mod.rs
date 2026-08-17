@@ -1,9 +1,11 @@
 mod database;
 mod entity;
+mod object_storage;
 mod service;
 
 pub use database::*;
 pub use entity::*;
+pub use object_storage::*;
 pub use service::*;
 
 use axum::response::{IntoResponse, Response};

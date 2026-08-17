@@ -1,6 +1,7 @@
 use axum::{
     Router,
-    routing::{get, post},
+    extract::DefaultBodyLimit,
+    routing::{delete, get, post, put},
 };
 use sqlx::PgPool;
 use tokio::signal;
@@ -8,10 +9,12 @@ use tokio::signal;
 use crate::{
     config::Config,
     database::Database,
+    object_storage::{self, Storage},
     route::{
-        delete_book, delete_creator, get_book, get_books, get_content_ratings, get_creator,
-        get_creators, get_labels, get_languages, healthz, store_book, store_creator, update_book,
-        update_creator,
+        COVER_MAX_BYTES, delete_book, delete_book_cover, delete_creator, get_book,
+        get_book_cover_image, get_book_covers, get_books, get_content_ratings, get_creator,
+        get_creators, get_labels, get_languages, healthz, store_book, store_book_cover,
+        store_creator, update_book, update_book_main_cover, update_creator,
     },
     service::Service,
 };
@@ -27,7 +30,17 @@ impl App {
             .await
             .expect("failed to connect to Postgres");
         let database = Database::new(pool);
-        let service = Service::new(database);
+
+        let covers = Storage::new(
+            object_storage::client(&cfg.object_storage),
+            cfg.object_storage.covers_bucket.clone(),
+        );
+        covers
+            .ensure_bucket()
+            .await
+            .expect("failed to ensure the covers bucket");
+
+        let service = Service::new(database, covers);
 
         let router = Router::new()
             .route("/healthz", get(healthz))
@@ -44,6 +57,17 @@ impl App {
                 "/books/{id}",
                 get(get_book).put(update_book).delete(delete_book),
             )
+            .route(
+                "/books/{id}/covers",
+                get(get_book_covers)
+                    .merge(post(store_book_cover).layer(DefaultBodyLimit::max(COVER_MAX_BYTES))),
+            )
+            .route("/books/{id}/covers/{cover_id}", delete(delete_book_cover))
+            .route(
+                "/books/{id}/covers/{cover_id}/image",
+                get(get_book_cover_image),
+            )
+            .route("/books/{id}/main-cover", put(update_book_main_cover))
             .with_state(service);
 
         Self {
