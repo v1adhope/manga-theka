@@ -39,12 +39,12 @@ pub fn client(cfg: &config::ObjectStorage) -> Client {
 }
 
 #[derive(Debug, Clone)]
-pub struct Storage {
+pub struct ObjectStorage {
     client: Client,
     bucket: String,
 }
 
-impl Storage {
+impl ObjectStorage {
     pub fn new(client: Client, bucket: String) -> Self {
         Self { client, bucket }
     }

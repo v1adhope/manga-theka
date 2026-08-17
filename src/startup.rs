@@ -9,7 +9,7 @@ use tokio::signal;
 use crate::{
     config::Config,
     database::Database,
-    object_storage::{self, Storage},
+    object_storage::{self, ObjectStorage},
     route::{
         COVER_MAX_BYTES, delete_book, delete_book_cover, delete_creator, get_book,
         get_book_cover_image, get_book_covers, get_books, get_content_ratings, get_creator,
@@ -31,16 +31,16 @@ impl App {
             .expect("failed to connect to Postgres");
         let database = Database::new(pool);
 
-        let covers = Storage::new(
+        let storage = ObjectStorage::new(
             object_storage::client(&cfg.object_storage),
             cfg.object_storage.covers_bucket.clone(),
         );
-        covers
+        storage
             .ensure_bucket()
             .await
             .expect("failed to ensure the covers bucket");
 
-        let service = Service::new(database, covers);
+        let service = Service::new(database, storage);
 
         let router = Router::new()
             .route("/healthz", get(healthz))

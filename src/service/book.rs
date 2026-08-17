@@ -46,7 +46,7 @@ impl Service {
         self.database.delete_book(id).await?;
 
         for cover_id in cover_ids {
-            let _ = self.covers.delete(&cover_id.to_string()).await;
+            let _ = self.storage.delete(&cover_id.to_string()).await;
         }
 
         Ok(())
@@ -60,7 +60,7 @@ impl Service {
     ) -> Result<(), ServiceError> {
         self.database.book_exists(book_id).await?;
 
-        self.covers
+        self.storage
             .upload(&item.id.to_string(), body, item.extension.content_type())
             .await?;
 
@@ -85,7 +85,7 @@ impl Service {
         let extension = self.database.get_book_cover(book_id, id).await?;
         let disposition = format!("inline; filename=\"{id}.{}\"", extension.as_ref());
 
-        self.covers
+        self.storage
             .presign(&id.to_string(), COVER_PRESIGN_TTL, &disposition)
             .await
             .map_err(Into::into)
@@ -101,7 +101,7 @@ impl Service {
     pub async fn delete_book_cover(&self, book_id: Uuid, id: Uuid) -> Result<(), ServiceError> {
         self.database.delete_book_cover(book_id, id).await?;
 
-        let _ = self.covers.delete(&id.to_string()).await;
+        let _ = self.storage.delete(&id.to_string()).await;
 
         Ok(())
     }

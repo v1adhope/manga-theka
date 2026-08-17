@@ -38,10 +38,9 @@ jobs:
       rustfs:
         image: rustfs/rustfs:latest
         env:
-          RUSTFS_ADDRESS: 0.0.0.0:9000
-          RUSTFS_VOLUMES: /data/rustfs0
           RUSTFS_ACCESS_KEY: rustfsadmin
           RUSTFS_SECRET_KEY: rustfsadmin
+          RUSTFS_VOLUMES: /data/rustfs0
           RUSTFS_CONSOLE_ENABLE: "false"
         ports:
           - 9000:9000
