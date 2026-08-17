@@ -1,8 +1,7 @@
 use aws_sdk_s3::{
     error::SdkError,
     operation::{
-        create_bucket::CreateBucketError, delete_object::DeleteObjectError,
-        get_object::GetObjectError, put_object::PutObjectError,
+        delete_object::DeleteObjectError, get_object::GetObjectError, put_object::PutObjectError,
     },
     presigning::PresigningConfigError,
 };
@@ -15,9 +14,6 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum ObjectStorageError {
-    #[error("Failed to create the bucket")]
-    CreateBucket(#[source] Box<SdkError<CreateBucketError>>),
-
     #[error("Failed to upload the object")]
     Upload(#[source] Box<SdkError<PutObjectError>>),
 

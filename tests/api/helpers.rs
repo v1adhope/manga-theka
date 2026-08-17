@@ -119,6 +119,7 @@ impl TestApp {
             ("APP_DATABASE__PORT", "5432"),
             ("APP_DATABASE__DATABASE_NAME", db_name.as_str()),
             ("APP_OBJECT_STORAGE__ENDPOINT", "http://localhost:9000"),
+            ("APP_OBJECT_STORAGE__REGION", "us-east-1"),
             ("APP_OBJECT_STORAGE__ACCESS_KEY", "rustfsadmin"),
             ("APP_OBJECT_STORAGE__SECRET_KEY", "rustfsadmin"),
             ("APP_OBJECT_STORAGE__COVERS_BUCKET", covers_bucket.as_str()),
@@ -127,7 +128,7 @@ impl TestApp {
             ("APP_LOG_LEVEL", "info"),
         ]);
         let pool = Self::configure_db(&cfg.database).await;
-        let s3 = object_storage::client(&cfg.object_storage);
+        let s3 = object_storage::client(&cfg.object_storage).await;
         let app = {
             let _guard = BUCKET_CREATION.lock().await;
             App::build(&cfg).await

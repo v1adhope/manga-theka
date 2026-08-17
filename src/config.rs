@@ -57,6 +57,7 @@ impl Database {
 #[derive(Deserialize, Debug)]
 pub struct ObjectStorage {
     pub endpoint: String,
+    pub region: String,
     pub access_key: String,
     pub secret_key: SecretString,
     pub covers_bucket: String,

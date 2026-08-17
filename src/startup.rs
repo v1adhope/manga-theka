@@ -32,13 +32,10 @@ impl App {
         let database = Database::new(pool);
 
         let storage = ObjectStorage::new(
-            object_storage::client(&cfg.object_storage),
+            object_storage::client(&cfg.object_storage).await,
             cfg.object_storage.covers_bucket.clone(),
         );
-        storage
-            .ensure_bucket()
-            .await
-            .expect("failed to ensure the covers bucket");
+        storage.ensure_bucket().await;
 
         let service = Service::new(database, storage);
 
