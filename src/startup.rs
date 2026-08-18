@@ -8,12 +8,13 @@ use tokio::signal;
 use crate::{
     config::Config,
     database::{self, Database},
+    entity::COVER_MAX_BYTES,
     object_storage::{self, ObjectStorage},
     route::{
-        COVER_MAX_BYTES, delete_book, delete_book_cover, delete_creator, get_book,
-        get_book_cover_image, get_book_covers, get_books, get_content_ratings, get_creator,
-        get_creators, get_labels, get_languages, healthz, store_book, store_book_cover,
-        store_creator, update_book, update_book_main_cover, update_creator,
+        delete_book, delete_book_cover, delete_creator, get_book, get_book_cover_image,
+        get_book_covers, get_books, get_content_ratings, get_creator, get_creators, get_labels,
+        get_languages, healthz, store_book, store_book_cover, store_creator, update_book,
+        update_book_main_cover, update_creator,
     },
     service::Service,
 };

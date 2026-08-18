@@ -19,8 +19,6 @@ use crate::{
     service::Service,
 };
 
-pub const COVER_MAX_BYTES: usize = 5 * 1024 * 1024;
-
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BookLinkReq {

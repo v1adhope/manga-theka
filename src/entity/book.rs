@@ -9,6 +9,8 @@ use crate::{
     error::EntityError,
 };
 
+pub const COVER_MAX_BYTES: usize = 5 * 1024 * 1024;
+
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
 pub enum BookStatus {
     Ongoing,
