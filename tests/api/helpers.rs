@@ -7,6 +7,7 @@ use axum::response::Response;
 use http_body_util::BodyExt;
 use manga_theka::{
     config::{Config, Database},
+    database,
     entity::{
         AlternativeTitle, Book, BookLink, BookName, ContentRating, Creator, Description, Label,
         Language, LinkUrl, Name,
@@ -191,16 +192,7 @@ impl TestApp {
         .await
         .expect("failed to create database");
 
-        let pool = PgPool::connect_with(cfg.with_db())
-            .await
-            .expect("failed to connect to Postgres");
-
-        sqlx::migrate!()
-            .run(&pool)
-            .await
-            .expect("failed to migrate the database");
-
-        pool
+        database::pool(cfg).await
     }
 
     pub async fn insert_book(&self, b: &Book) {

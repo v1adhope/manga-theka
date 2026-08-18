@@ -3,12 +3,11 @@ use axum::{
     extract::DefaultBodyLimit,
     routing::{delete, get, post, put},
 };
-use sqlx::PgPool;
 use tokio::signal;
 
 use crate::{
     config::Config,
-    database::Database,
+    database::{self, Database},
     object_storage::{self, ObjectStorage},
     route::{
         COVER_MAX_BYTES, delete_book, delete_book_cover, delete_creator, get_book,
@@ -26,15 +25,12 @@ pub struct App {
 
 impl App {
     pub async fn build(cfg: &Config) -> Self {
-        let pool = PgPool::connect_with(cfg.database.with_db())
-            .await
-            .expect("failed to connect to Postgres");
+        let pool = database::pool(&cfg.database).await;
         let database = Database::new(pool);
+        database.migrate().await;
 
-        let storage = ObjectStorage::new(
-            object_storage::client(&cfg.object_storage).await,
-            cfg.object_storage.covers_bucket.clone(),
-        );
+        let client = object_storage::client(&cfg.object_storage).await;
+        let storage = ObjectStorage::new(client, cfg.object_storage.covers_bucket.clone());
         storage.ensure_bucket().await;
 
         let service = Service::new(database, storage);
