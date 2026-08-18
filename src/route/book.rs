@@ -208,24 +208,18 @@ pub async fn store_book_cover(
     let extension = CoverExtension::try_from(body.as_ref())?;
     let cover = BookCover {
         id: Uuid::now_v7(),
+        book_id,
         extension,
+        content: body,
         is_main: false,
     };
 
-    service.store_book_cover(book_id, &cover, body).await?;
+    service.store_book_cover(&cover).await?;
 
     Ok(json_data_response(
         StatusCode::CREATED,
         StoreResp { id: cover.id },
     ))
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BookCoverResp {
-    pub id: Uuid,
-    pub is_main: bool,
-    pub url: String,
 }
 
 pub async fn get_book_covers(
@@ -234,16 +228,7 @@ pub async fn get_book_covers(
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let covers = service.get_book_covers(book_id).await?;
 
-    let data: Vec<BookCoverResp> = covers
-        .into_iter()
-        .map(|c| BookCoverResp {
-            url: format!("/books/{book_id}/covers/{}/image", c.id),
-            id: c.id,
-            is_main: c.is_main,
-        })
-        .collect();
-
-    Ok(json_data_response(StatusCode::OK, data))
+    Ok(json_data_response(StatusCode::OK, covers))
 }
 
 pub async fn get_book_cover_image(

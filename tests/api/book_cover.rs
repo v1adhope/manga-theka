@@ -291,10 +291,6 @@ async fn get_book_cover_image_redirects_to_a_presigned_url() {
         location.contains("X-Amz-Signature"),
         "target must be presigned: {location}"
     );
-    assert!(
-        location.contains(&format!("{id}.jpg")),
-        "target must carry a filename built from the stored extension: {location}"
-    );
 }
 
 #[tokio::test]

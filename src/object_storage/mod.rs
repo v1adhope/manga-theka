@@ -1,3 +1,4 @@
+mod book;
 mod object;
 
 use std::time::Duration;

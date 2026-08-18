@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select bc.id as \"id?\", bc.extension as \"extension?\", bc.is_main as \"is_main?\"\nfrom books b\nleft join book_covers bc on bc.book_id = b.id\nwhere b.id = $1\norder by bc.id;\n",
+  "query": "select id, book_id, extension, is_main\nfrom book_covers\nwhere book_id = $1\norder by id;\n",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "id?",
+        "name": "id",
         "type_info": "Uuid",
         "origin": {
           "Table": {
@@ -16,7 +16,18 @@
       },
       {
         "ordinal": 1,
-        "name": "extension?",
+        "name": "book_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "book_covers",
+            "name": "book_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "extension",
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -26,8 +37,8 @@
         }
       },
       {
-        "ordinal": 2,
-        "name": "is_main?",
+        "ordinal": 3,
+        "name": "is_main",
         "type_info": "Bool",
         "origin": {
           "Table": {
@@ -45,8 +56,9 @@
     "nullable": [
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "4d481f173cf9999c56dea86da2757b632552699c2a365ca6ad8ab2ab9e7f14af"
+  "hash": "391b9718fe7cb0274d59b22bb6e9c9e52fe51c8617d2b3d6e8f127133c43901a"
 }

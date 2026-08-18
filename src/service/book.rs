@@ -1,15 +1,10 @@
-use std::time::Duration;
-
-use bytes::Bytes;
 use uuid::Uuid;
 
 use crate::{
-    entity::{Book, BookCover, Pagination},
+    entity::{Book, BookCover, BookCoverQuery, COVER_PRESIGN_TTL, Pagination},
     error::ServiceError,
     service::Service,
 };
-
-const COVER_PRESIGN_TTL: Duration = Duration::from_secs(300);
 
 impl Service {
     pub async fn store_book(&self, item: Book, label_ids: Vec<Uuid>) -> Result<(), ServiceError> {
@@ -45,32 +40,29 @@ impl Service {
 
         self.database.delete_book(id).await?;
 
-        for cover_id in cover_ids {
-            let _ = self.storage.delete(&cover_id.to_string()).await;
-        }
-
-        Ok(())
-    }
-
-    pub async fn store_book_cover(
-        &self,
-        book_id: Uuid,
-        item: &BookCover,
-        body: Bytes,
-    ) -> Result<(), ServiceError> {
-        self.database.book_exists(book_id).await?;
-
         self.storage
-            .upload(&item.id.to_string(), body, item.extension.content_type())
-            .await?;
-
-        self.database
-            .store_book_cover(book_id, item)
+            .delete_many(&cover_ids)
             .await
             .map_err(Into::into)
     }
 
-    pub async fn get_book_covers(&self, book_id: Uuid) -> Result<Vec<BookCover>, ServiceError> {
+    pub async fn store_book_cover(&self, item: &BookCover) -> Result<(), ServiceError> {
+        self.database.ensure_book_exists(item.book_id).await?;
+
+        self.storage.upload_book_cover(item).await?;
+
+        self.database
+            .store_book_cover(item)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn get_book_covers(
+        &self,
+        book_id: Uuid,
+    ) -> Result<Vec<BookCoverQuery>, ServiceError> {
+        self.database.ensure_book_exists(book_id).await?;
+
         self.database
             .get_book_covers(book_id)
             .await
@@ -82,11 +74,10 @@ impl Service {
         book_id: Uuid,
         id: Uuid,
     ) -> Result<String, ServiceError> {
-        let extension = self.database.get_book_cover(book_id, id).await?;
-        let disposition = format!("inline; filename=\"{id}.{}\"", extension.as_ref());
+        self.database.ensure_book_cover_exists(book_id, id).await?;
 
         self.storage
-            .presign(&id.to_string(), COVER_PRESIGN_TTL, &disposition)
+            .presign(&id.to_string(), COVER_PRESIGN_TTL)
             .await
             .map_err(Into::into)
     }
@@ -101,8 +92,6 @@ impl Service {
     pub async fn delete_book_cover(&self, book_id: Uuid, id: Uuid) -> Result<(), ServiceError> {
         self.database.delete_book_cover(book_id, id).await?;
 
-        let _ = self.storage.delete(&id.to_string()).await;
-
-        Ok(())
+        self.storage.delete(id).await.map_err(Into::into)
     }
 }

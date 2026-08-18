@@ -1,5 +1,6 @@
+use bytes::Bytes;
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
+use std::{str::FromStr, time::Duration};
 use time::OffsetDateTime;
 use url::Url;
 use uuid::Uuid;
@@ -10,6 +11,7 @@ use crate::{
 };
 
 pub const COVER_MAX_BYTES: usize = 5 * 1024 * 1024;
+pub const COVER_PRESIGN_TTL: Duration = Duration::from_secs(300);
 
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
 pub enum BookStatus {
@@ -104,7 +106,7 @@ impl AsRef<str> for BookLinkKind {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize)]
 pub enum CoverExtension {
     Jpg,
     Png,
@@ -278,13 +280,79 @@ pub struct AlternativeTitle {
 #[derive(Debug)]
 pub struct BookCover {
     pub id: Uuid,
+    pub book_id: Uuid,
+    pub extension: CoverExtension,
+    pub content: Bytes,
+    pub is_main: bool,
+}
+
+impl BookCover {
+    pub fn content_disposition(&self) -> String {
+        format!(
+            "inline; filename=\"{}.{}\"",
+            self.id,
+            self.extension.as_ref()
+        )
+    }
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+#[serde(transparent)]
+pub struct CoverUrl(String);
+
+impl From<(Uuid, Uuid)> for CoverUrl {
+    fn from((book_id, id): (Uuid, Uuid)) -> Self {
+        Self(format!("/books/{book_id}/covers/{id}/image"))
+    }
+}
+
+impl AsRef<str> for CoverUrl {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BookCoverQuery {
+    pub id: Uuid,
     pub extension: CoverExtension,
     pub is_main: bool,
+    pub url: CoverUrl,
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::entity::{BookName, CoverExtension, Description, LinkUrl};
+    use uuid::Uuid;
+
+    use crate::entity::{BookCover, BookName, CoverExtension, CoverUrl, Description, LinkUrl};
+    use bytes::Bytes;
+
+    #[test]
+    fn content_disposition_is_inline_with_the_extension_suffixed_filename() {
+        let cover = BookCover {
+            id: Uuid::from_u128(1),
+            book_id: Uuid::from_u128(2),
+            extension: CoverExtension::Webp,
+            content: Bytes::new(),
+            is_main: false,
+        };
+
+        assert_eq!(
+            cover.content_disposition(),
+            "inline; filename=\"00000000-0000-0000-0000-000000000001.webp\""
+        );
+    }
+
+    #[test]
+    fn cover_url_points_at_the_book_scoped_image_route() {
+        let url = CoverUrl::from((Uuid::from_u128(1), Uuid::from_u128(2)));
+
+        assert_eq!(
+            url.as_ref(),
+            "/books/00000000-0000-0000-0000-000000000001/covers/00000000-0000-0000-0000-000000000002/image"
+        );
+    }
 
     #[test]
     fn jpeg_magic_bytes_are_sniffed() {
