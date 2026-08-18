@@ -39,9 +39,14 @@ impl ObjectStorage {
 
     #[instrument(name = "object_storage.object.presign", skip_all, fields(bucket = %self.bucket, key = %key))]
     pub async fn presign(&self, key: &str, ttl: Duration) -> Result<String, ObjectStorageError> {
-        let presigning = PresigningConfig::expires_in(ttl)
-            .map_err(|e| ObjectStorageError::Presigning(e.into()))
-            .inspect_err(ObjectStorageError::log_internal)?;
+        self.presign_inner(key, ttl)
+            .await
+            .map_err(ObjectStorageError::Presign)
+            .inspect_err(ObjectStorageError::log_internal)
+    }
+
+    async fn presign_inner(&self, key: &str, ttl: Duration) -> anyhow::Result<String> {
+        let presigning = PresigningConfig::expires_in(ttl)?;
 
         let req = self
             .client
@@ -49,9 +54,7 @@ impl ObjectStorage {
             .bucket(&self.bucket)
             .key(key)
             .presigned(presigning)
-            .await
-            .map_err(|e| ObjectStorageError::Presign(e.into()))
-            .inspect_err(ObjectStorageError::log_internal)?;
+            .await?;
 
         Ok(req.uri().to_owned())
     }
@@ -63,6 +66,13 @@ impl ObjectStorage {
 
     #[instrument(name = "object_storage.object.delete_many", skip_all, fields(bucket = %self.bucket, keys = keys.len()))]
     pub async fn delete_many(&self, keys: &[Uuid]) -> Result<(), ObjectStorageError> {
+        self.delete_many_inner(keys)
+            .await
+            .map_err(ObjectStorageError::Delete)
+            .inspect_err(ObjectStorageError::log_internal)
+    }
+
+    async fn delete_many_inner(&self, keys: &[Uuid]) -> anyhow::Result<()> {
         if keys.is_empty() {
             return Ok(());
         }
@@ -71,20 +81,12 @@ impl ObjectStorage {
             let mut objects = Vec::with_capacity(chunk.len());
 
             for key in chunk {
-                let obj = ObjectIdentifier::builder()
-                    .key(key.to_string())
-                    .build()
-                    .map_err(|e| ObjectStorageError::Delete(e.into()))
-                    .inspect_err(ObjectStorageError::log_internal)?;
+                let obj = ObjectIdentifier::builder().key(key.to_string()).build()?;
 
                 objects.push(obj);
             }
 
-            let delete = Delete::builder()
-                .set_objects(Some(objects))
-                .build()
-                .map_err(|e| ObjectStorageError::Delete(e.into()))
-                .inspect_err(ObjectStorageError::log_internal)?;
+            let delete = Delete::builder().set_objects(Some(objects)).build()?;
 
             let res = self
                 .client
@@ -92,12 +94,15 @@ impl ObjectStorage {
                 .bucket(&self.bucket)
                 .delete(delete)
                 .send()
-                .await
-                .map_err(|e| ObjectStorageError::Delete(e.into()))
-                .inspect_err(ObjectStorageError::log_internal)?;
+                .await?;
 
             if !res.errors().is_empty() {
-                tracing::error!(errors = ?res.errors(), "internal object storage error");
+                anyhow::bail!(
+                    "failed to delete {} of {} objects: {:?}",
+                    res.errors().len(),
+                    chunk.len(),
+                    res.errors()
+                );
             }
         }
 

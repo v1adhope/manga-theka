@@ -10,9 +10,6 @@ pub enum ObjectStorageError {
     #[error("Failed to upload the object")]
     Upload(#[source] anyhow::Error),
 
-    #[error("Failed to build the presigning config")]
-    Presigning(#[source] anyhow::Error),
-
     #[error("Failed to presign the object url")]
     Presign(#[source] anyhow::Error),
 
