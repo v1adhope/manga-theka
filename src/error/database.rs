@@ -70,6 +70,9 @@ pub enum DatabaseError {
     #[error("Book not found")]
     BookNotFound,
 
+    #[error("Book cover extension doesn't exist")]
+    BookCoverExtensionDoesNotExist(#[source] sqlx::Error),
+
     #[error("Another cover was promoted concurrently")]
     BookCoverMainConflict(#[source] sqlx::Error),
 
@@ -159,6 +162,9 @@ impl From<sqlx::Error> for DatabaseError {
                 Some("pk_book_titles_book_id_language_id_name") => {
                     return Self::BookTitleNameDuplication(err);
                 }
+                Some("enum_book_covers_extension") => {
+                    return Self::BookCoverExtensionDoesNotExist(err);
+                }
                 Some("unique_book_covers_book_id_is_main") => {
                     return Self::BookCoverMainConflict(err);
                 }
@@ -201,7 +207,8 @@ impl IntoResponse for DatabaseError {
             | Self::BookLinkUrlDuplication(_)
             | Self::BookTitleLanguageDoesNotExist(_)
             | Self::BookTitleNameTooLong(_)
-            | Self::BookTitleNameDuplication(_) => {
+            | Self::BookTitleNameDuplication(_)
+            | Self::BookCoverExtensionDoesNotExist(_) => {
                 (StatusCode::UNPROCESSABLE_ENTITY, self.to_string())
             }
         }
