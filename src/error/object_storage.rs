@@ -1,10 +1,3 @@
-use aws_sdk_s3::{
-    error::SdkError,
-    operation::{
-        delete_object::DeleteObjectError, get_object::GetObjectError, put_object::PutObjectError,
-    },
-    presigning::PresigningConfigError,
-};
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
@@ -15,16 +8,16 @@ use thiserror::Error;
 #[non_exhaustive]
 pub enum ObjectStorageError {
     #[error("Failed to upload the object")]
-    Upload(#[source] Box<SdkError<PutObjectError>>),
+    Upload(#[source] anyhow::Error),
 
     #[error("Failed to build the presigning config")]
-    Presigning(#[source] PresigningConfigError),
+    Presigning(#[source] anyhow::Error),
 
     #[error("Failed to presign the object url")]
-    Presign(#[source] Box<SdkError<GetObjectError>>),
+    Presign(#[source] anyhow::Error),
 
     #[error("Failed to delete the object")]
-    Delete(#[source] Box<SdkError<DeleteObjectError>>),
+    Delete(#[source] anyhow::Error),
 }
 
 impl ObjectStorageError {

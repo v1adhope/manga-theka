@@ -63,6 +63,7 @@ aws-config = { version = "1", default-features = false, features = [
   "default-https-client",
   "behavior-version-latest",
 ] }
+anyhow = "1"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

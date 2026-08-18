@@ -7,8 +7,8 @@ use tracing::instrument;
 use crate::{error::ObjectStorageError, object_storage::ObjectStorage};
 
 impl ObjectStorage {
-    #[instrument(name = "object_storage.covers.upload_cover", skip_all, fields(bucket = %self.bucket, key = %key))]
-    pub async fn upload_cover(
+    #[instrument(name = "object_storage.object.upload", skip_all, fields(bucket = %self.bucket, key = %key))]
+    pub async fn upload(
         &self,
         key: &str,
         body: Bytes,
@@ -22,21 +22,21 @@ impl ObjectStorage {
             .body(ByteStream::from(body))
             .send()
             .await
-            .map_err(|e| ObjectStorageError::Upload(Box::new(e)))
+            .map_err(|e| ObjectStorageError::Upload(e.into()))
             .inspect_err(ObjectStorageError::log_internal)?;
 
         Ok(())
     }
 
-    #[instrument(name = "object_storage.covers.presign_cover", skip_all, fields(bucket = %self.bucket, key = %key))]
-    pub async fn presign_cover(
+    #[instrument(name = "object_storage.object.presign", skip_all, fields(bucket = %self.bucket, key = %key))]
+    pub async fn presign(
         &self,
         key: &str,
         ttl: Duration,
         content_disposition: &str,
     ) -> Result<String, ObjectStorageError> {
         let presigning = PresigningConfig::expires_in(ttl)
-            .map_err(ObjectStorageError::Presigning)
+            .map_err(|e| ObjectStorageError::Presigning(e.into()))
             .inspect_err(ObjectStorageError::log_internal)?;
 
         let req = self
@@ -47,21 +47,21 @@ impl ObjectStorage {
             .response_content_disposition(content_disposition)
             .presigned(presigning)
             .await
-            .map_err(|e| ObjectStorageError::Presign(Box::new(e)))
+            .map_err(|e| ObjectStorageError::Presign(e.into()))
             .inspect_err(ObjectStorageError::log_internal)?;
 
         Ok(req.uri().to_owned())
     }
 
-    #[instrument(name = "object_storage.covers.delete_cover", skip_all, fields(bucket = %self.bucket, key = %key))]
-    pub async fn delete_cover(&self, key: &str) -> Result<(), ObjectStorageError> {
+    #[instrument(name = "object_storage.object.delete", skip_all, fields(bucket = %self.bucket, key = %key))]
+    pub async fn delete(&self, key: &str) -> Result<(), ObjectStorageError> {
         self.client
             .delete_object()
             .bucket(&self.bucket)
             .key(key)
             .send()
             .await
-            .map_err(|e| ObjectStorageError::Delete(Box::new(e)))
+            .map_err(|e| ObjectStorageError::Delete(e.into()))
             .inspect_err(ObjectStorageError::log_internal)?;
 
         Ok(())

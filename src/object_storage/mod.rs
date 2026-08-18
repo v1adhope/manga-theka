@@ -1,4 +1,4 @@
-mod covers;
+mod object;
 
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::{
