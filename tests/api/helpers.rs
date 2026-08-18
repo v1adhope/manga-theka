@@ -22,6 +22,12 @@ use tokio::sync::Mutex;
 use tracing_log::log::LevelFilter;
 use uuid::Uuid;
 
+static TRACING: LazyLock<()> = LazyLock::new(|| {
+    telemetry::init_subscriber("info");
+});
+
+static BUCKET_CREATION: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
 #[derive(Debug)]
 pub struct BookSample {
     pub name: Option<String>,
@@ -93,12 +99,6 @@ pub fn title_keys(titles: &[AlternativeTitle]) -> Vec<(Uuid, &str)> {
 
     keys
 }
-
-static TRACING: LazyLock<()> = LazyLock::new(|| {
-    telemetry::init_subscriber("info");
-});
-
-static BUCKET_CREATION: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 pub struct TestApp {
     pub pool: PgPool,
