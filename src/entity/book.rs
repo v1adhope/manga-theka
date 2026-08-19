@@ -126,6 +126,10 @@ impl CoverExtension {
             Self::Webp => "image/webp",
         }
     }
+
+    pub fn content_disposition(&self, id: Uuid) -> String {
+        format!("inline; filename=\"{id}.{}\"", self.as_ref())
+    }
 }
 
 impl TryFrom<&[u8]> for CoverExtension {
@@ -293,11 +297,7 @@ pub struct BookCover {
 
 impl BookCover {
     pub fn content_disposition(&self) -> String {
-        format!(
-            "inline; filename=\"{}.{}\"",
-            self.id,
-            self.extension.as_ref()
-        )
+        self.extension.content_disposition(self.id)
     }
 }
 
