@@ -1,7 +1,8 @@
 use axum::{
     Json,
+    body::Bytes,
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{StatusCode, header},
     response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
@@ -10,8 +11,8 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        AlternativeTitle, Book, BookKind, BookLink, BookLinkKind, BookName, BookStatus,
-        ContentRating, Description, Language, LinkUrl, Pagination,
+        AlternativeTitle, Book, BookCover, BookKind, BookLink, BookLinkKind, BookName, BookStatus,
+        ContentRating, CoverExtension, Description, Language, LinkUrl, Pagination,
     },
     error::{AppError, EntityError},
     route::{PaginationQuery, StoreResp, json_data_response, json_response},
@@ -196,5 +197,68 @@ pub async fn delete_book(
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
     service.delete_book(id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn store_book_cover(
+    State(service): State<Service>,
+    Path(book_id): Path<Uuid>,
+    body: Bytes,
+) -> Result<(StatusCode, impl IntoResponse), AppError> {
+    let extension = CoverExtension::try_from(body.as_ref())?;
+    let cover = BookCover {
+        id: Uuid::now_v7(),
+        book_id,
+        extension,
+        content: body,
+        is_main: false,
+    };
+
+    service.store_book_cover(&cover).await?;
+
+    Ok(json_data_response(
+        StatusCode::CREATED,
+        StoreResp { id: cover.id },
+    ))
+}
+
+pub async fn get_book_covers(
+    State(service): State<Service>,
+    Path(book_id): Path<Uuid>,
+) -> Result<(StatusCode, impl IntoResponse), AppError> {
+    let covers = service.get_book_covers(book_id).await?;
+
+    Ok(json_data_response(StatusCode::OK, covers))
+}
+
+pub async fn get_book_cover_image(
+    State(service): State<Service>,
+    Path((book_id, cover_id)): Path<(Uuid, Uuid)>,
+) -> Result<(StatusCode, impl IntoResponse), AppError> {
+    let url = service.presign_book_cover(book_id, cover_id).await?;
+
+    Ok((StatusCode::FOUND, [(header::LOCATION, url)]))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MainCoverReq {
+    pub cover_id: Uuid,
+}
+
+pub async fn update_book_main_cover(
+    State(service): State<Service>,
+    Path(book_id): Path<Uuid>,
+    Json(req): Json<MainCoverReq>,
+) -> Result<StatusCode, AppError> {
+    service.promote_book_cover(book_id, req.cover_id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn delete_book_cover(
+    State(service): State<Service>,
+    Path((book_id, cover_id)): Path<(Uuid, Uuid)>,
+) -> Result<StatusCode, AppError> {
+    service.delete_book_cover(book_id, cover_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }

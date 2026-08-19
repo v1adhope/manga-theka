@@ -2,6 +2,7 @@ pub mod config;
 pub mod database;
 pub mod entity;
 pub mod error;
+pub mod object_storage;
 pub mod route;
 pub mod service;
 pub mod startup;

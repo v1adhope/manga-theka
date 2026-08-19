@@ -35,6 +35,21 @@ jobs:
           --health-timeout 3s
           --health-retries 5
 
+      rustfs:
+        image: rustfs/rustfs:latest
+        env:
+          RUSTFS_ACCESS_KEY: rustfsadmin
+          RUSTFS_SECRET_KEY: rustfsadmin
+          RUSTFS_VOLUMES: /data/rustfs0
+          RUSTFS_CONSOLE_ENABLE: "false"
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd "curl -fsS http://127.0.0.1:9000/health"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v7
 

@@ -1,23 +1,38 @@
 use std::sync::LazyLock;
 use std::time::Duration;
 
+use aws_sdk_s3::primitives::ByteStream;
 use axum::Router;
-use axum::http::StatusCode;
+use axum::body::Body;
+use axum::http::{Request, StatusCode, header};
 use axum::response::Response;
+use fake::Fake;
 use http_body_util::BodyExt;
 use manga_theka::{
     config::{Config, Database},
+    database,
     entity::{
-        AlternativeTitle, Book, BookLink, BookName, ContentRating, Creator, Description, Label,
-        Language, LinkUrl, Name,
+        AlternativeTitle, Book, BookCoverQuery, BookLink, BookName, ContentRating, CoverExtension,
+        CoverUrl, Creator, Description, Label, Language, LinkUrl, Name,
     },
+    object_storage,
     startup::App,
     telemetry,
 };
 use serde::Deserialize;
 use sqlx::{AssertSqlSafe, ConnectOptions, Connection, Executor, PgConnection, PgPool};
+use tokio::sync::Mutex;
+use tower::ServiceExt;
 use tracing_log::log::LevelFilter;
 use uuid::Uuid;
+
+use crate::fakers::BookFaker;
+
+static TRACING: LazyLock<()> = LazyLock::new(|| {
+    telemetry::init_subscriber("info");
+});
+
+static BUCKET_CREATION: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 #[derive(Debug)]
 pub struct BookSample {
@@ -91,13 +106,11 @@ pub fn title_keys(titles: &[AlternativeTitle]) -> Vec<(Uuid, &str)> {
     keys
 }
 
-static TRACING: LazyLock<()> = LazyLock::new(|| {
-    telemetry::init_subscriber("info");
-});
-
 pub struct TestApp {
     pub pool: PgPool,
     pub router: Router,
+    pub s3: aws_sdk_s3::Client,
+    pub covers_bucket: String,
 }
 
 impl TestApp {
@@ -105,29 +118,41 @@ impl TestApp {
         LazyLock::force(&TRACING);
 
         let db_name = Uuid::now_v7().to_string();
+        let covers_bucket = format!("covers-{}", Uuid::now_v7());
         let cfg = Config::from_env_pairs([
             ("APP_DATABASE__USERNAME", "postgres"),
             ("APP_DATABASE__PASSWORD", "postgres"),
             ("APP_DATABASE__HOST", "localhost"),
             ("APP_DATABASE__PORT", "5432"),
             ("APP_DATABASE__DATABASE_NAME", db_name.as_str()),
+            ("APP_OBJECT_STORAGE__ENDPOINT", "http://localhost:9000"),
+            ("APP_OBJECT_STORAGE__REGION", "us-east-1"),
+            ("APP_OBJECT_STORAGE__ACCESS_KEY", "rustfsadmin"),
+            ("APP_OBJECT_STORAGE__SECRET_KEY", "rustfsadmin"),
+            ("APP_OBJECT_STORAGE__COVERS_BUCKET", covers_bucket.as_str()),
             // Ignored pairs
             ("APP_ADDR", "0.0.0.0:0"),
             ("APP_LOG_LEVEL", "info"),
         ]);
         let pool = Self::configure_db(&cfg.database).await;
-        let app = App::build(&cfg).await;
+        let s3 = object_storage::client(&cfg.object_storage).await;
+        let app = {
+            let _guard = BUCKET_CREATION.lock().await;
+            App::build(&cfg).await
+        };
 
         TestApp {
             pool,
             router: app.router(),
+            s3,
+            covers_bucket,
         }
     }
 
     async fn configure_db(cfg: &Database) -> PgPool {
         let conn_cfg = cfg
             .without_db()
-            .log_slow_statements(LevelFilter::Warn, Duration::from_secs(3));
+            .log_slow_statements(LevelFilter::Warn, Duration::from_secs(10));
         let mut conn = PgConnection::connect_with(&conn_cfg)
             .await
             .expect("failed to connect to Postgres without database");
@@ -139,16 +164,41 @@ impl TestApp {
         .await
         .expect("failed to create database");
 
-        let pool = PgPool::connect_with(cfg.with_db())
-            .await
-            .expect("failed to connect to Postgres");
+        database::pool(cfg).await
+    }
 
-        sqlx::migrate!()
-            .run(&pool)
+    pub async fn object_exists(&self, key: Uuid) -> bool {
+        self.s3
+            .head_object()
+            .bucket(&self.covers_bucket)
+            .key(key.to_string())
+            .send()
             .await
-            .expect("failed to migrate the database");
+            .is_ok()
+    }
 
-        pool
+    pub async fn object_content_type(&self, key: Uuid) -> String {
+        self.s3
+            .head_object()
+            .bucket(&self.covers_bucket)
+            .key(key.to_string())
+            .send()
+            .await
+            .expect("stored object must exist")
+            .content_type()
+            .expect("stored object must carry a content type")
+            .to_owned()
+    }
+
+    pub async fn objects_count(&self) -> usize {
+        self.s3
+            .list_objects_v2()
+            .bucket(&self.covers_bucket)
+            .send()
+            .await
+            .expect("failed to list the covers bucket")
+            .contents()
+            .len()
     }
 
     pub async fn insert_book(&self, b: &Book) {
@@ -381,6 +431,71 @@ order by c.id;
         }
     }
 
+    pub async fn insert_random_book(&self) -> Uuid {
+        let book: Book = BookFaker::default().fake();
+        self.insert_book(&book).await;
+
+        book.id
+    }
+
+    pub async fn fetch_covers(&self, book_id: Uuid) -> Vec<BookCoverQuery> {
+        sqlx::query!(
+            r#"
+select id, extension, is_main
+from book_covers
+where book_id = $1
+order by id;
+        "#,
+            book_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .expect("failed to read book covers")
+        .into_iter()
+        .map(|r| BookCoverQuery {
+            id: r.id,
+            extension: r
+                .extension
+                .parse()
+                .expect("stored cover extension must be valid"),
+            is_main: r.is_main,
+            url: CoverUrl::from((book_id, r.id)),
+        })
+        .collect()
+    }
+
+    pub async fn insert_cover(&self, book_id: Uuid, image: &'static [u8]) -> Uuid {
+        let id = Uuid::now_v7();
+        let extension =
+            CoverExtension::try_from(image).expect("factory cover must be a supported image");
+
+        sqlx::query!(
+            r#"
+insert into book_covers(id, book_id, extension, is_main)
+values($1, $2, $3, false);
+        "#,
+            id,
+            book_id,
+            extension.as_ref()
+        )
+        .execute(&self.pool)
+        .await
+        .expect("failed to insert factory book cover");
+
+        self.s3
+            .put_object()
+            .bucket(&self.covers_bucket)
+            .key(id.to_string())
+            .content_type(extension.content_type())
+            .content_disposition(extension.content_disposition(id))
+            .body(ByteStream::from_static(image))
+            .send()
+            .await
+            .expect("failed to upload factory book cover");
+
+        id
+    }
+
     pub async fn insert_creator(&self, c: &Creator) {
         sqlx::query!(
             r#"
@@ -396,5 +511,55 @@ values($1, $2, $3, $4, $5);
         .execute(&self.pool)
         .await
         .expect("failed to insert factory creator");
+    }
+
+    pub async fn get_covers(&self, book_id: Uuid) -> Response {
+        let req = Request::get(format!("/books/{book_id}/covers"))
+            .body(Body::empty())
+            .unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap()
+    }
+
+    pub async fn get_cover_image(&self, book_id: Uuid, cover_id: Uuid) -> Response {
+        let req = Request::get(format!("/books/{book_id}/covers/{cover_id}/image"))
+            .body(Body::empty())
+            .unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap()
+    }
+
+    pub async fn put_main_cover(&self, book_id: Uuid, cover_id: Uuid) -> StatusCode {
+        let body = serde_json::json!({ "coverId": cover_id }).to_string();
+        let req = Request::put(format!("/books/{book_id}/main-cover"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body))
+            .unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap().status()
+    }
+
+    pub async fn delete_cover(&self, book_id: Uuid, cover_id: Uuid) -> Response {
+        let req = Request::delete(format!("/books/{book_id}/covers/{cover_id}"))
+            .body(Body::empty())
+            .unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap()
+    }
+
+    pub async fn get_creator(&self, id: Uuid) -> Response {
+        let req = Request::get(format!("/creators/{id}"))
+            .body(Body::empty())
+            .unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap()
+    }
+
+    pub async fn delete_creator(&self, id: Uuid) -> Response {
+        let req = Request::delete(format!("/creators/{id}"))
+            .body(Body::empty())
+            .unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap()
     }
 }

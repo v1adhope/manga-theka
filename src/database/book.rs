@@ -7,9 +7,9 @@ use uuid::Uuid;
 use crate::{
     database::{Database, creator::CreatorRow, label::LabelRow},
     entity::{
-        AlternativeTitle, Book, BookKind, BookLink, BookLinkKind, BookName, BookStatus,
-        ContentRating, Creator, DEFAULT_LIMIT, Description, Label, Language, Limit, LinkUrl,
-        Pagination,
+        AlternativeTitle, Book, BookCover, BookCoverQuery, BookKind, BookLink, BookLinkKind,
+        BookName, BookStatus, ContentRating, CoverExtension, Creator, DEFAULT_LIMIT, Description,
+        Label, Language, Limit, LinkUrl, Pagination,
     },
     error::DatabaseError,
 };
@@ -89,6 +89,32 @@ impl TryFrom<BookTitleRow> for AlternativeTitle {
         Ok(AlternativeTitle {
             language_id: row.language_id,
             name,
+        })
+    }
+}
+
+struct BookCoverRow {
+    id: Uuid,
+    book_id: Uuid,
+    extension: String,
+    is_main: bool,
+}
+
+impl TryFrom<BookCoverRow> for BookCoverQuery {
+    type Error = DatabaseError;
+
+    fn try_from(row: BookCoverRow) -> Result<Self, Self::Error> {
+        let url = (row.book_id, row.id).into();
+        let extension: CoverExtension = row
+            .extension
+            .parse()
+            .map_err(|e| DatabaseError::invariant_corrupted("extension", e))?;
+
+        Ok(BookCoverQuery {
+            url,
+            id: row.id,
+            extension,
+            is_main: row.is_main,
         })
     }
 }
@@ -377,6 +403,21 @@ impl Database {
         Ok(())
     }
 
+    #[instrument(name = "db.book.exists", skip_all, fields(book.id = %id))]
+    pub async fn ensure_book_exists(&self, id: Uuid) -> Result<(), DatabaseError> {
+        let row = sqlx::query_file!("queries/book_exists.sql", id)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(DatabaseError::from)
+            .inspect_err(DatabaseError::log_internal)?;
+
+        if !row.exists {
+            return Err(DatabaseError::BookNotFound);
+        }
+
+        Ok(())
+    }
+
     #[instrument(name = "db.book.labels", skip_all, level = Level::DEBUG, fields(books = book_ids.len()))]
     async fn get_books_labels(
         &self,
@@ -536,6 +577,118 @@ impl Database {
             .execute(&mut *conn)
             .await?;
 
+        Ok(())
+    }
+
+    #[instrument(name = "db.book_cover.store", skip_all, fields(book.id = %item.book_id, cover.id = %item.id))]
+    pub async fn store_book_cover(&self, item: &BookCover) -> Result<(), DatabaseError> {
+        sqlx::query_file!(
+            "queries/store_book_cover.sql",
+            item.id,
+            item.book_id,
+            item.extension.as_ref(),
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(DatabaseError::from)
+        .inspect_err(DatabaseError::log_internal)?;
+
+        Ok(())
+    }
+
+    #[instrument(name = "db.book_cover.list", skip_all, fields(book.id = %book_id))]
+    pub async fn get_book_covers(
+        &self,
+        book_id: Uuid,
+    ) -> Result<Vec<BookCoverQuery>, DatabaseError> {
+        self.get_book_covers_inner(book_id)
+            .await
+            .inspect_err(DatabaseError::log_internal)
+    }
+
+    async fn get_book_covers_inner(
+        &self,
+        book_id: Uuid,
+    ) -> Result<Vec<BookCoverQuery>, DatabaseError> {
+        let rows = sqlx::query_file_as!(BookCoverRow, "queries/get_book_covers.sql", book_id)
+            .fetch_all(&self.pool)
+            .await?;
+
+        let mut covers: Vec<BookCoverQuery> = Vec::with_capacity(rows.len());
+        for row in rows {
+            let cover: BookCoverQuery = row.try_into()?;
+            covers.push(cover);
+        }
+
+        Ok(covers)
+    }
+
+    #[instrument(name = "db.book_cover.exists", skip_all, fields(book.id = %book_id, cover.id = %id))]
+    pub async fn ensure_book_cover_exists(
+        &self,
+        book_id: Uuid,
+        id: Uuid,
+    ) -> Result<(), DatabaseError> {
+        let row = sqlx::query_file!("queries/book_cover_exists.sql", id, book_id)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(DatabaseError::from)
+            .inspect_err(DatabaseError::log_internal)?;
+
+        if !row.exists {
+            return Err(DatabaseError::BookCoverNotFound);
+        }
+
+        Ok(())
+    }
+
+    #[instrument(name = "db.book_cover.ids", skip_all, fields(book.id = %book_id))]
+    pub async fn get_book_cover_ids(&self, book_id: Uuid) -> Result<Vec<Uuid>, DatabaseError> {
+        sqlx::query_file_scalar!("queries/get_book_cover_ids.sql", book_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(DatabaseError::from)
+            .inspect_err(DatabaseError::log_internal)
+    }
+
+    #[instrument(name = "db.book_cover.delete", skip_all, fields(book.id = %book_id, cover.id = %id))]
+    pub async fn delete_book_cover(&self, book_id: Uuid, id: Uuid) -> Result<(), DatabaseError> {
+        let row = sqlx::query_file!("queries/delete_book_cover.sql", id, book_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(DatabaseError::from)
+            .inspect_err(DatabaseError::log_internal)?;
+
+        if row.is_none() {
+            return Err(DatabaseError::BookCoverNotFound);
+        }
+
+        Ok(())
+    }
+
+    #[instrument(name = "db.book_cover.promote", skip_all, fields(book.id = %book_id, cover.id = %id))]
+    pub async fn promote_book_cover(&self, book_id: Uuid, id: Uuid) -> Result<(), DatabaseError> {
+        self.promote_book_cover_inner(book_id, id)
+            .await
+            .inspect_err(DatabaseError::log_internal)
+    }
+
+    async fn promote_book_cover_inner(&self, book_id: Uuid, id: Uuid) -> Result<(), DatabaseError> {
+        let mut tx = self.pool.begin().await?;
+
+        sqlx::query_file!("queries/demote_book_cover.sql", book_id)
+            .execute(&mut *tx)
+            .await?;
+
+        let row = sqlx::query_file!("queries/promote_book_cover.sql", book_id, id)
+            .fetch_optional(&mut *tx)
+            .await?;
+
+        if row.is_none() {
+            return Err(DatabaseError::BookCoverNotFound);
+        }
+
+        tx.commit().await?;
         Ok(())
     }
 }

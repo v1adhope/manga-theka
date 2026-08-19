@@ -14,6 +14,100 @@ use manga_theka::entity::{
 use time::OffsetDateTime;
 use uuid::{Uuid, uuid};
 
+pub const COVER_JPG: &[u8] = include_bytes!("fixtures/cover.jpg");
+pub const COVER_PNG: &[u8] = include_bytes!("fixtures/cover.png");
+pub const COVER_WEBP: &[u8] = include_bytes!("fixtures/cover.webp");
+
+pub static CONTENT_RATINGS: LazyLock<[ContentRating; 4]> = LazyLock::new(|| {
+    [
+        ContentRating {
+            id: uuid!("019f124b-314f-73fc-8310-701df63eacea"),
+            name: "Everyone".to_owned(),
+            code: "E".to_owned(),
+        },
+        ContentRating {
+            id: uuid!("019f125c-33ef-753d-984f-08781390d2f4"),
+            name: "Teen".to_owned(),
+            code: "T".to_owned(),
+        },
+        ContentRating {
+            id: uuid!("019f125c-bf63-7578-a57d-16f2f593c365"),
+            name: "Teen Plus".to_owned(),
+            code: "T+".to_owned(),
+        },
+        ContentRating {
+            id: uuid!("019f125d-2006-7a75-bcc2-4fc07e370d2d"),
+            name: "Mature".to_owned(),
+            code: "M".to_owned(),
+        },
+    ]
+});
+
+pub static LANGUAGES: LazyLock<[Language; 5]> = LazyLock::new(|| {
+    [
+        Language {
+            id: uuid!("019f12ac-d1fc-78f2-a4bc-d0827c0f1578"),
+            code: "ja".to_owned(),
+            name: "Japanese".to_owned(),
+        },
+        Language {
+            id: uuid!("019f12ac-f9f3-7b8c-ba3f-97033810d391"),
+            code: "ko".to_owned(),
+            name: "Korean".to_owned(),
+        },
+        Language {
+            id: uuid!("019f12ad-0c41-7022-8877-50861d4ec2a4"),
+            code: "zh".to_owned(),
+            name: "Chinese".to_owned(),
+        },
+        Language {
+            id: uuid!("019f12ad-1e26-7fdd-9318-b18ccd74e734"),
+            code: "en".to_owned(),
+            name: "English".to_owned(),
+        },
+        Language {
+            id: uuid!("019f12ad-2e9e-762d-999c-b4bc9bbdc964"),
+            code: "ru".to_owned(),
+            name: "Russian".to_owned(),
+        },
+    ]
+});
+
+pub static LABELS: LazyLock<[Label; 6]> = LazyLock::new(|| {
+    [
+        Label {
+            id: uuid!("019febc2-01af-7d7a-9468-ad2779d97503"),
+            name: "Action".to_owned(),
+            kind: LabelKind::Genre,
+        },
+        Label {
+            id: uuid!("019febc2-01b3-75aa-9d15-98e0f3f847d6"),
+            name: "Fantasy".to_owned(),
+            kind: LabelKind::Genre,
+        },
+        Label {
+            id: uuid!("019febc2-01b9-763d-822a-4c21c88b4f6d"),
+            name: "Romance".to_owned(),
+            kind: LabelKind::Genre,
+        },
+        Label {
+            id: uuid!("019febba-36fa-701d-97ed-e65d87fe8ddd"),
+            name: "Mafia".to_owned(),
+            kind: LabelKind::Tag,
+        },
+        Label {
+            id: uuid!("019febba-36fa-701d-97ed-eb6f2148a897"),
+            name: "Zombies".to_owned(),
+            kind: LabelKind::Tag,
+        },
+        Label {
+            id: uuid!("019febbf-0532-70e9-85dc-7929be8cafc9"),
+            name: "School Life".to_owned(),
+            kind: LabelKind::Tag,
+        },
+    ]
+});
+
 pub struct CreatorRoleFaker;
 
 impl Dummy<CreatorRoleFaker> for CreatorRole {
@@ -92,31 +186,6 @@ impl Dummy<DescriptionFaker> for Description {
     }
 }
 
-pub static CONTENT_RATINGS: LazyLock<[ContentRating; 4]> = LazyLock::new(|| {
-    [
-        ContentRating {
-            id: uuid!("019f124b-314f-73fc-8310-701df63eacea"),
-            name: "Everyone".to_owned(),
-            code: "E".to_owned(),
-        },
-        ContentRating {
-            id: uuid!("019f125c-33ef-753d-984f-08781390d2f4"),
-            name: "Teen".to_owned(),
-            code: "T".to_owned(),
-        },
-        ContentRating {
-            id: uuid!("019f125c-bf63-7578-a57d-16f2f593c365"),
-            name: "Teen Plus".to_owned(),
-            code: "T+".to_owned(),
-        },
-        ContentRating {
-            id: uuid!("019f125d-2006-7a75-bcc2-4fc07e370d2d"),
-            name: "Mature".to_owned(),
-            code: "M".to_owned(),
-        },
-    ]
-});
-
 pub struct ContentRatingFaker;
 
 impl Dummy<ContentRatingFaker> for ContentRating {
@@ -125,36 +194,6 @@ impl Dummy<ContentRatingFaker> for ContentRating {
     }
 }
 
-pub static LANGUAGES: LazyLock<[Language; 5]> = LazyLock::new(|| {
-    [
-        Language {
-            id: uuid!("019f12ac-d1fc-78f2-a4bc-d0827c0f1578"),
-            code: "ja".to_owned(),
-            name: "Japanese".to_owned(),
-        },
-        Language {
-            id: uuid!("019f12ac-f9f3-7b8c-ba3f-97033810d391"),
-            code: "ko".to_owned(),
-            name: "Korean".to_owned(),
-        },
-        Language {
-            id: uuid!("019f12ad-0c41-7022-8877-50861d4ec2a4"),
-            code: "zh".to_owned(),
-            name: "Chinese".to_owned(),
-        },
-        Language {
-            id: uuid!("019f12ad-1e26-7fdd-9318-b18ccd74e734"),
-            code: "en".to_owned(),
-            name: "English".to_owned(),
-        },
-        Language {
-            id: uuid!("019f12ad-2e9e-762d-999c-b4bc9bbdc964"),
-            code: "ru".to_owned(),
-            name: "Russian".to_owned(),
-        },
-    ]
-});
-
 pub struct LanguageFaker;
 
 impl Dummy<LanguageFaker> for Language {
@@ -162,41 +201,6 @@ impl Dummy<LanguageFaker> for Language {
         LANGUAGES[rng.random_range(0..LANGUAGES.len())].clone()
     }
 }
-
-pub static LABELS: LazyLock<[Label; 6]> = LazyLock::new(|| {
-    [
-        Label {
-            id: uuid!("019febc2-01af-7d7a-9468-ad2779d97503"),
-            name: "Action".to_owned(),
-            kind: LabelKind::Genre,
-        },
-        Label {
-            id: uuid!("019febc2-01b3-75aa-9d15-98e0f3f847d6"),
-            name: "Fantasy".to_owned(),
-            kind: LabelKind::Genre,
-        },
-        Label {
-            id: uuid!("019febc2-01b9-763d-822a-4c21c88b4f6d"),
-            name: "Romance".to_owned(),
-            kind: LabelKind::Genre,
-        },
-        Label {
-            id: uuid!("019febba-36fa-701d-97ed-e65d87fe8ddd"),
-            name: "Mafia".to_owned(),
-            kind: LabelKind::Tag,
-        },
-        Label {
-            id: uuid!("019febba-36fa-701d-97ed-eb6f2148a897"),
-            name: "Zombies".to_owned(),
-            kind: LabelKind::Tag,
-        },
-        Label {
-            id: uuid!("019febbf-0532-70e9-85dc-7929be8cafc9"),
-            name: "School Life".to_owned(),
-            kind: LabelKind::Tag,
-        },
-    ]
-});
 
 pub struct LabelFaker;
 

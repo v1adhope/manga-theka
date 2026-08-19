@@ -12,7 +12,8 @@
 - Avoid chained conversions like `value.as_ref().to_string()` — implement the target conversion directly on value's type instead of composing it from intermediate ones.
 - Traits such as `From`, `TryFrom`, `Display`, and `Debug` represent structural behavior and syntax guarantees, not execution side-effects.
 - Flag if expected to use raw identifier syntax like `r#type`.
-- One canonical entity object per domain layer — no operation-specific aliases (`WriteBook`, `BookDetails`, `BookDto` → `Book`).
+- Declare a constant at the smallest scope that covers all its uses — function, file, or module, in that order of preference.
+- Keep one canonical entity per responsibility in a domain layer — e.g. `Book` for commands, `BookQuery` for reads — instead of operation-specific aliases like `WriteBook`, `BookDetails`, or `BookDto`.
 - A repository owns its own transaction boundary by default. Put begin/commit in the application layer when the atomic unit spans more than one repository or depends on a business decision; in that case give the repository methods involved a `&mut PgConnection` parameter so they can join the caller's transaction.
 - Don't add comments unless asked.
 

@@ -4,15 +4,16 @@ mod creator;
 mod label;
 mod language;
 
-use crate::database::Database;
+use crate::{database::Database, object_storage::ObjectStorage};
 
 #[derive(Debug, Clone)]
 pub struct Service {
     pub database: Database,
+    pub storage: ObjectStorage,
 }
 
 impl Service {
-    pub fn new(database: Database) -> Self {
-        Self { database }
+    pub fn new(database: Database, storage: ObjectStorage) -> Self {
+        Self { database, storage }
     }
 }

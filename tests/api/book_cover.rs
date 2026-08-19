@@ -1,0 +1,362 @@
+use axum::{
+    body::Body,
+    http::{Request, StatusCode, header},
+};
+use http_body_util::BodyExt;
+use manga_theka::entity::BookCoverQuery;
+use tower::ServiceExt;
+use uuid::Uuid;
+
+use crate::fakers::{COVER_JPG, COVER_PNG, COVER_WEBP};
+use crate::helpers::{RespWrapper, TestApp, assert_error, assert_stored};
+
+#[tokio::test]
+async fn store_book_cover_is_sniffed_not_trusted_from_content_type() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+
+    let req = Request::post(format!("/books/{book_id}/covers"))
+        .header(header::CONTENT_TYPE, "image/jpeg")
+        .body(Body::from(COVER_PNG))
+        .unwrap();
+
+    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let cover_id = assert_stored(resp).await;
+    let content_type = app.object_content_type(cover_id).await;
+
+    assert_eq!(content_type, "image/png");
+}
+
+#[tokio::test]
+async fn store_book_cover_with_unknown_format_returns_415() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+
+    let req = Request::post(format!("/books/{book_id}/covers"))
+        .header(header::CONTENT_TYPE, "image/png")
+        .body(Body::from("GIF89a not really an image"))
+        .unwrap();
+
+    let resp = app.router.clone().oneshot(req).await.unwrap();
+    assert_error(resp, StatusCode::UNSUPPORTED_MEDIA_TYPE).await;
+
+    let obj_count = app.objects_count().await;
+    let covers = app.fetch_covers(book_id).await;
+
+    assert_eq!(obj_count, 0);
+    assert!(covers.is_empty());
+}
+
+#[tokio::test]
+async fn store_book_cover_under_the_limit_passes() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+
+    let mut body = COVER_PNG.to_vec();
+    body.resize(3 * 1024 * 1024, 0);
+
+    let req = Request::post(format!("/books/{book_id}/covers"))
+        .body(Body::from(body))
+        .unwrap();
+
+    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let cover_id = assert_stored(resp).await;
+
+    let obj_exists = app.object_exists(cover_id).await;
+    assert!(obj_exists);
+}
+
+#[tokio::test]
+async fn store_book_cover_with_oversized_body_returns_413() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+
+    let mut body = COVER_PNG.to_vec();
+    body.resize(5 * 1024 * 1024 + 1, 0);
+
+    let req = Request::post(format!("/books/{book_id}/covers"))
+        .body(Body::from(body))
+        .unwrap();
+
+    let resp = app.router.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::PAYLOAD_TOO_LARGE);
+
+    let obj_count = app.objects_count().await;
+    assert_eq!(obj_count, 0);
+}
+
+#[tokio::test]
+async fn store_book_cover_for_unknown_book_returns_404() {
+    let app = TestApp::new().await;
+
+    let req = Request::post(format!("/books/{}/covers", Uuid::now_v7()))
+        .body(Body::from(COVER_PNG))
+        .unwrap();
+
+    let resp = app.router.clone().oneshot(req).await.unwrap();
+    assert_error(resp, StatusCode::NOT_FOUND).await;
+
+    let obj_count = app.objects_count().await;
+    assert_eq!(obj_count, 0,);
+}
+
+#[tokio::test]
+async fn store_book_cover_with_malformed_book_id_returns_400() {
+    let app = TestApp::new().await;
+
+    let req = Request::post("/books/not-a-uuid/covers")
+        .body(Body::from(COVER_PNG))
+        .unwrap();
+
+    let resp = app.router.oneshot(req).await.unwrap();
+    assert_error(resp, StatusCode::BAD_REQUEST).await;
+}
+
+#[tokio::test]
+async fn store_book_cover_leaves_the_gallery_unflagged() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+
+    for image in [COVER_PNG, COVER_JPG] {
+        let req = Request::post(format!("/books/{book_id}/covers"))
+            .body(Body::from(image))
+            .unwrap();
+
+        let resp = app.router.clone().oneshot(req).await.unwrap();
+        assert_stored(resp).await;
+    }
+
+    let covers = app.fetch_covers(book_id).await;
+    let flagged_count = covers.iter().filter(|c| c.is_main).count();
+
+    assert_eq!(flagged_count, 0);
+}
+
+#[tokio::test]
+async fn get_book_covers_without_uploads_returns_an_empty_gallery() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+
+    let resp = app.get_covers(book_id).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let wrapper: RespWrapper<Vec<BookCoverQuery>> = serde_json::from_slice(&bytes).unwrap();
+    assert!(wrapper.data.is_empty());
+}
+
+#[tokio::test]
+async fn get_book_covers_for_unknown_book_returns_404() {
+    let app = TestApp::new().await;
+
+    let resp = app.get_covers(Uuid::now_v7()).await;
+    assert_error(resp, StatusCode::NOT_FOUND).await;
+}
+
+#[tokio::test]
+async fn get_book_covers_lists_uploads_in_upload_order_with_relative_urls() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+
+    let first_id = app.insert_cover(book_id, COVER_PNG).await;
+    let second_id = app.insert_cover(book_id, COVER_JPG).await;
+    let third_id = app.insert_cover(book_id, COVER_WEBP).await;
+
+    let resp = app.get_covers(book_id).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let wrapper: RespWrapper<Vec<BookCoverQuery>> = serde_json::from_slice(&bytes).unwrap();
+
+    let cover_ids: Vec<Uuid> = wrapper.data.iter().map(|c| c.id).collect();
+    let first_url = format!("/books/{book_id}/covers/{first_id}/image");
+    assert_eq!(cover_ids, vec![first_id, second_id, third_id]);
+    assert_eq!(wrapper.data[0].url.as_ref(), first_url);
+}
+
+#[tokio::test]
+async fn get_book_cover_image_redirects_to_a_presigned_url() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+    let cover_id = app.insert_cover(book_id, COVER_JPG).await;
+
+    let resp = app.get_cover_image(book_id, cover_id).await;
+    assert_eq!(resp.status(), StatusCode::FOUND);
+
+    let location = resp
+        .headers()
+        .get(header::LOCATION)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_owned();
+
+    assert!(location.contains("X-Amz-Signature"));
+}
+
+#[tokio::test]
+async fn get_book_cover_image_for_unknown_cover_returns_404() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+
+    let resp = app.get_cover_image(book_id, Uuid::now_v7()).await;
+    assert_error(resp, StatusCode::NOT_FOUND).await;
+}
+
+#[tokio::test]
+async fn get_book_cover_image_of_another_book_returns_404() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+    let other_book_id = app.insert_random_book().await;
+    let cover_id = app.insert_cover(book_id, COVER_JPG).await;
+
+    let resp = app.get_cover_image(other_book_id, cover_id).await;
+    assert_error(resp, StatusCode::NOT_FOUND).await;
+}
+
+#[tokio::test]
+async fn promote_book_cover_flags_it_and_demotes_the_previous_one() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+    let first_id = app.insert_cover(book_id, COVER_PNG).await;
+    let second_id = app.insert_cover(book_id, COVER_JPG).await;
+
+    let first_status = app.put_main_cover(book_id, first_id).await;
+    let second_status = app.put_main_cover(book_id, second_id).await;
+    let covers = app.fetch_covers(book_id).await;
+    let flagged_ids: Vec<Uuid> = covers.iter().filter(|c| c.is_main).map(|c| c.id).collect();
+
+    assert_eq!(first_status, StatusCode::NO_CONTENT);
+    assert_eq!(second_status, StatusCode::NO_CONTENT);
+    assert_eq!(flagged_ids, vec![second_id]);
+}
+
+#[tokio::test]
+async fn promote_book_cover_is_idempotent() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+    let cover_id = app.insert_cover(book_id, COVER_PNG).await;
+
+    let first_status = app.put_main_cover(book_id, cover_id).await;
+    let second_status = app.put_main_cover(book_id, cover_id).await;
+    let covers = app.fetch_covers(book_id).await;
+    let flagged_count = covers.iter().filter(|c| c.is_main).count();
+
+    assert_eq!(first_status, StatusCode::NO_CONTENT);
+    assert_eq!(second_status, StatusCode::NO_CONTENT);
+    assert_eq!(flagged_count, 1);
+}
+
+#[tokio::test]
+async fn promote_unknown_book_cover_returns_404() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+
+    let status = app.put_main_cover(book_id, Uuid::now_v7()).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn promote_book_cover_of_another_book_returns_404() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+    let other_book_id = app.insert_random_book().await;
+    let cover_id = app.insert_cover(book_id, COVER_PNG).await;
+
+    let status = app.put_main_cover(other_book_id, cover_id).await;
+    let covers = app.fetch_covers(book_id).await;
+    let flagged_count = covers.iter().filter(|c| c.is_main).count();
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(flagged_count, 0,);
+}
+
+#[tokio::test]
+async fn delete_book_cover_removes_it_from_the_gallery_and_purges_the_object() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+    let first_id = app.insert_cover(book_id, COVER_PNG).await;
+    let second_id = app.insert_cover(book_id, COVER_JPG).await;
+
+    let resp = app.delete_cover(book_id, first_id).await;
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    let covers = app.fetch_covers(book_id).await;
+    let cover_ids: Vec<Uuid> = covers.iter().map(|c| c.id).collect();
+    let first_obj_exists = app.object_exists(first_id).await;
+    let second_obj_exists = app.object_exists(second_id).await;
+
+    assert_eq!(cover_ids, vec![second_id]);
+    assert!(!first_obj_exists);
+    assert!(second_obj_exists);
+}
+
+#[tokio::test]
+async fn delete_book_cover_twice_returns_404() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+    let cover_id = app.insert_cover(book_id, COVER_PNG).await;
+
+    for expected_status in [StatusCode::NO_CONTENT, StatusCode::NOT_FOUND] {
+        let resp = app.delete_cover(book_id, cover_id).await;
+        assert_eq!(resp.status(), expected_status);
+    }
+}
+
+#[tokio::test]
+async fn delete_book_cover_of_another_book_returns_404() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+    let other_book_id = app.insert_random_book().await;
+    let cover_id = app.insert_cover(book_id, COVER_PNG).await;
+
+    let resp = app.delete_cover(other_book_id, cover_id).await;
+    assert_error(resp, StatusCode::NOT_FOUND).await;
+
+    let obj_exists = app.object_exists(cover_id).await;
+    assert!(obj_exists);
+}
+
+#[tokio::test]
+async fn delete_the_flagged_book_cover_leaves_the_oldest_remaining_one() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+    let first_id = app.insert_cover(book_id, COVER_PNG).await;
+    let second_id = app.insert_cover(book_id, COVER_JPG).await;
+
+    app.put_main_cover(book_id, second_id).await;
+
+    let resp = app.delete_cover(book_id, second_id).await;
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    let covers = app.fetch_covers(book_id).await;
+    let cover_ids: Vec<Uuid> = covers.iter().map(|c| c.id).collect();
+    let flagged_count = covers.iter().filter(|c| c.is_main).count();
+
+    assert_eq!(cover_ids, vec![first_id]);
+    assert_eq!(flagged_count, 0);
+}
+
+#[tokio::test]
+async fn delete_book_removes_its_covers_and_purges_their_objects() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+    let first_id = app.insert_cover(book_id, COVER_PNG).await;
+    let second_id = app.insert_cover(book_id, COVER_JPG).await;
+
+    let req = Request::delete(format!("/books/{book_id}"))
+        .body(Body::empty())
+        .unwrap();
+
+    let resp = app.router.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    let resp = app.get_covers(book_id).await;
+    assert_error(resp, StatusCode::NOT_FOUND).await;
+
+    let first_obj_exists = app.object_exists(first_id).await;
+    let second_obj_exists = app.object_exists(second_id).await;
+
+    assert!(!first_obj_exists);
+    assert!(!second_obj_exists);
+}

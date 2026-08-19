@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update book_covers\nset is_main = true\nwhere id = $2 and book_id = $1\nreturning id;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "book_covers",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "832583b7cd1f0034eb0b6757ed1e624d64b06da0f3b207b75b23343622cee335"
+}

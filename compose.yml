@@ -10,15 +10,21 @@ services:
       POSTGRES_DB: ${APP_DATABASE__DATABASE_NAME}
     volumes:
       - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U $${APP_DATABASE__USERNAME} -d $${APP_DATABASE__DATABASE_NAME}",
-        ]
-      interval: 1s
-      timeout: 5s
-      retries: 10
+
+  rustfs:
+    image: rustfs/rustfs:latest
+    restart: always
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      RUSTFS_ACCESS_KEY: ${APP_OBJECT_STORAGE__ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${APP_OBJECT_STORAGE__SECRET_KEY}
+      RUSTFS_VOLUMES: /data/rustfs0
+      RUSTFS_CONSOLE_ENABLE: "true"
+    volumes:
+      - rustfsdata:/data
 
 volumes:
   pgdata:
+  rustfsdata:

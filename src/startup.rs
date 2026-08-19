@@ -1,17 +1,20 @@
 use axum::{
     Router,
-    routing::{get, post},
+    extract::DefaultBodyLimit,
+    routing::{delete, get, post, put},
 };
-use sqlx::PgPool;
 use tokio::signal;
 
 use crate::{
     config::Config,
-    database::Database,
+    database::{self, Database},
+    entity::COVER_MAX_BYTES,
+    object_storage::{self, ObjectStorage},
     route::{
-        delete_book, delete_creator, get_book, get_books, get_content_ratings, get_creator,
-        get_creators, get_labels, get_languages, healthz, store_book, store_creator, update_book,
-        update_creator,
+        delete_book, delete_book_cover, delete_creator, get_book, get_book_cover_image,
+        get_book_covers, get_books, get_content_ratings, get_creator, get_creators, get_labels,
+        get_languages, healthz, store_book, store_book_cover, store_creator, update_book,
+        update_book_main_cover, update_creator,
     },
     service::Service,
 };
@@ -23,11 +26,15 @@ pub struct App {
 
 impl App {
     pub async fn build(cfg: &Config) -> Self {
-        let pool = PgPool::connect_with(cfg.database.with_db())
-            .await
-            .expect("failed to connect to Postgres");
+        let pool = database::pool(&cfg.database).await;
         let database = Database::new(pool);
-        let service = Service::new(database);
+        database.migrate().await;
+
+        let client = object_storage::client(&cfg.object_storage).await;
+        let storage = ObjectStorage::new(client, cfg.object_storage.covers_bucket.clone());
+        storage.ensure_bucket().await;
+
+        let service = Service::new(database, storage);
 
         let router = Router::new()
             .route("/healthz", get(healthz))
@@ -44,6 +51,17 @@ impl App {
                 "/books/{id}",
                 get(get_book).put(update_book).delete(delete_book),
             )
+            .route(
+                "/books/{id}/covers",
+                get(get_book_covers)
+                    .merge(post(store_book_cover).layer(DefaultBodyLimit::max(COVER_MAX_BYTES))),
+            )
+            .route("/books/{id}/covers/{cover_id}", delete(delete_book_cover))
+            .route(
+                "/books/{id}/covers/{cover_id}/image",
+                get(get_book_cover_image),
+            )
+            .route("/books/{id}/main-cover", put(update_book_main_cover))
             .with_state(service);
 
         Self {

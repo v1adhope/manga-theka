@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select id, book_id, extension, is_main\nfrom book_covers\nwhere book_id = $1\norder by id;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "book_covers",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "book_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "book_covers",
+            "name": "book_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "extension",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "book_covers",
+            "name": "extension"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "is_main",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "book_covers",
+            "name": "is_main"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "391b9718fe7cb0274d59b22bb6e9c9e52fe51c8617d2b3d6e8f127133c43901a"
+}

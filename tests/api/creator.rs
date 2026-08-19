@@ -220,11 +220,7 @@ async fn get_creator_with_valid_id_passes() {
 
     app.insert_creator(&creator).await;
 
-    let req = Request::get(format!("/creators/{}", creator.id))
-        .body(Body::empty())
-        .unwrap();
-
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.get_creator(creator.id).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -244,11 +240,7 @@ async fn get_creator_with_valid_id_passes() {
 #[tokio::test]
 async fn get_creator_with_unknown_id_returns_404() {
     let app = TestApp::new().await;
-    let req = Request::get(format!("/creators/{}", uuid::Uuid::now_v7()))
-        .body(Body::empty())
-        .unwrap();
-
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.get_creator(uuid::Uuid::now_v7()).await;
     assert_error(resp, StatusCode::NOT_FOUND).await;
 }
 
@@ -387,11 +379,7 @@ async fn delete_creator_with_valid_id_passes() {
 
     app.insert_creator(&creator).await;
 
-    let req = Request::delete(format!("/creators/{}", creator.id))
-        .body(Body::empty())
-        .unwrap();
-
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.delete_creator(creator.id).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let count = sqlx::query_scalar!("select count(*) from creators")
@@ -405,11 +393,7 @@ async fn delete_creator_with_valid_id_passes() {
 async fn delete_creator_with_unknown_id_returns_404() {
     let app = TestApp::new().await;
 
-    let req = Request::delete(format!("/creators/{}", uuid::Uuid::now_v7()))
-        .body(Body::empty())
-        .unwrap();
-
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.delete_creator(uuid::Uuid::now_v7()).await;
     assert_error(resp, StatusCode::NOT_FOUND).await;
 }
 
@@ -422,11 +406,7 @@ async fn delete_creator_leaves_other_creators_untouched() {
     app.insert_creator(&creator).await;
     app.insert_creator(&other_creator).await;
 
-    let req = Request::delete(format!("/creators/{}", creator.id))
-        .body(Body::empty())
-        .unwrap();
-
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.delete_creator(creator.id).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let row = sqlx::query!(
