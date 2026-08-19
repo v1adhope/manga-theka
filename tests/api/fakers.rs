@@ -8,8 +8,9 @@ use fake::faker::lorem::en::{Sentence, Word};
 use fake::faker::name::en::FirstName;
 use fake::rand::RngExt;
 use manga_theka::entity::{
-    AlternativeTitle, Book, BookKind, BookLink, BookLinkKind, BookName, BookStatus, ContentRating,
-    Creator, CreatorRole, Description, Label, LabelKind, Language, LinkUrl, Name,
+    AlternativeTitle, Book, BookKind, BookLink, BookLinkKind, BookName, BookStatus, Chapter,
+    ChapterLocalization, ChapterNumber, ChapterTitle, ContentRating, Creator, CreatorRole,
+    Description, Label, LabelKind, Language, LinkUrl, Name, Volume,
 };
 use time::OffsetDateTime;
 use uuid::{Uuid, uuid};
@@ -308,6 +309,73 @@ impl Dummy<BookFaker> for Book {
             links,
             titles,
             creators,
+            updated_at: None,
+            created_at: OffsetDateTime::UNIX_EPOCH,
+        }
+    }
+}
+
+pub struct ChapterNumberFaker;
+
+impl Dummy<ChapterNumberFaker> for ChapterNumber {
+    fn dummy_with_rng<R: RngExt + ?Sized>(_config: &ChapterNumberFaker, rng: &mut R) -> Self {
+        let hundredths = rng.random_range(0..=9_999_999);
+        ChapterNumber::try_from(hundredths as f32 / 100.0).unwrap()
+    }
+}
+
+pub struct ChapterTitleFaker;
+
+impl Dummy<ChapterTitleFaker> for ChapterTitle {
+    fn dummy_with_rng<R: RngExt + ?Sized>(_config: &ChapterTitleFaker, rng: &mut R) -> Self {
+        let name = Sentence(2..5).fake_with_rng::<String, R>(rng);
+        ChapterTitle::try_from(name).unwrap()
+    }
+}
+
+pub struct ChapterLocalizationFaker;
+
+impl Dummy<ChapterLocalizationFaker> for ChapterLocalization {
+    fn dummy_with_rng<R: RngExt + ?Sized>(_config: &ChapterLocalizationFaker, rng: &mut R) -> Self {
+        let language: Language = LanguageFaker.fake_with_rng(rng);
+
+        ChapterLocalization {
+            language_id: language.id,
+            name: ChapterTitleFaker.fake_with_rng(rng),
+        }
+    }
+}
+
+pub struct ChapterFaker {
+    pub book_id: Uuid,
+    pub localizations: RangeInclusive<usize>,
+}
+
+impl ChapterFaker {
+    pub fn new(book_id: Uuid) -> Self {
+        ChapterFaker {
+            book_id,
+            localizations: 0..=3,
+        }
+    }
+}
+
+impl Dummy<ChapterFaker> for Chapter {
+    fn dummy_with_rng<R: RngExt + ?Sized>(config: &ChapterFaker, rng: &mut R) -> Self {
+        let mut localizations: Vec<ChapterLocalization> = (0..rng
+            .random_range(config.localizations.clone()))
+            .map(|_| ChapterLocalizationFaker.fake_with_rng(rng))
+            .collect();
+        localizations.sort_by_key(|l| l.language_id);
+        localizations.dedup_by_key(|l| l.language_id);
+
+        Chapter {
+            id: Uuid::now_v7(),
+            book_id: config.book_id,
+            number: ChapterNumberFaker.fake_with_rng(rng),
+            name: Some(ChapterTitleFaker.fake_with_rng(rng)),
+            volume: Some(Volume::try_from(rng.random_range(0..=200)).unwrap()),
+            localizations,
             updated_at: None,
             created_at: OffsetDateTime::UNIX_EPOCH,
         }

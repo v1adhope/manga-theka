@@ -1,3 +1,4 @@
+use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::error::EntityError;
@@ -29,6 +30,13 @@ impl Limit {
 pub struct Pagination {
     pub after: Option<Uuid>,
     pub limit: Option<Limit>,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+pub enum SortOrder {
+    #[default]
+    Asc,
+    Desc,
 }
 
 #[cfg(test)]

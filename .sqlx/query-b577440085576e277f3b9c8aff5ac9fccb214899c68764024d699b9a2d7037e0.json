@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update chapters\nset number = $3, name = $4, volume = $5, updated_at = $6\nwhere id = $1 and book_id = $2\nreturning id;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "chapters",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Float4",
+        "Text",
+        "Int2",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b577440085576e277f3b9c8aff5ac9fccb214899c68764024d699b9a2d7037e0"
+}

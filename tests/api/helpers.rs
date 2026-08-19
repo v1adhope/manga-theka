@@ -12,8 +12,9 @@ use manga_theka::{
     config::{Config, Database},
     database,
     entity::{
-        AlternativeTitle, Book, BookCoverQuery, BookLink, BookName, ContentRating, CoverExtension,
-        CoverUrl, Creator, Description, Label, Language, LinkUrl, Name,
+        AlternativeTitle, Book, BookCoverQuery, BookLink, BookName, Chapter, ChapterLocalization,
+        ChapterNumber, ChapterTitle, ContentRating, CoverExtension, CoverUrl, Creator, Description,
+        Label, Language, LinkUrl, Name, Volume,
     },
     object_storage,
     startup::App,
@@ -41,6 +42,14 @@ pub struct BookSample {
     pub labels: i64,
     pub links: i64,
     pub titles: i64,
+}
+
+#[derive(Debug)]
+pub struct ChapterSample {
+    pub number: Option<f32>,
+    pub name: Option<String>,
+    pub updated_at: Option<time::OffsetDateTime>,
+    pub localizations: i64,
 }
 
 #[derive(Deserialize, Debug)]
@@ -100,6 +109,16 @@ pub fn title_keys(titles: &[AlternativeTitle]) -> Vec<(Uuid, &str)> {
     let mut keys: Vec<(Uuid, &str)> = titles
         .iter()
         .map(|t| (t.language_id, t.name.as_ref()))
+        .collect();
+    keys.sort();
+
+    keys
+}
+
+pub fn localization_keys(localizations: &[ChapterLocalization]) -> Vec<(Uuid, &str)> {
+    let mut keys: Vec<(Uuid, &str)> = localizations
+        .iter()
+        .map(|l| (l.language_id, l.name.as_ref()))
         .collect();
     keys.sort();
 
@@ -494,6 +513,115 @@ values($1, $2, $3, false);
             .expect("failed to upload factory book cover");
 
         id
+    }
+
+    pub async fn insert_chapter(&self, c: &Chapter) {
+        sqlx::query!(
+            r#"
+insert into chapters(id, book_id, number, name, volume, updated_at, created_at)
+values($1, $2, $3, $4, $5, $6, $7);
+        "#,
+            c.id,
+            c.book_id,
+            c.number.as_f32(),
+            c.name.as_ref().map(AsRef::as_ref),
+            c.volume.map(Volume::as_i16),
+            c.updated_at,
+            c.created_at
+        )
+        .execute(&self.pool)
+        .await
+        .expect("failed to insert factory chapter");
+
+        let mut language_ids: Vec<Uuid> = Vec::with_capacity(c.localizations.len());
+        let mut names: Vec<String> = Vec::with_capacity(c.localizations.len());
+        for l in &c.localizations {
+            language_ids.push(l.language_id);
+            names.push(l.name.as_ref().to_owned());
+        }
+        sqlx::query!(
+            r#"
+insert into chapter_localizations(chapter_id, language_id, name)
+select $1, localization.language_id, localization.name
+from unnest($2::uuid[], $3::text[]) as localization(language_id, name);
+        "#,
+            c.id,
+            &language_ids,
+            &names
+        )
+        .execute(&self.pool)
+        .await
+        .expect("failed to insert factory chapter localizations");
+    }
+
+    pub async fn fetch_chapter(&self, id: Uuid) -> Chapter {
+        let row = sqlx::query!(
+            r#"
+select book_id, number, name, volume, updated_at, created_at
+from chapters
+where id = $1;
+        "#,
+            id
+        )
+        .fetch_one(&self.pool)
+        .await
+        .expect("failed to read chapter");
+
+        let localizations = sqlx::query!(
+            r#"
+select language_id, name
+from chapter_localizations
+where chapter_id = $1
+order by language_id;
+        "#,
+            id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .expect("failed to read chapter localizations")
+        .into_iter()
+        .map(|r| ChapterLocalization {
+            language_id: r.language_id,
+            name: ChapterTitle::try_from(r.name).expect("stored localization name must be valid"),
+        })
+        .collect();
+
+        Chapter {
+            id,
+            book_id: row.book_id,
+            number: ChapterNumber::try_from(row.number).expect("stored number must be valid"),
+            name: row
+                .name
+                .map(|n| ChapterTitle::try_from(n).expect("stored name must be valid")),
+            volume: row
+                .volume
+                .map(|v| Volume::try_from(v).expect("stored volume must be valid")),
+            localizations,
+            updated_at: row.updated_at,
+            created_at: row.created_at,
+        }
+    }
+
+    pub async fn fetch_chapter_sample(&self, id: Uuid) -> ChapterSample {
+        let row = sqlx::query!(
+            r#"
+select (select c.number from chapters c where c.id = $1) as "number?",
+       (select c.name from chapters c where c.id = $1) as "name?",
+       (select c.updated_at from chapters c where c.id = $1) as "updated_at?",
+       (select count(*) from chapter_localizations cl where cl.chapter_id = $1) as "localizations!";
+        "#,
+            id
+        )
+        .fetch_one(&self.pool)
+        .await
+        .expect("failed to read chapter sample");
+
+        ChapterSample {
+            number: row.number,
+            name: row.name,
+            updated_at: row.updated_at,
+            localizations: row.localizations,
+        }
     }
 
     pub async fn insert_creator(&self, c: &Creator) {

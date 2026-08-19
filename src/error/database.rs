@@ -79,6 +79,30 @@ pub enum DatabaseError {
     #[error("Book cover not found")]
     BookCoverNotFound,
 
+    #[error("Chapter name exceeds the 255-character limit")]
+    ChapterNameTooLong(#[source] sqlx::Error),
+
+    #[error("Chapter number is out of range")]
+    ChapterNumberOutOfRange(#[source] sqlx::Error),
+
+    #[error("Chapter volume is out of range")]
+    ChapterVolumeOutOfRange(#[source] sqlx::Error),
+
+    #[error("Chapter number already exists in this book")]
+    ChapterNumberDuplication(#[source] sqlx::Error),
+
+    #[error("Chapter localization language doesn't exist")]
+    ChapterLocalizationLanguageDoesNotExist(#[source] sqlx::Error),
+
+    #[error("Chapter localization exceeds the 255-character limit")]
+    ChapterLocalizationNameTooLong(#[source] sqlx::Error),
+
+    #[error("Chapter localization language is attached more than once")]
+    ChapterLocalizationDuplication(#[source] sqlx::Error),
+
+    #[error("Chapter not found")]
+    ChapterNotFound,
+
     #[error("Database invariant corrupted on field '{field}': {message}")]
     InvariantCorrupted { field: String, message: String },
 
@@ -168,8 +192,29 @@ impl From<sqlx::Error> for DatabaseError {
                 Some("unique_book_covers_book_id_is_main") => {
                     return Self::BookCoverMainConflict(err);
                 }
-                Some("fk_book_covers_books_book_id") => {
+                Some("fk_book_covers_books_book_id") | Some("fk_chapters_books_book_id") => {
                     return Self::BookNotFound;
+                }
+                Some("check_length_chapters_name") => {
+                    return Self::ChapterNameTooLong(err);
+                }
+                Some("check_range_chapters_number") => {
+                    return Self::ChapterNumberOutOfRange(err);
+                }
+                Some("check_range_chapters_volume") => {
+                    return Self::ChapterVolumeOutOfRange(err);
+                }
+                Some("unique_chapters_book_id_number") => {
+                    return Self::ChapterNumberDuplication(err);
+                }
+                Some("fk_chapter_localizations_languages_language_id") => {
+                    return Self::ChapterLocalizationLanguageDoesNotExist(err);
+                }
+                Some("check_length_chapter_localizations_name") => {
+                    return Self::ChapterLocalizationNameTooLong(err);
+                }
+                Some("pk_chapter_localizations_chapter_id_language_id") => {
+                    return Self::ChapterLocalizationDuplication(err);
                 }
                 _ => {}
             }
@@ -185,12 +230,14 @@ impl IntoResponse for DatabaseError {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Something went wrong".to_string(),
             ),
-            Self::CreatorNotFound | Self::BookNotFound | Self::BookCoverNotFound => {
-                (StatusCode::NOT_FOUND, self.to_string())
-            }
+            Self::CreatorNotFound
+            | Self::BookNotFound
+            | Self::BookCoverNotFound
+            | Self::ChapterNotFound => (StatusCode::NOT_FOUND, self.to_string()),
             Self::CreatorInUse(_)
             | Self::CreatorFullNameDuplication(_)
-            | Self::BookCoverMainConflict(_) => (StatusCode::CONFLICT, self.to_string()),
+            | Self::BookCoverMainConflict(_)
+            | Self::ChapterNumberDuplication(_) => (StatusCode::CONFLICT, self.to_string()),
             Self::CreatorFirstNameTooLong(_)
             | Self::CreatorLastNameTooLong(_)
             | Self::CreatorRoleDoesNotExist(_)
@@ -208,7 +255,13 @@ impl IntoResponse for DatabaseError {
             | Self::BookTitleLanguageDoesNotExist(_)
             | Self::BookTitleNameTooLong(_)
             | Self::BookTitleNameDuplication(_)
-            | Self::BookCoverExtensionDoesNotExist(_) => {
+            | Self::BookCoverExtensionDoesNotExist(_)
+            | Self::ChapterNameTooLong(_)
+            | Self::ChapterNumberOutOfRange(_)
+            | Self::ChapterVolumeOutOfRange(_)
+            | Self::ChapterLocalizationLanguageDoesNotExist(_)
+            | Self::ChapterLocalizationNameTooLong(_)
+            | Self::ChapterLocalizationDuplication(_) => {
                 (StatusCode::UNPROCESSABLE_ENTITY, self.to_string())
             }
         }
