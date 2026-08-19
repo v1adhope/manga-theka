@@ -111,7 +111,7 @@ impl AsRef<str> for BookLinkKind {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq, Deserialize, Serialize)]
 pub enum CoverExtension {
     Jpg,
     Png,
@@ -301,7 +301,7 @@ impl BookCover {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct CoverUrl(String);
 
@@ -317,7 +317,7 @@ impl AsRef<str> for CoverUrl {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BookCoverQuery {
     pub id: Uuid,
