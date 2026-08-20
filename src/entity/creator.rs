@@ -3,7 +3,10 @@ use std::str::FromStr;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::{entity::validate_name, error::EntityError};
+use crate::{
+    entity::{Entity, validate_name},
+    error::EntityError,
+};
 
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
 pub enum CreatorRole {
@@ -41,6 +44,10 @@ pub struct Creator {
     pub role: CreatorRole,
     #[serde(with = "time::serde::rfc3339")]
     pub created_at: OffsetDateTime,
+}
+
+impl Entity for Creator {
+    const NAME: &'static str = "Creator";
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]

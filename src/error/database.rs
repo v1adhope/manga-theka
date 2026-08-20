@@ -4,107 +4,50 @@ use axum::{
 };
 use thiserror::Error;
 
+use crate::entity::{Book, Entity};
+
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum DatabaseError {
-    #[error("Creator first name exceeds the 255-character limit")]
-    CreatorFirstNameTooLong(#[source] sqlx::Error),
+    #[error("{field} is out of range")]
+    OutOfRange {
+        field: &'static str,
+        #[source]
+        source: sqlx::Error,
+    },
 
-    #[error("Creator last name exceeds the 255-character limit")]
-    CreatorLastNameTooLong(#[source] sqlx::Error),
+    #[error("{field} doesn't exist")]
+    DoesNotExist {
+        field: &'static str,
+        #[source]
+        source: sqlx::Error,
+    },
 
-    #[error("Creator role doesn't exist")]
-    CreatorRoleDoesNotExist(#[source] sqlx::Error),
+    #[error("{field} is attached more than once")]
+    Duplication {
+        field: &'static str,
+        #[source]
+        source: sqlx::Error,
+    },
 
-    #[error("Creator full name already exists")]
-    CreatorFullNameDuplication(#[source] sqlx::Error),
+    #[error("{field} already exists")]
+    AlreadyExists {
+        field: &'static str,
+        #[source]
+        source: sqlx::Error,
+    },
+
+    #[error("{entity} not found")]
+    NotFound { entity: &'static str },
 
     #[error("Creator is attached to one or more books")]
     CreatorInUse(#[source] sqlx::Error),
 
-    #[error("Creator not found")]
-    CreatorNotFound,
-
-    #[error("Book name exceeds the 255-character limit")]
-    BookNameTooLong(#[source] sqlx::Error),
-
-    #[error("Book description exceeds the 2000-character limit")]
-    BookDescriptionTooLong(#[source] sqlx::Error),
-
-    #[error("Book status doesn't exist")]
-    BookStatusDoesNotExist(#[source] sqlx::Error),
-
-    #[error("Book kind doesn't exist")]
-    BookKindDoesNotExist(#[source] sqlx::Error),
-
-    #[error("Book content rating doesn't exist")]
-    BookContentRatingDoesNotExist(#[source] sqlx::Error),
-
-    #[error("Book publication language doesn't exist")]
-    BookPublicationLanguageDoesNotExist(#[source] sqlx::Error),
-
-    #[error("Book label doesn't exist")]
-    BookLabelDoesNotExist(#[source] sqlx::Error),
-
-    #[error("Book label is attached more than once")]
-    BookLabelDuplication(#[source] sqlx::Error),
-
-    #[error("Book link kind doesn't exist")]
-    BookLinkKindDoesNotExist(#[source] sqlx::Error),
-
-    #[error("Book link url exceeds the 2048-character limit")]
-    BookLinkUrlTooLong(#[source] sqlx::Error),
-
-    #[error("Book link url is attached more than once")]
-    BookLinkUrlDuplication(#[source] sqlx::Error),
-
-    #[error("Alternative title language doesn't exist")]
-    BookTitleLanguageDoesNotExist(#[source] sqlx::Error),
-
-    #[error("Alternative title exceeds the 255-character limit")]
-    BookTitleNameTooLong(#[source] sqlx::Error),
-
-    #[error("Alternative title is attached more than once")]
-    BookTitleNameDuplication(#[source] sqlx::Error),
-
-    #[error("Book not found")]
-    BookNotFound,
-
-    #[error("Book cover extension doesn't exist")]
-    BookCoverExtensionDoesNotExist(#[source] sqlx::Error),
-
     #[error("Another cover was promoted concurrently")]
     BookCoverMainConflict(#[source] sqlx::Error),
 
-    #[error("Book cover not found")]
-    BookCoverNotFound,
-
-    #[error("Chapter name exceeds the 255-character limit")]
-    ChapterNameTooLong(#[source] sqlx::Error),
-
-    #[error("Chapter number is out of range")]
-    ChapterNumberOutOfRange(#[source] sqlx::Error),
-
-    #[error("Chapter volume is out of range")]
-    ChapterVolumeOutOfRange(#[source] sqlx::Error),
-
-    #[error("Chapter number already exists in this book")]
-    ChapterNumberDuplication(#[source] sqlx::Error),
-
-    #[error("Chapter localization language doesn't exist")]
-    ChapterLocalizationLanguageDoesNotExist(#[source] sqlx::Error),
-
-    #[error("Chapter localization exceeds the 255-character limit")]
-    ChapterLocalizationNameTooLong(#[source] sqlx::Error),
-
-    #[error("Chapter localization language is attached more than once")]
-    ChapterLocalizationDuplication(#[source] sqlx::Error),
-
-    #[error("Chapter not found")]
-    ChapterNotFound,
-
-    #[error("Database invariant corrupted on field '{field}': {message}")]
-    InvariantCorrupted { field: String, message: String },
+    #[error("Database invariant corrupted on field '{field}': {msg}")]
+    InvariantCorrupted { field: &'static str, msg: String },
 
     #[error("Unknown database error")]
     Unknown(#[source] sqlx::Error),
@@ -117,10 +60,14 @@ impl DatabaseError {
         }
     }
 
-    pub fn invariant_corrupted(field: &str, message: impl std::error::Error) -> Self {
+    pub fn not_found<T: Entity>() -> Self {
+        Self::NotFound { entity: T::NAME }
+    }
+
+    pub fn invariant_corrupted(field: &'static str, msg: impl std::error::Error) -> Self {
         Self::InvariantCorrupted {
-            field: field.to_string(),
-            message: message.to_string(),
+            field,
+            msg: msg.to_string(),
         }
     }
 }
@@ -130,91 +77,169 @@ impl From<sqlx::Error> for DatabaseError {
         if let Some(db_err) = err.as_database_error() {
             match db_err.constraint() {
                 Some("check_length_creators_first_name") => {
-                    return Self::CreatorFirstNameTooLong(err);
+                    return Self::OutOfRange {
+                        field: "Creator first name",
+                        source: err,
+                    };
                 }
                 Some("check_length_creators_last_name") => {
-                    return Self::CreatorLastNameTooLong(err);
+                    return Self::OutOfRange {
+                        field: "Creator last name",
+                        source: err,
+                    };
                 }
                 Some("enum_creators_role") => {
-                    return Self::CreatorRoleDoesNotExist(err);
+                    return Self::DoesNotExist {
+                        field: "Creator role",
+                        source: err,
+                    };
                 }
                 Some("unique_creators_first_name_last_name") => {
-                    return Self::CreatorFullNameDuplication(err);
+                    return Self::AlreadyExists {
+                        field: "Creator full name",
+                        source: err,
+                    };
                 }
                 Some("fk_book_creators_creators_creator_id") => {
                     return Self::CreatorInUse(err);
                 }
                 Some("check_length_books_name") => {
-                    return Self::BookNameTooLong(err);
+                    return Self::OutOfRange {
+                        field: "Book name",
+                        source: err,
+                    };
                 }
                 Some("check_length_books_description") => {
-                    return Self::BookDescriptionTooLong(err);
+                    return Self::OutOfRange {
+                        field: "Book description",
+                        source: err,
+                    };
                 }
                 Some("enum_books_status") => {
-                    return Self::BookStatusDoesNotExist(err);
+                    return Self::DoesNotExist {
+                        field: "Book status",
+                        source: err,
+                    };
                 }
                 Some("enum_books_kind") => {
-                    return Self::BookKindDoesNotExist(err);
+                    return Self::DoesNotExist {
+                        field: "Book kind",
+                        source: err,
+                    };
                 }
                 Some("fk_books_content_ratings_content_rating") => {
-                    return Self::BookContentRatingDoesNotExist(err);
+                    return Self::DoesNotExist {
+                        field: "Book content rating",
+                        source: err,
+                    };
                 }
                 Some("fk_books_languages_publication_language") => {
-                    return Self::BookPublicationLanguageDoesNotExist(err);
+                    return Self::DoesNotExist {
+                        field: "Book publication language",
+                        source: err,
+                    };
                 }
                 Some("fk_book_labels_labels_label_id") => {
-                    return Self::BookLabelDoesNotExist(err);
+                    return Self::DoesNotExist {
+                        field: "Book label",
+                        source: err,
+                    };
                 }
                 Some("pk_book_labels_book_id_label_id") => {
-                    return Self::BookLabelDuplication(err);
+                    return Self::Duplication {
+                        field: "Book label",
+                        source: err,
+                    };
                 }
                 Some("enum_book_links_kind") => {
-                    return Self::BookLinkKindDoesNotExist(err);
+                    return Self::DoesNotExist {
+                        field: "Book link kind",
+                        source: err,
+                    };
                 }
                 Some("check_length_book_links_url") => {
-                    return Self::BookLinkUrlTooLong(err);
+                    return Self::OutOfRange {
+                        field: "Book link url",
+                        source: err,
+                    };
                 }
                 Some("pk_book_links_book_id_link_hash") => {
-                    return Self::BookLinkUrlDuplication(err);
+                    return Self::Duplication {
+                        field: "Book link url",
+                        source: err,
+                    };
                 }
                 Some("fk_book_titles_languages_language_id") => {
-                    return Self::BookTitleLanguageDoesNotExist(err);
+                    return Self::DoesNotExist {
+                        field: "Alternative title language",
+                        source: err,
+                    };
                 }
                 Some("check_length_book_titles_name") => {
-                    return Self::BookTitleNameTooLong(err);
+                    return Self::OutOfRange {
+                        field: "Alternative title name",
+                        source: err,
+                    };
                 }
                 Some("pk_book_titles_book_id_language_id_name") => {
-                    return Self::BookTitleNameDuplication(err);
+                    return Self::Duplication {
+                        field: "Alternative title name",
+                        source: err,
+                    };
                 }
                 Some("enum_book_covers_extension") => {
-                    return Self::BookCoverExtensionDoesNotExist(err);
+                    return Self::DoesNotExist {
+                        field: "Book cover extension",
+                        source: err,
+                    };
                 }
                 Some("unique_book_covers_book_id_is_main") => {
                     return Self::BookCoverMainConflict(err);
                 }
                 Some("fk_book_covers_books_book_id") | Some("fk_chapters_books_book_id") => {
-                    return Self::BookNotFound;
+                    return Self::not_found::<Book>();
                 }
                 Some("check_length_chapters_name") => {
-                    return Self::ChapterNameTooLong(err);
+                    return Self::OutOfRange {
+                        field: "Chapter name",
+                        source: err,
+                    };
                 }
                 Some("check_range_chapters_number") | Some("check_scale_chapters_number") => {
-                    return Self::ChapterNumberOutOfRange(err);
+                    return Self::OutOfRange {
+                        field: "Chapter number",
+                        source: err,
+                    };
                 }
                 Some("check_range_chapters_volume") => {
-                    return Self::ChapterVolumeOutOfRange(err);
+                    return Self::OutOfRange {
+                        field: "Chapter volume",
+                        source: err,
+                    };
                 }
                 Some("unique_chapters_book_id_number") => {
-                    return Self::ChapterNumberDuplication(err);
+                    return Self::AlreadyExists {
+                        field: "Chapter number",
+                        source: err,
+                    };
                 }
                 Some("fk_chapter_localizations_languages_language_id") => {
-                    return Self::ChapterLocalizationLanguageDoesNotExist(err);
+                    return Self::DoesNotExist {
+                        field: "Chapter localization language",
+                        source: err,
+                    };
                 }
                 Some("check_length_chapter_localizations_name") => {
-                    return Self::ChapterLocalizationNameTooLong(err);
+                    return Self::OutOfRange {
+                        field: "Chapter localization name",
+                        source: err,
+                    };
                 }
                 Some("pk_chapter_localizations_chapter_id_language_id") => {
-                    return Self::ChapterLocalizationDuplication(err);
+                    return Self::Duplication {
+                        field: "Chapter localization language",
+                        source: err,
+                    };
                 }
                 _ => {}
             }
@@ -230,38 +255,11 @@ impl IntoResponse for DatabaseError {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Something went wrong".to_string(),
             ),
-            Self::CreatorNotFound
-            | Self::BookNotFound
-            | Self::BookCoverNotFound
-            | Self::ChapterNotFound => (StatusCode::NOT_FOUND, self.to_string()),
-            Self::CreatorInUse(_)
-            | Self::CreatorFullNameDuplication(_)
-            | Self::BookCoverMainConflict(_)
-            | Self::ChapterNumberDuplication(_) => (StatusCode::CONFLICT, self.to_string()),
-            Self::CreatorFirstNameTooLong(_)
-            | Self::CreatorLastNameTooLong(_)
-            | Self::CreatorRoleDoesNotExist(_)
-            | Self::BookNameTooLong(_)
-            | Self::BookDescriptionTooLong(_)
-            | Self::BookStatusDoesNotExist(_)
-            | Self::BookKindDoesNotExist(_)
-            | Self::BookContentRatingDoesNotExist(_)
-            | Self::BookPublicationLanguageDoesNotExist(_)
-            | Self::BookLabelDoesNotExist(_)
-            | Self::BookLabelDuplication(_)
-            | Self::BookLinkKindDoesNotExist(_)
-            | Self::BookLinkUrlTooLong(_)
-            | Self::BookLinkUrlDuplication(_)
-            | Self::BookTitleLanguageDoesNotExist(_)
-            | Self::BookTitleNameTooLong(_)
-            | Self::BookTitleNameDuplication(_)
-            | Self::BookCoverExtensionDoesNotExist(_)
-            | Self::ChapterNameTooLong(_)
-            | Self::ChapterNumberOutOfRange(_)
-            | Self::ChapterVolumeOutOfRange(_)
-            | Self::ChapterLocalizationLanguageDoesNotExist(_)
-            | Self::ChapterLocalizationNameTooLong(_)
-            | Self::ChapterLocalizationDuplication(_) => {
+            Self::NotFound { .. } => (StatusCode::NOT_FOUND, self.to_string()),
+            Self::AlreadyExists { .. } | Self::CreatorInUse(_) | Self::BookCoverMainConflict(_) => {
+                (StatusCode::CONFLICT, self.to_string())
+            }
+            Self::OutOfRange { .. } | Self::DoesNotExist { .. } | Self::Duplication { .. } => {
                 (StatusCode::UNPROCESSABLE_ENTITY, self.to_string())
             }
         }

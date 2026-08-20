@@ -16,6 +16,10 @@ pub use filter::*;
 pub use label::*;
 pub use language::*;
 
+pub trait Entity {
+    const NAME: &'static str;
+}
+
 fn validate_name(s: String) -> Result<String, EntityError> {
     if s.trim().is_empty() {
         return Err(EntityError::NameIsEmptyOrWhitespace);

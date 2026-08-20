@@ -74,7 +74,7 @@ impl Database {
         .inspect_err(DatabaseError::log_internal)?;
 
         if row.is_none() {
-            return Err(DatabaseError::CreatorNotFound);
+            return Err(DatabaseError::not_found::<Creator>());
         }
 
         Ok(())
@@ -94,7 +94,7 @@ impl Database {
 
         match row {
             Some(row) => Creator::try_from(row),
-            None => Err(DatabaseError::CreatorNotFound),
+            None => Err(DatabaseError::not_found::<Creator>()),
         }
     }
 
@@ -153,7 +153,7 @@ impl Database {
             .inspect_err(DatabaseError::log_internal)?;
 
         if row.is_none() {
-            return Err(DatabaseError::CreatorNotFound);
+            return Err(DatabaseError::not_found::<Creator>());
         }
 
         Ok(())

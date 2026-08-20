@@ -134,7 +134,7 @@ impl Database {
         .await?;
 
         if row.is_none() {
-            return Err(DatabaseError::ChapterNotFound);
+            return Err(DatabaseError::not_found::<Chapter>());
         }
 
         sqlx::query_file!("queries/delete_chapter_localizations.sql", item.id)
@@ -159,7 +159,7 @@ impl Database {
             .await?;
 
         let Some(row) = row else {
-            return Err(DatabaseError::ChapterNotFound);
+            return Err(DatabaseError::not_found::<Chapter>());
         };
 
         let mut localizations = self.get_chapters_localizations(&[id]).await?;
@@ -262,7 +262,7 @@ impl Database {
             .inspect_err(DatabaseError::log_internal)?;
 
         if row.is_none() {
-            return Err(DatabaseError::ChapterNotFound);
+            return Err(DatabaseError::not_found::<Chapter>());
         }
 
         Ok(())

@@ -6,7 +6,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
-    entity::{ContentRating, Creator, Label, Language, validate_name},
+    entity::{ContentRating, Creator, Entity, Label, Language, validate_name},
     error::EntityError,
 };
 
@@ -266,6 +266,10 @@ pub struct Book {
     pub created_at: OffsetDateTime,
 }
 
+impl Entity for Book {
+    const NAME: &'static str = "Book";
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BookLink {
@@ -287,6 +291,10 @@ pub struct BookCover {
     pub extension: CoverExtension,
     pub content: Bytes,
     pub is_main: bool,
+}
+
+impl Entity for BookCover {
+    const NAME: &'static str = "Book cover";
 }
 
 impl BookCover {

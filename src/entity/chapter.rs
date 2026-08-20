@@ -5,7 +5,10 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::{entity::validate_name, error::EntityError};
+use crate::{
+    entity::{Entity, validate_name},
+    error::EntityError,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -91,6 +94,10 @@ pub struct Chapter {
     pub updated_at: Option<OffsetDateTime>,
     #[serde(with = "time::serde::rfc3339")]
     pub created_at: OffsetDateTime,
+}
+
+impl Entity for Chapter {
+    const NAME: &'static str = "Chapter";
 }
 
 #[derive(Debug, Serialize, Deserialize)]

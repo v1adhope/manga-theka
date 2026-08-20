@@ -266,7 +266,7 @@ impl Database {
         .await?;
 
         if row.is_none() {
-            return Err(DatabaseError::BookNotFound);
+            return Err(DatabaseError::not_found::<Book>());
         }
 
         Self::delete_book_relations(&mut tx, item.id).await?;
@@ -289,7 +289,7 @@ impl Database {
             .await?;
 
         let Some(row) = row else {
-            return Err(DatabaseError::BookNotFound);
+            return Err(DatabaseError::not_found::<Book>());
         };
 
         let ids = [id];
@@ -397,7 +397,7 @@ impl Database {
             .await?;
 
         if row.is_none() {
-            return Err(DatabaseError::BookNotFound);
+            return Err(DatabaseError::not_found::<Book>());
         }
 
         Ok(())
@@ -412,7 +412,7 @@ impl Database {
             .inspect_err(DatabaseError::log_internal)?;
 
         if !row.exists {
-            return Err(DatabaseError::BookNotFound);
+            return Err(DatabaseError::not_found::<Book>());
         }
 
         Ok(())
@@ -636,7 +636,7 @@ impl Database {
             .inspect_err(DatabaseError::log_internal)?;
 
         if !row.exists {
-            return Err(DatabaseError::BookCoverNotFound);
+            return Err(DatabaseError::not_found::<BookCover>());
         }
 
         Ok(())
@@ -660,7 +660,7 @@ impl Database {
             .inspect_err(DatabaseError::log_internal)?;
 
         if row.is_none() {
-            return Err(DatabaseError::BookCoverNotFound);
+            return Err(DatabaseError::not_found::<BookCover>());
         }
 
         Ok(())
@@ -685,7 +685,7 @@ impl Database {
             .await?;
 
         if row.is_none() {
-            return Err(DatabaseError::BookCoverNotFound);
+            return Err(DatabaseError::not_found::<BookCover>());
         }
 
         tx.commit().await?;
