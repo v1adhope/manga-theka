@@ -306,7 +306,7 @@ async fn get_chapter_with_valid_id_embeds_its_localizations() {
 
     app.insert_chapter(&chapter).await;
 
-    let req = Request::get(format!("/books/{book_id}/chapters/{}", chapter.id))
+    let req = Request::get(format!("/chapters/{}", chapter.id))
         .body(Body::empty())
         .unwrap();
     let resp = app.router.oneshot(req).await.unwrap();
@@ -340,7 +340,7 @@ async fn get_chapter_holds_at_most_one_localization_per_language() {
 
     app.insert_chapter(&chapter).await;
 
-    let req = Request::get(format!("/books/{book_id}/chapters/{}", chapter.id))
+    let req = Request::get(format!("/chapters/{}", chapter.id))
         .body(Body::empty())
         .unwrap();
     let resp = app.router.oneshot(req).await.unwrap();
@@ -365,34 +365,38 @@ async fn get_chapter_holds_at_most_one_localization_per_language() {
 #[tokio::test]
 async fn get_chapter_with_unknown_id_returns_404() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
 
-    let req = Request::get(format!(
-        "/books/{book_id}/chapters/{}",
-        uuid::Uuid::now_v7()
-    ))
-    .body(Body::empty())
-    .unwrap();
+    let req = Request::get(format!("/chapters/{}", uuid::Uuid::now_v7()))
+        .body(Body::empty())
+        .unwrap();
 
     let resp = app.router.oneshot(req).await.unwrap();
     assert_error(resp, StatusCode::NOT_FOUND).await;
 }
 
 #[tokio::test]
-async fn get_chapter_of_another_book_returns_404() {
+async fn get_chapter_resolves_without_a_book_scope() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
-    let other_book_id = app.insert_random_book().await;
-    let chapter: Chapter = ChapterFaker::new(other_book_id).fake();
+    app.insert_random_book().await;
+    let owner_id = app.insert_random_book().await;
+    let chapter: Chapter = ChapterFaker::new(owner_id).fake();
 
     app.insert_chapter(&chapter).await;
 
-    let req = Request::get(format!("/books/{book_id}/chapters/{}", chapter.id))
+    let req = Request::get(format!("/chapters/{}", chapter.id))
         .body(Body::empty())
         .unwrap();
 
     let resp = app.router.oneshot(req).await.unwrap();
-    assert_error(resp, StatusCode::NOT_FOUND).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let wrapper: RespWrapper<Chapter> = serde_json::from_slice(&bytes).unwrap();
+
+    assert_eq!(
+        wrapper.data.book_id, owner_id,
+        "the flat route must name the owning book in the payload"
+    );
 }
 
 async fn insert_numbered_chapters(app: &TestApp, book_id: uuid::Uuid, numbers: &[f32]) {
@@ -617,7 +621,7 @@ async fn update_chapter_with_valid_body_passes() {
     })
     .to_string();
 
-    let req = Request::put(format!("/books/{book_id}/chapters/{}", chapter.id))
+    let req = Request::put(format!("/chapters/{}", chapter.id))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(body))
         .unwrap();
@@ -660,7 +664,7 @@ async fn update_chapter_with_empty_localizations_detaches_everything() {
     })
     .to_string();
 
-    let req = Request::put(format!("/books/{book_id}/chapters/{}", chapter.id))
+    let req = Request::put(format!("/chapters/{}", chapter.id))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(body))
         .unwrap();
@@ -687,7 +691,7 @@ async fn update_chapter_renumbers_without_touching_other_chapters() {
 
     let body = serde_json::json!({ "number": 1.5 }).to_string();
 
-    let req = Request::put(format!("/books/{book_id}/chapters/{}", chapter.id))
+    let req = Request::put(format!("/chapters/{}", chapter.id))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(body))
         .unwrap();
@@ -717,7 +721,7 @@ async fn update_chapter_to_a_taken_number_returns_409() {
 
     let body = serde_json::json!({ "number": 2 }).to_string();
 
-    let req = Request::put(format!("/books/{book_id}/chapters/{}", chapter.id))
+    let req = Request::put(format!("/chapters/{}", chapter.id))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(body))
         .unwrap();
@@ -729,40 +733,44 @@ async fn update_chapter_to_a_taken_number_returns_409() {
 #[tokio::test]
 async fn update_chapter_with_unknown_id_returns_404() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
 
     let body = serde_json::json!({ "number": 1 }).to_string();
 
-    let req = Request::put(format!(
-        "/books/{book_id}/chapters/{}",
-        uuid::Uuid::now_v7()
-    ))
-    .header(header::CONTENT_TYPE, "application/json")
-    .body(Body::from(body))
-    .unwrap();
-
-    let resp = app.router.oneshot(req).await.unwrap();
-    assert_error(resp, StatusCode::NOT_FOUND).await;
-}
-
-#[tokio::test]
-async fn update_chapter_of_another_book_returns_404() {
-    let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
-    let other_book_id = app.insert_random_book().await;
-    let chapter: Chapter = ChapterFaker::new(other_book_id).fake();
-
-    app.insert_chapter(&chapter).await;
-
-    let body = serde_json::json!({ "number": 1 }).to_string();
-
-    let req = Request::put(format!("/books/{book_id}/chapters/{}", chapter.id))
+    let req = Request::put(format!("/chapters/{}", uuid::Uuid::now_v7()))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(body))
         .unwrap();
 
     let resp = app.router.oneshot(req).await.unwrap();
     assert_error(resp, StatusCode::NOT_FOUND).await;
+}
+
+#[tokio::test]
+async fn update_chapter_leaves_the_owning_book_untouched() {
+    let app = TestApp::new().await;
+    app.insert_random_book().await;
+    let owner_id = app.insert_random_book().await;
+    let chapter: Chapter = ChapterFaker::new(owner_id).fake();
+
+    app.insert_chapter(&chapter).await;
+
+    let body = serde_json::json!({ "number": 1 }).to_string();
+
+    let req = Request::put(format!("/chapters/{}", chapter.id))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body))
+        .unwrap();
+
+    let resp = app.router.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    let got = app.fetch_chapter(chapter.id).await;
+
+    assert_eq!(got.number, ChapterNumber::try_from(1.0).unwrap());
+    assert_eq!(
+        got.book_id, owner_id,
+        "a chapter never changes books on update"
+    );
 }
 
 #[tokio::test]
@@ -777,7 +785,7 @@ async fn delete_chapter_with_valid_id_passes() {
 
     app.insert_chapter(&chapter).await;
 
-    let req = Request::delete(format!("/books/{book_id}/chapters/{}", chapter.id))
+    let req = Request::delete(format!("/chapters/{}", chapter.id))
         .body(Body::empty())
         .unwrap();
 
@@ -806,7 +814,7 @@ async fn delete_chapter_leaves_other_chapters_untouched() {
     app.insert_chapter(&chapter).await;
     app.insert_chapter(&other).await;
 
-    let req = Request::delete(format!("/books/{book_id}/chapters/{}", chapter.id))
+    let req = Request::delete(format!("/chapters/{}", chapter.id))
         .body(Body::empty())
         .unwrap();
     let resp = app.router.clone().oneshot(req).await.unwrap();
@@ -821,34 +829,37 @@ async fn delete_chapter_leaves_other_chapters_untouched() {
 #[tokio::test]
 async fn delete_chapter_with_unknown_id_returns_404() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
 
-    let req = Request::delete(format!(
-        "/books/{book_id}/chapters/{}",
-        uuid::Uuid::now_v7()
-    ))
-    .body(Body::empty())
-    .unwrap();
+    let req = Request::delete(format!("/chapters/{}", uuid::Uuid::now_v7()))
+        .body(Body::empty())
+        .unwrap();
 
     let resp = app.router.oneshot(req).await.unwrap();
     assert_error(resp, StatusCode::NOT_FOUND).await;
 }
 
 #[tokio::test]
-async fn delete_chapter_of_another_book_returns_404() {
+async fn delete_chapter_leaves_other_books_chapters_alone() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
-    let other_book_id = app.insert_random_book().await;
-    let chapter: Chapter = ChapterFaker::new(other_book_id).fake();
+    let bystander_id = app.insert_random_book().await;
+    let owner_id = app.insert_random_book().await;
+    let chapter: Chapter = ChapterFaker::new(owner_id).fake();
+    let bystander: Chapter = ChapterFaker::new(bystander_id).fake();
 
     app.insert_chapter(&chapter).await;
+    app.insert_chapter(&bystander).await;
 
-    let req = Request::delete(format!("/books/{book_id}/chapters/{}", chapter.id))
+    let req = Request::delete(format!("/chapters/{}", chapter.id))
         .body(Body::empty())
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
-    assert_error(resp, StatusCode::NOT_FOUND).await;
+    let resp = app.router.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    let listed = list_chapters(&app, format!("/books/{bystander_id}/chapters")).await;
+
+    assert_eq!(listed.data.len(), 1);
+    assert_eq!(listed.data.first().map(|c| c.id), Some(bystander.id));
 }
 
 #[tokio::test]

@@ -112,7 +112,7 @@ impl Database {
         Ok(())
     }
 
-    #[instrument(name = "db.chapter.update", skip_all, fields(book.id = %item.book_id, chapter.id = %item.id))]
+    #[instrument(name = "db.chapter.update", skip_all, fields(chapter.id = %item.id))]
     pub async fn update_chapter(&self, item: &Chapter) -> Result<(), DatabaseError> {
         self.update_chapter_inner(item)
             .await
@@ -125,7 +125,6 @@ impl Database {
         let row = sqlx::query_file!(
             "queries/update_chapter.sql",
             item.id,
-            item.book_id,
             item.number.as_f32(),
             item.name.as_ref().map(AsRef::as_ref),
             item.volume.map(Volume::as_i16),
@@ -147,15 +146,15 @@ impl Database {
         Ok(())
     }
 
-    #[instrument(name = "db.chapter.get", skip_all, fields(book.id = %book_id, chapter.id = %id))]
-    pub async fn get_chapter(&self, book_id: Uuid, id: Uuid) -> Result<Chapter, DatabaseError> {
-        self.get_chapter_inner(book_id, id)
+    #[instrument(name = "db.chapter.get", skip_all, fields(chapter.id = %id))]
+    pub async fn get_chapter(&self, id: Uuid) -> Result<Chapter, DatabaseError> {
+        self.get_chapter_inner(id)
             .await
             .inspect_err(DatabaseError::log_internal)
     }
 
-    async fn get_chapter_inner(&self, book_id: Uuid, id: Uuid) -> Result<Chapter, DatabaseError> {
-        let row = sqlx::query_file_as!(ChapterRow, "queries/get_chapter.sql", id, book_id)
+    async fn get_chapter_inner(&self, id: Uuid) -> Result<Chapter, DatabaseError> {
+        let row = sqlx::query_file_as!(ChapterRow, "queries/get_chapter.sql", id)
             .fetch_optional(&self.pool)
             .await?;
 
@@ -256,9 +255,9 @@ impl Database {
         Ok((chapters, next_cursor))
     }
 
-    #[instrument(name = "db.chapter.delete", skip_all, fields(book.id = %book_id, chapter.id = %id))]
-    pub async fn delete_chapter(&self, book_id: Uuid, id: Uuid) -> Result<(), DatabaseError> {
-        let row = sqlx::query_file!("queries/delete_chapter.sql", id, book_id)
+    #[instrument(name = "db.chapter.delete", skip_all, fields(chapter.id = %id))]
+    pub async fn delete_chapter(&self, id: Uuid) -> Result<(), DatabaseError> {
+        let row = sqlx::query_file!("queries/delete_chapter.sql", id)
             .fetch_optional(&self.pool)
             .await
             .map_err(DatabaseError::from)

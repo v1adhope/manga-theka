@@ -68,7 +68,7 @@ impl App {
                 post(store_chapter).get(get_chapters),
             )
             .route(
-                "/books/{id}/chapters/{chapter_id}",
+                "/chapters/{id}",
                 get(get_chapter).put(update_chapter).delete(delete_chapter),
             )
             .with_state(service);

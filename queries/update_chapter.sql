@@ -1,4 +1,4 @@
 update chapters
-set number = $3, name = $4, volume = $5, updated_at = $6
-where id = $1 and book_id = $2
+set number = $2, name = $3, volume = $4, updated_at = $5
+where id = $1
 returning id;

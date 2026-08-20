@@ -11,11 +11,8 @@ impl Service {
         self.database.store_chapter(&item).await.map_err(Into::into)
     }
 
-    pub async fn get_chapter(&self, book_id: Uuid, id: Uuid) -> Result<Chapter, ServiceError> {
-        self.database
-            .get_chapter(book_id, id)
-            .await
-            .map_err(Into::into)
+    pub async fn get_chapter(&self, id: Uuid) -> Result<Chapter, ServiceError> {
+        self.database.get_chapter(id).await.map_err(Into::into)
     }
 
     pub async fn get_chapters(
@@ -38,10 +35,7 @@ impl Service {
             .map_err(Into::into)
     }
 
-    pub async fn delete_chapter(&self, book_id: Uuid, id: Uuid) -> Result<(), ServiceError> {
-        self.database
-            .delete_chapter(book_id, id)
-            .await
-            .map_err(Into::into)
+    pub async fn delete_chapter(&self, id: Uuid) -> Result<(), ServiceError> {
+        self.database.delete_chapter(id).await.map_err(Into::into)
     }
 }

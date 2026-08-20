@@ -104,13 +104,13 @@ pub async fn store_chapter(
 
 pub async fn update_chapter(
     State(service): State<Service>,
-    Path((book_id, id)): Path<(Uuid, Uuid)>,
+    Path(id): Path<Uuid>,
     Json(req): Json<ChapterReq>,
 ) -> Result<StatusCode, AppError> {
     let chapter: Chapter = ChapterWithRelations {
         req,
         id,
-        book_id,
+        book_id: Uuid::nil(),
         updated_at: Some(OffsetDateTime::now_utc()),
         created_at: OffsetDateTime::UNIX_EPOCH,
     }
@@ -165,18 +165,18 @@ pub async fn get_chapters(
 
 pub async fn get_chapter(
     State(service): State<Service>,
-    Path((book_id, id)): Path<(Uuid, Uuid)>,
+    Path(id): Path<Uuid>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    let chapter = service.get_chapter(book_id, id).await?;
+    let chapter = service.get_chapter(id).await?;
 
     Ok(json_data_response(StatusCode::OK, chapter))
 }
 
 pub async fn delete_chapter(
     State(service): State<Service>,
-    Path((book_id, id)): Path<(Uuid, Uuid)>,
+    Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    service.delete_chapter(book_id, id).await?;
+    service.delete_chapter(id).await?;
 
     Ok(StatusCode::NO_CONTENT)
 }
