@@ -192,7 +192,11 @@ impl Database {
         filter: &Filter,
     ) -> Result<(Vec<Chapter>, Option<Uuid>), DatabaseError> {
         let limit = filter.limit.map_or(DEFAULT_LIMIT, Limit::as_u32);
-        let order = filter.sort_order.unwrap_or(SortOrder::Desc);
+        let (cursor_comparison, direction) = match filter.sort_order.unwrap_or(SortOrder::Desc) {
+            SortOrder::Asc => (">", "asc"),
+            SortOrder::Desc => ("<", "desc"),
+        };
+
         let mut builder: QueryBuilder<Postgres> = QueryBuilder::new(
             r"select c.id, c.book_id, c.number, c.name, c.volume, c.updated_at, c.created_at
               from chapters c
@@ -200,25 +204,22 @@ impl Database {
         );
         builder.push_bind(book_id);
 
-        if let Some(id) = filter.after {
-            let comparison = match order {
-                SortOrder::Asc => " and c.number > ",
-                SortOrder::Desc => " and c.number < ",
-            };
+        if let Some(cursor) = filter.after {
             builder
-                .push(comparison)
-                .push("(select cur.number from chapters cur where cur.id = ")
-                .push_bind(id)
+                .push(" and c.number ")
+                .push(cursor_comparison)
+                .push(" (select cur.number from chapters cur where cur.id = ")
+                .push_bind(cursor)
                 .push(" and cur.book_id = ")
                 .push_bind(book_id)
                 .push(")");
         }
 
-        let direction = match order {
-            SortOrder::Asc => " order by c.number asc limit ",
-            SortOrder::Desc => " order by c.number desc limit ",
-        };
-        builder.push(direction).push_bind((limit + 1) as i64);
+        builder
+            .push(" order by c.number ")
+            .push(direction)
+            .push(" limit ")
+            .push_bind(i64::from(limit) + 1);
 
         let mut rows = builder
             .build_query_as::<ChapterRow>()
@@ -229,9 +230,10 @@ impl Database {
             return Ok((Vec::new(), None));
         }
 
-        let has_next_page = rows.len() > limit as usize;
-        if has_next_page {
+        let mut next_cursor = None;
+        if rows.len() > limit as usize {
             rows.pop();
+            next_cursor = rows.last().map(|r| r.id);
         }
 
         let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
@@ -247,10 +249,6 @@ impl Database {
             .try_into()?;
             chapters.push(chapter);
         }
-
-        let next_cursor = has_next_page
-            .then(|| chapters.last().map(|c| c.id))
-            .flatten();
 
         Ok((chapters, next_cursor))
     }
