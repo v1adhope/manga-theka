@@ -417,7 +417,7 @@ async fn list_chapters(app: &TestApp, path: String) -> RespWrapper<Vec<Chapter>>
 }
 
 #[tokio::test]
-async fn get_chapters_defaults_to_ascending_number_order() {
+async fn get_chapters_defaults_to_descending_number_order() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
     let numbers = [13.0, 0.0, 12.5, 12.0];
@@ -427,21 +427,21 @@ async fn get_chapters_defaults_to_ascending_number_order() {
     let listed = list_chapters(&app, format!("/books/{book_id}/chapters")).await;
     let got: Vec<f32> = listed.data.iter().map(|c| c.number.as_f32()).collect();
 
-    assert_eq!(got, vec![0.0, 12.0, 12.5, 13.0]);
+    assert_eq!(got, vec![13.0, 12.5, 12.0, 0.0]);
 }
 
 #[tokio::test]
-async fn get_chapters_with_desc_order_reverses_the_page() {
+async fn get_chapters_with_asc_order_reverses_the_page() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
     let numbers = [1.0, 2.0, 3.0];
 
     insert_numbered_chapters(&app, book_id, &numbers).await;
 
-    let listed = list_chapters(&app, format!("/books/{book_id}/chapters?order=Desc")).await;
+    let listed = list_chapters(&app, format!("/books/{book_id}/chapters?order=Asc")).await;
     let got: Vec<f32> = listed.data.iter().map(|c| c.number.as_f32()).collect();
 
-    assert_eq!(got, vec![3.0, 2.0, 1.0]);
+    assert_eq!(got, vec![1.0, 2.0, 3.0]);
 }
 
 #[tokio::test]
@@ -485,7 +485,7 @@ async fn get_chapters_with_after_and_limit_3_returns_next_page() {
     let first_numbers: Vec<f32> = first.data.iter().map(|c| c.number.as_f32()).collect();
     let cursor = first.next_cursor.unwrap();
 
-    assert_eq!(first_numbers, vec![0.0, 1.0, 2.0]);
+    assert_eq!(first_numbers, vec![5.0, 4.0, 3.0]);
 
     let second = list_chapters(
         &app,
@@ -494,33 +494,29 @@ async fn get_chapters_with_after_and_limit_3_returns_next_page() {
     .await;
     let second_numbers: Vec<f32> = second.data.iter().map(|c| c.number.as_f32()).collect();
 
-    assert_eq!(second_numbers, vec![3.0, 4.0, 5.0]);
+    assert_eq!(second_numbers, vec![2.0, 1.0, 0.0]);
     assert!(second.next_cursor.is_none());
 }
 
 #[tokio::test]
-async fn get_chapters_with_after_walks_descending_pages() {
+async fn get_chapters_with_after_walks_ascending_pages() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
     let numbers: Vec<f32> = (0..4).map(|n| n as f32).collect();
 
     insert_numbered_chapters(&app, book_id, &numbers).await;
 
-    let first = list_chapters(
-        &app,
-        format!("/books/{book_id}/chapters?order=Desc&limit=2"),
-    )
-    .await;
+    let first = list_chapters(&app, format!("/books/{book_id}/chapters?order=Asc&limit=2")).await;
     let cursor = first.next_cursor.unwrap();
 
     let second = list_chapters(
         &app,
-        format!("/books/{book_id}/chapters?order=Desc&limit=2&after={cursor}"),
+        format!("/books/{book_id}/chapters?order=Asc&limit=2&after={cursor}"),
     )
     .await;
     let second_numbers: Vec<f32> = second.data.iter().map(|c| c.number.as_f32()).collect();
 
-    assert_eq!(second_numbers, vec![1.0, 0.0]);
+    assert_eq!(second_numbers, vec![2.0, 3.0]);
 }
 
 #[tokio::test]

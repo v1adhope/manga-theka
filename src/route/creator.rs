@@ -9,7 +9,7 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
-    entity::{Creator, CreatorRole, Name, Pagination},
+    entity::{Creator, CreatorRole, Filter, Name},
     error::{AppError, EntityError},
     route::{PaginationQuery, StoreResp, json_data_response, json_response},
     service::Service,
@@ -76,9 +76,9 @@ pub async fn get_creators(
     State(service): State<Service>,
     Query(query): Query<PaginationQuery>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    let pg: Pagination = query.try_into()?;
+    let filter: Filter = query.try_into()?;
 
-    let (data, next_cursor) = service.get_creators(pg).await?;
+    let (data, next_cursor) = service.get_creators(filter).await?;
 
     Ok(json_response(
         StatusCode::OK,

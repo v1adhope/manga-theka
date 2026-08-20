@@ -27,21 +27,59 @@ impl Limit {
 }
 
 #[derive(Debug)]
-pub struct Pagination {
+pub struct Filter {
     pub after: Option<Uuid>,
     pub limit: Option<Limit>,
+    pub sort_order: Option<SortOrder>,
 }
 
-#[derive(Debug, Clone, Copy, Default, Deserialize)]
+impl Filter {
+    pub fn builder() -> FilterBuilder {
+        FilterBuilder::default()
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct FilterBuilder {
+    after: Option<Uuid>,
+    limit: Option<u32>,
+    sort_order: Option<SortOrder>,
+}
+
+impl FilterBuilder {
+    pub fn after(mut self, v: Option<Uuid>) -> Self {
+        self.after = v;
+        self
+    }
+
+    pub fn limit(mut self, v: Option<u32>) -> Self {
+        self.limit = v;
+        self
+    }
+
+    pub fn sort_order(mut self, v: Option<SortOrder>) -> Self {
+        self.sort_order = v;
+        self
+    }
+
+    pub fn build(self) -> Result<Filter, EntityError> {
+        Ok(Filter {
+            after: self.after,
+            limit: self.limit.map(Limit::try_from).transpose()?,
+            sort_order: self.sort_order,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
 pub enum SortOrder {
-    #[default]
     Asc,
     Desc,
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::entity::pagination::{Limit, MAX_LIMIT};
+    use crate::entity::filter::{Limit, MAX_LIMIT};
 
     #[test]
     fn limit_zero_is_rejected() {

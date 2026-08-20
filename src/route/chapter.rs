@@ -10,10 +10,10 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        Chapter, ChapterLocalization, ChapterNumber, ChapterTitle, Pagination, SortOrder, Volume,
+        Chapter, ChapterLocalization, ChapterNumber, ChapterTitle, Filter, SortOrder, Volume,
     },
     error::{AppError, EntityError},
-    route::{PaginationQuery, StoreResp, json_data_response, json_response},
+    route::{StoreResp, json_data_response, json_response},
     service::Service,
 };
 
@@ -129,16 +129,15 @@ pub struct ChapterListQuery {
     pub limit: Option<u32>,
 }
 
-impl TryFrom<ChapterListQuery> for (Pagination, SortOrder) {
+impl TryFrom<ChapterListQuery> for Filter {
     type Error = EntityError;
 
     fn try_from(q: ChapterListQuery) -> Result<Self, Self::Error> {
-        let pagination = Pagination::try_from(PaginationQuery {
-            after: q.after,
-            limit: q.limit,
-        })?;
-
-        Ok((pagination, q.order.unwrap_or_default()))
+        Self::builder()
+            .after(q.after)
+            .limit(q.limit)
+            .sort_order(q.order)
+            .build()
     }
 }
 
@@ -154,9 +153,9 @@ pub async fn get_chapters(
     Path(book_id): Path<Uuid>,
     Query(query): Query<ChapterListQuery>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    let (pg, order): (Pagination, SortOrder) = query.try_into()?;
+    let filter: Filter = query.try_into()?;
 
-    let (data, next_cursor) = service.get_chapters(book_id, pg, order).await?;
+    let (data, next_cursor) = service.get_chapters(book_id, filter).await?;
 
     Ok(json_response(
         StatusCode::OK,

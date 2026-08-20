@@ -19,10 +19,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::{
-    entity::{Limit, Pagination},
-    error::EntityError,
-};
+use crate::{entity::Filter, error::EntityError};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -37,14 +34,11 @@ pub struct PaginationQuery {
     pub limit: Option<u32>,
 }
 
-impl TryFrom<PaginationQuery> for Pagination {
+impl TryFrom<PaginationQuery> for Filter {
     type Error = EntityError;
 
     fn try_from(q: PaginationQuery) -> Result<Self, Self::Error> {
-        Ok(Self {
-            after: q.after,
-            limit: q.limit.map(Limit::try_from).transpose()?,
-        })
+        Self::builder().after(q.after).limit(q.limit).build()
     }
 }
 

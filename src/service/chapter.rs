@@ -1,7 +1,7 @@
 use uuid::Uuid;
 
 use crate::{
-    entity::{Chapter, Pagination, SortOrder},
+    entity::{Chapter, Filter},
     error::ServiceError,
     service::Service,
 };
@@ -21,13 +21,12 @@ impl Service {
     pub async fn get_chapters(
         &self,
         book_id: Uuid,
-        pagination: Pagination,
-        order: SortOrder,
+        filter: Filter,
     ) -> Result<(Vec<Chapter>, Option<Uuid>), ServiceError> {
         self.database.ensure_book_exists(book_id).await?;
 
         self.database
-            .get_chapters(book_id, &pagination, order)
+            .get_chapters(book_id, &filter)
             .await
             .map_err(Into::into)
     }

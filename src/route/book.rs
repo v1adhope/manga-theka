@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::{
     entity::{
         AlternativeTitle, Book, BookCover, BookKind, BookLink, BookLinkKind, BookName, BookStatus,
-        ContentRating, CoverExtension, Description, Language, LinkUrl, Pagination,
+        ContentRating, CoverExtension, Description, Filter, Language, LinkUrl,
     },
     error::{AppError, EntityError},
     route::{PaginationQuery, StoreResp, json_data_response, json_response},
@@ -174,9 +174,9 @@ pub async fn get_books(
     State(service): State<Service>,
     Query(query): Query<PaginationQuery>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    let pg: Pagination = query.try_into()?;
+    let filter: Filter = query.try_into()?;
 
-    let (data, next_cursor) = service.get_books(pg).await?;
+    let (data, next_cursor) = service.get_books(filter).await?;
 
     Ok(json_response(
         StatusCode::OK,

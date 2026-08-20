@@ -7,8 +7,8 @@ use uuid::Uuid;
 use crate::{
     database::Database,
     entity::{
-        Chapter, ChapterLocalization, ChapterNumber, ChapterTitle, DEFAULT_LIMIT, Limit,
-        Pagination, SortOrder, Volume,
+        Chapter, ChapterLocalization, ChapterNumber, ChapterTitle, DEFAULT_LIMIT, Filter, Limit,
+        SortOrder, Volume,
     },
     error::DatabaseError,
 };
@@ -175,15 +175,14 @@ impl Database {
     #[instrument(
         name = "db.chapter.list",
         skip_all,
-        fields(book.id = %book_id, after = ?pagination.after, limit = ?pagination.limit, order = ?order)
+        fields(book.id = %book_id, filter = ?filter)
     )]
     pub async fn get_chapters(
         &self,
         book_id: Uuid,
-        pagination: &Pagination,
-        order: SortOrder,
+        filter: &Filter,
     ) -> Result<(Vec<Chapter>, Option<Uuid>), DatabaseError> {
-        self.get_chapters_inner(book_id, pagination, order)
+        self.get_chapters_inner(book_id, filter)
             .await
             .inspect_err(DatabaseError::log_internal)
     }
@@ -191,10 +190,10 @@ impl Database {
     async fn get_chapters_inner(
         &self,
         book_id: Uuid,
-        pagination: &Pagination,
-        order: SortOrder,
+        filter: &Filter,
     ) -> Result<(Vec<Chapter>, Option<Uuid>), DatabaseError> {
-        let limit = pagination.limit.map_or(DEFAULT_LIMIT, Limit::as_u32);
+        let limit = filter.limit.map_or(DEFAULT_LIMIT, Limit::as_u32);
+        let order = filter.sort_order.unwrap_or(SortOrder::Desc);
         let mut builder: QueryBuilder<Postgres> = QueryBuilder::new(
             r"select c.id, c.book_id, c.number, c.name, c.volume, c.updated_at, c.created_at
               from chapters c
@@ -202,7 +201,7 @@ impl Database {
         );
         builder.push_bind(book_id);
 
-        if let Some(id) = pagination.after {
+        if let Some(id) = filter.after {
             let comparison = match order {
                 SortOrder::Asc => " and c.number > ",
                 SortOrder::Desc => " and c.number < ",
