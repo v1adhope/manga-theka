@@ -51,7 +51,7 @@ The single canonical, always-present English name of a `Book`, stored directly o
 _Avoid_: Title, Localized name
 
 **Alternative Title**:
-A supplementary name for a `Book` in any language -- the original non-English title or an official translation. Unlike `Chapter Title`, a `Book` may have many `Alternative Title`s in the same language.
+A supplementary name for a `Book` in any language -- the original non-English title or an official translation. Unlike `Chapter Name`, a `Book` may have many `Alternative Title`s in the same language.
 _Avoid_: Translation, Localization
 
 **Book Kind**:
@@ -78,12 +78,12 @@ _Avoid_: Episode, Issue
 The semantic, reader-facing identifier of a `Chapter` (e.g. "Chapter 12", "Chapter 12.5" for a special) -- editable independent of physical position, unique per `Book`.
 _Avoid_: Order, Index, Sort Order
 
-**Chapter Title**:
+**Chapter Name**:
 The canonical English-of-record name of a `Chapter`. Nullable -- not every chapter has one.
-_Avoid_: Chapter Name
+_Avoid_: Chapter Title
 
 **Chapter Localization**:
-A `Chapter Title`'s rendering in a specific language, one row per language including English (mirrored in). Unlike `Alternative Title`, at most one per language.
+A `Chapter Name`'s rendering in a specific language, one row per language including English (mirrored in). Unlike `Alternative Title`, at most one per language.
 _Avoid_: Chapter Translation
 
 **Label**:

@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        Chapter, ChapterLocalization, ChapterNumber, ChapterTitle, Filter, SortOrder, Volume,
+        Chapter, ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume, Filter, SortOrder,
     },
     error::{AppError, EntityError},
     route::{StoreResp, json_data_response, json_response},
@@ -65,7 +65,7 @@ impl TryFrom<ChapterWithRelations> for Chapter {
         for localization in localization_reqs {
             localizations.push(ChapterLocalization {
                 language_id: localization.language_id,
-                name: ChapterTitle::try_from(localization.name)?,
+                name: ChapterName::try_from(localization.name)?,
             });
         }
 
@@ -73,8 +73,8 @@ impl TryFrom<ChapterWithRelations> for Chapter {
             id,
             book_id,
             number: ChapterNumber::try_from(number)?,
-            name: name.map(ChapterTitle::try_from).transpose()?,
-            volume: volume.map(Volume::try_from).transpose()?,
+            name: name.map(ChapterName::try_from).transpose()?,
+            volume: volume.map(ChapterVolume::try_from).transpose()?,
             localizations,
             updated_at,
             created_at,

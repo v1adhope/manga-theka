@@ -7,8 +7,8 @@ use uuid::Uuid;
 use crate::{
     database::Database,
     entity::{
-        Chapter, ChapterLocalization, ChapterNumber, ChapterTitle, DEFAULT_LIMIT, Filter, Limit,
-        SortOrder, Volume,
+        Chapter, ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume, DEFAULT_LIMIT,
+        Filter, Limit, SortOrder,
     },
     error::DatabaseError,
 };
@@ -34,7 +34,7 @@ impl TryFrom<ChapterLocalizationRow> for ChapterLocalization {
     type Error = DatabaseError;
 
     fn try_from(row: ChapterLocalizationRow) -> Result<Self, Self::Error> {
-        let name = ChapterTitle::try_from(row.name)
+        let name = ChapterName::try_from(row.name)
             .map_err(|e| DatabaseError::invariant_corrupted("name", e))?;
 
         Ok(ChapterLocalization {
@@ -59,13 +59,13 @@ impl TryFrom<ChapterWithRelations> for Chapter {
             .map_err(|e| DatabaseError::invariant_corrupted("number", e))?;
         let name = row
             .name
-            .map(ChapterTitle::try_from)
+            .map(ChapterName::try_from)
             .transpose()
             .map_err(|e| DatabaseError::invariant_corrupted("name", e))?;
 
         let volume = row
             .volume
-            .map(Volume::try_from)
+            .map(ChapterVolume::try_from)
             .transpose()
             .map_err(|e| DatabaseError::invariant_corrupted("volume", e))?;
 
@@ -99,7 +99,7 @@ impl Database {
             item.book_id,
             item.number.as_f32(),
             item.name.as_ref().map(AsRef::as_ref),
-            item.volume.map(Volume::as_i16),
+            item.volume.map(ChapterVolume::as_i16),
             item.updated_at,
             item.created_at,
         )
@@ -127,7 +127,7 @@ impl Database {
             item.id,
             item.number.as_f32(),
             item.name.as_ref().map(AsRef::as_ref),
-            item.volume.map(Volume::as_i16),
+            item.volume.map(ChapterVolume::as_i16),
             item.updated_at,
         )
         .fetch_optional(&mut *tx)

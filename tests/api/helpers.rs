@@ -13,8 +13,8 @@ use manga_theka::{
     database,
     entity::{
         AlternativeTitle, Book, BookCoverQuery, BookLink, BookName, Chapter, ChapterLocalization,
-        ChapterNumber, ChapterTitle, ContentRating, CoverExtension, CoverUrl, Creator, Description,
-        Label, Language, LinkUrl, Name, Volume,
+        ChapterName, ChapterNumber, ChapterVolume, ContentRating, CoverExtension, CoverUrl,
+        Creator, Description, Label, Language, LinkUrl, Name,
     },
     object_storage,
     startup::App,
@@ -525,7 +525,7 @@ values($1, $2, $3, $4, $5, $6, $7);
             c.book_id,
             c.number.as_f32(),
             c.name.as_ref().map(AsRef::as_ref),
-            c.volume.map(Volume::as_i16),
+            c.volume.map(ChapterVolume::as_i16),
             c.updated_at,
             c.created_at
         )
@@ -582,7 +582,7 @@ order by language_id;
         .into_iter()
         .map(|r| ChapterLocalization {
             language_id: r.language_id,
-            name: ChapterTitle::try_from(r.name).expect("stored localization name must be valid"),
+            name: ChapterName::try_from(r.name).expect("stored localization name must be valid"),
         })
         .collect();
 
@@ -592,10 +592,10 @@ order by language_id;
             number: ChapterNumber::try_from(row.number).expect("stored number must be valid"),
             name: row
                 .name
-                .map(|n| ChapterTitle::try_from(n).expect("stored name must be valid")),
+                .map(|n| ChapterName::try_from(n).expect("stored name must be valid")),
             volume: row
                 .volume
-                .map(|v| Volume::try_from(v).expect("stored volume must be valid")),
+                .map(|v| ChapterVolume::try_from(v).expect("stored volume must be valid")),
             localizations,
             updated_at: row.updated_at,
             created_at: row.created_at,

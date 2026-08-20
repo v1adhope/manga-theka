@@ -3,7 +3,7 @@ use std::str::FromStr;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::error::EntityError;
+use crate::{entity::validate_name, error::EntityError};
 
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
 pub enum CreatorRole {
@@ -51,12 +51,7 @@ impl TryFrom<String> for Name {
     type Error = EntityError;
 
     fn try_from(s: String) -> Result<Self, Self::Error> {
-        if s.trim().is_empty() {
-            return Err(EntityError::NameIsEmptyOrWhitespace);
-        }
-        if s.chars().count() > 255 {
-            return Err(EntityError::NameExceedsCharLimit(s));
-        }
+        let s = validate_name(s)?;
         if !s.chars().all(|c| c.is_alphabetic()) {
             return Err(EntityError::NameContainsNotLetters(s));
         }

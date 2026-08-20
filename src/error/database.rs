@@ -198,7 +198,7 @@ impl From<sqlx::Error> for DatabaseError {
                 Some("check_length_chapters_name") => {
                     return Self::ChapterNameTooLong(err);
                 }
-                Some("check_range_chapters_number") => {
+                Some("check_range_chapters_number") | Some("check_scale_chapters_number") => {
                     return Self::ChapterNumberOutOfRange(err);
                 }
                 Some("check_range_chapters_volume") => {

@@ -8,7 +8,7 @@ use tower::ServiceExt;
 use crate::fakers::{ChapterFaker, LANGUAGES};
 use crate::helpers::{RespWrapper, TestApp, assert_error, assert_stored, localization_keys};
 use fake::Fake;
-use manga_theka::entity::{Chapter, ChapterNumber, ChapterTitle, Volume};
+use manga_theka::entity::{Chapter, ChapterName, ChapterNumber, ChapterVolume};
 
 #[tokio::test]
 async fn store_chapter_with_valid_body_passes() {
@@ -111,7 +111,7 @@ async fn store_chapter_with_zero_number_and_volume_passes() {
     let got = app.fetch_chapter(id).await;
 
     assert_eq!(got.number, ChapterNumber::try_from(0.0).unwrap());
-    assert_eq!(got.volume, Some(Volume::try_from(0).unwrap()));
+    assert_eq!(got.volume, Some(ChapterVolume::try_from(0).unwrap()));
 }
 
 #[tokio::test]
@@ -911,7 +911,7 @@ async fn store_chapter_with_a_255_char_localization_name_passes() {
 
     assert_eq!(
         got.localizations.first().map(|l| l.name.as_ref()),
-        Some(ChapterTitle::try_from(name).unwrap().as_ref())
+        Some(ChapterName::try_from(name).unwrap().as_ref())
     );
 }
 

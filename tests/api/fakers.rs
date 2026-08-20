@@ -9,8 +9,8 @@ use fake::faker::name::en::FirstName;
 use fake::rand::RngExt;
 use manga_theka::entity::{
     AlternativeTitle, Book, BookKind, BookLink, BookLinkKind, BookName, BookStatus, Chapter,
-    ChapterLocalization, ChapterNumber, ChapterTitle, ContentRating, Creator, CreatorRole,
-    Description, Label, LabelKind, Language, LinkUrl, Name, Volume,
+    ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume, ContentRating, Creator,
+    CreatorRole, Description, Label, LabelKind, Language, LinkUrl, Name,
 };
 use time::OffsetDateTime;
 use uuid::{Uuid, uuid};
@@ -324,12 +324,12 @@ impl Dummy<ChapterNumberFaker> for ChapterNumber {
     }
 }
 
-pub struct ChapterTitleFaker;
+pub struct ChapterNameFaker;
 
-impl Dummy<ChapterTitleFaker> for ChapterTitle {
-    fn dummy_with_rng<R: RngExt + ?Sized>(_config: &ChapterTitleFaker, rng: &mut R) -> Self {
+impl Dummy<ChapterNameFaker> for ChapterName {
+    fn dummy_with_rng<R: RngExt + ?Sized>(_config: &ChapterNameFaker, rng: &mut R) -> Self {
         let name = Sentence(2..5).fake_with_rng::<String, R>(rng);
-        ChapterTitle::try_from(name).unwrap()
+        ChapterName::try_from(name).unwrap()
     }
 }
 
@@ -341,7 +341,7 @@ impl Dummy<ChapterLocalizationFaker> for ChapterLocalization {
 
         ChapterLocalization {
             language_id: language.id,
-            name: ChapterTitleFaker.fake_with_rng(rng),
+            name: ChapterNameFaker.fake_with_rng(rng),
         }
     }
 }
@@ -373,8 +373,8 @@ impl Dummy<ChapterFaker> for Chapter {
             id: Uuid::now_v7(),
             book_id: config.book_id,
             number: ChapterNumberFaker.fake_with_rng(rng),
-            name: Some(ChapterTitleFaker.fake_with_rng(rng)),
-            volume: Some(Volume::try_from(rng.random_range(0..=200)).unwrap()),
+            name: Some(ChapterNameFaker.fake_with_rng(rng)),
+            volume: Some(ChapterVolume::try_from(rng.random_range(0..=200)).unwrap()),
             localizations,
             updated_at: None,
             created_at: OffsetDateTime::UNIX_EPOCH,
