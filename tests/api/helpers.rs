@@ -22,18 +22,15 @@ use manga_theka::{
 };
 use serde::Deserialize;
 use sqlx::{AssertSqlSafe, ConnectOptions, Connection, Executor, PgConnection, PgPool};
-use tokio::sync::Mutex;
 use tower::ServiceExt;
 use tracing_log::log::LevelFilter;
 use uuid::Uuid;
 
-use crate::fakers::BookFaker;
+use crate::fakers::{BookFaker, ChapterFaker};
 
 static TRACING: LazyLock<()> = LazyLock::new(|| {
     telemetry::init_subscriber("info");
 });
-
-static BUCKET_CREATION: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 #[derive(Debug)]
 pub struct BookSample {
@@ -155,10 +152,7 @@ impl TestApp {
         ]);
         let pool = Self::configure_db(&cfg.database).await;
         let s3 = object_storage::client(&cfg.object_storage).await;
-        let app = {
-            let _guard = BUCKET_CREATION.lock().await;
-            App::build(&cfg).await
-        };
+        let app = App::build(&cfg).await;
 
         TestApp {
             pool,
@@ -554,6 +548,27 @@ from unnest($2::uuid[], $3::text[]) as localization(language_id, name);
         .expect("failed to insert factory chapter localizations");
     }
 
+    pub async fn insert_numbered_chapters(&self, book_id: Uuid, numbers: &[f32]) {
+        for number in numbers {
+            let mut chapter: Chapter = ChapterFaker {
+                book_id,
+                localizations: 0..=0,
+            }
+            .fake();
+            chapter.number =
+                ChapterNumber::try_from(*number).expect("factory number must be valid");
+
+            self.insert_chapter(&chapter).await;
+        }
+    }
+
+    pub async fn insert_random_chapter(&self, book_id: Uuid) -> Uuid {
+        let chapter: Chapter = ChapterFaker::new(book_id).fake();
+        self.insert_chapter(&chapter).await;
+
+        chapter.id
+    }
+
     pub async fn fetch_chapter(&self, id: Uuid) -> Chapter {
         let row = sqlx::query!(
             r#"
@@ -689,5 +704,22 @@ values($1, $2, $3, $4, $5);
             .unwrap();
 
         self.router.clone().oneshot(req).await.unwrap()
+    }
+
+    pub async fn delete_chapter(&self, id: Uuid) -> Response {
+        let req = Request::delete(format!("/chapters/{id}"))
+            .body(Body::empty())
+            .unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap()
+    }
+
+    pub async fn get_chapters(&self, path: String) -> RespWrapper<Vec<Chapter>> {
+        let req = Request::get(path).body(Body::empty()).unwrap();
+        let resp = self.router.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        serde_json::from_slice(&bytes).expect("failed to parse chapter page")
     }
 }
