@@ -1,7 +1,7 @@
 use uuid::Uuid;
 
 use crate::{
-    entity::{Book, BookCover, BookCoverQuery, COVER_PRESIGN_TTL, Pagination},
+    entity::{Book, BookCover, BookCoverQuery, COVER_PRESIGN_TTL, Filter},
     error::ServiceError,
     service::Service,
 };
@@ -20,12 +20,9 @@ impl Service {
 
     pub async fn get_books(
         &self,
-        pagination: Pagination,
+        filter: Filter,
     ) -> Result<(Vec<Book>, Option<Uuid>), ServiceError> {
-        self.database
-            .get_books(&pagination)
-            .await
-            .map_err(Into::into)
+        self.database.get_books(&filter).await.map_err(Into::into)
     }
 
     pub async fn update_book(&self, item: Book, label_ids: Vec<Uuid>) -> Result<(), ServiceError> {

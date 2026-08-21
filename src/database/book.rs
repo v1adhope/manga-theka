@@ -9,7 +9,7 @@ use crate::{
     entity::{
         AlternativeTitle, Book, BookCover, BookCoverQuery, BookKind, BookLink, BookLinkKind,
         BookName, BookStatus, ContentRating, CoverExtension, Creator, DEFAULT_LIMIT, Description,
-        Label, Language, Limit, LinkUrl, Pagination,
+        Filter, Label, Language, Limit, LinkUrl,
     },
     error::DatabaseError,
 };
@@ -266,7 +266,7 @@ impl Database {
         .await?;
 
         if row.is_none() {
-            return Err(DatabaseError::BookNotFound);
+            return Err(DatabaseError::not_found::<Book>());
         }
 
         Self::delete_book_relations(&mut tx, item.id).await?;
@@ -289,7 +289,7 @@ impl Database {
             .await?;
 
         let Some(row) = row else {
-            return Err(DatabaseError::BookNotFound);
+            return Err(DatabaseError::not_found::<Book>());
         };
 
         let ids = [id];
@@ -311,22 +311,22 @@ impl Database {
     #[instrument(
         name = "db.book.list",
         skip_all,
-        fields(after = ?pagination.after, limit = ?pagination.limit)
+        fields(filter = ?filter)
     )]
     pub async fn get_books(
         &self,
-        pagination: &Pagination,
+        filter: &Filter,
     ) -> Result<(Vec<Book>, Option<Uuid>), DatabaseError> {
-        self.get_books_inner(pagination)
+        self.get_books_inner(filter)
             .await
             .inspect_err(DatabaseError::log_internal)
     }
 
     async fn get_books_inner(
         &self,
-        pagination: &Pagination,
+        filter: &Filter,
     ) -> Result<(Vec<Book>, Option<Uuid>), DatabaseError> {
-        let limit = pagination.limit.map_or(DEFAULT_LIMIT, Limit::as_u32);
+        let limit = filter.limit.map_or(DEFAULT_LIMIT, Limit::as_u32);
         let mut builder: QueryBuilder<Postgres> = QueryBuilder::new(
             r"select b.id, b.name, b.description, b.publication_year,
                      cr.id as content_rating_id, cr.name as content_rating_name,
@@ -338,7 +338,7 @@ impl Database {
               join languages l on l.id = b.publication_language",
         );
 
-        if let Some(id) = pagination.after {
+        if let Some(id) = filter.after {
             builder.push(" where b.id < ").push_bind(id);
         }
 
@@ -397,7 +397,7 @@ impl Database {
             .await?;
 
         if row.is_none() {
-            return Err(DatabaseError::BookNotFound);
+            return Err(DatabaseError::not_found::<Book>());
         }
 
         Ok(())
@@ -412,7 +412,7 @@ impl Database {
             .inspect_err(DatabaseError::log_internal)?;
 
         if !row.exists {
-            return Err(DatabaseError::BookNotFound);
+            return Err(DatabaseError::not_found::<Book>());
         }
 
         Ok(())
@@ -636,7 +636,7 @@ impl Database {
             .inspect_err(DatabaseError::log_internal)?;
 
         if !row.exists {
-            return Err(DatabaseError::BookCoverNotFound);
+            return Err(DatabaseError::not_found::<BookCover>());
         }
 
         Ok(())
@@ -660,7 +660,7 @@ impl Database {
             .inspect_err(DatabaseError::log_internal)?;
 
         if row.is_none() {
-            return Err(DatabaseError::BookCoverNotFound);
+            return Err(DatabaseError::not_found::<BookCover>());
         }
 
         Ok(())
@@ -685,7 +685,7 @@ impl Database {
             .await?;
 
         if row.is_none() {
-            return Err(DatabaseError::BookCoverNotFound);
+            return Err(DatabaseError::not_found::<BookCover>());
         }
 
         tx.commit().await?;

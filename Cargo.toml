@@ -28,6 +28,7 @@ tokio = { version = "1", features = [
   "macros",
   "net",
   "signal",
+  "sync",
 ] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = [
@@ -57,13 +58,14 @@ aws-sdk-s3 = { version = "1", default-features = false, features = [
   "behavior-version-latest",
   "default-https-client",
 ] }
-bytes = "1.12.1"
+bytes = "1"
 aws-config = { version = "1", default-features = false, features = [
   "rt-tokio",
   "default-https-client",
   "behavior-version-latest",
 ] }
 anyhow = "1"
+regex = "1"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

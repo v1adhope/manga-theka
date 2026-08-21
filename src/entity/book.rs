@@ -6,7 +6,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
-    entity::{ContentRating, Creator, Label, Language},
+    entity::{ContentRating, Creator, Entity, Label, Language, validate_name},
     error::EntityError,
 };
 
@@ -181,13 +181,7 @@ impl TryFrom<String> for BookName {
     type Error = EntityError;
 
     fn try_from(s: String) -> Result<Self, Self::Error> {
-        if s.trim().is_empty() {
-            return Err(EntityError::NameIsEmptyOrWhitespace);
-        }
-        if s.chars().count() > 255 {
-            return Err(EntityError::NameExceedsCharLimit(s));
-        }
-        Ok(Self(s))
+        Ok(Self(validate_name(s)?))
     }
 }
 
@@ -272,6 +266,10 @@ pub struct Book {
     pub created_at: OffsetDateTime,
 }
 
+impl Entity for Book {
+    const NAME: &'static str = "Book";
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BookLink {
@@ -293,6 +291,10 @@ pub struct BookCover {
     pub extension: CoverExtension,
     pub content: Bytes,
     pub is_main: bool,
+}
+
+impl Entity for BookCover {
+    const NAME: &'static str = "Book cover";
 }
 
 impl BookCover {

@@ -9,12 +9,18 @@ use aws_sdk_s3::{
     config::{Credentials, Region, timeout::TimeoutConfig},
 };
 use secrecy::ExposeSecret;
+use tokio::sync::Semaphore;
 
 use crate::config;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
 const OPERATION_ATTEMPT_TIMEOUT: Duration = Duration::from_secs(5);
 const OPERATION_TIMEOUT: Duration = Duration::from_secs(15);
+// RustFS accepts at most 8 bucket creations in flight, so hold that ceiling here and
+// let the rest queue.
+const BUCKET_CREATION_LIMIT: usize = 8;
+
+static BUCKET_CREATION: Semaphore = Semaphore::const_new(BUCKET_CREATION_LIMIT);
 
 pub async fn client(cfg: &config::ObjectStorage) -> Client {
     let credentials = Credentials::new(
@@ -71,6 +77,11 @@ impl ObjectStorage {
         if exists {
             return;
         }
+
+        let _permit = BUCKET_CREATION
+            .acquire()
+            .await
+            .expect("bucket creation semaphore has been closed");
 
         self.client
             .create_bucket()

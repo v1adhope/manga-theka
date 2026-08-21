@@ -1,7 +1,7 @@
 use uuid::Uuid;
 
 use crate::{
-    entity::{Creator, Pagination},
+    entity::{Creator, Filter},
     error::ServiceError,
     service::Service,
 };
@@ -17,10 +17,10 @@ impl Service {
 
     pub async fn get_creators(
         &self,
-        pagination: Pagination,
+        filter: Filter,
     ) -> Result<(Vec<Creator>, Option<Uuid>), ServiceError> {
         self.database
-            .get_creators(&pagination)
+            .get_creators(&filter)
             .await
             .map_err(Into::into)
     }

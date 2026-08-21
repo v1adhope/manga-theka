@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into chapter_localizations(chapter_id, language_id, name)\nselect $1, localization.language_id, localization.name\nfrom unnest($2::uuid[], $3::text[]) as localization(language_id, name);\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bbd1becb973779efdc743427326599ddc2b544c1dd71b9e67949dc6b98a73c98"
+}

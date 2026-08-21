@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     database::Database,
-    entity::{Creator, CreatorRole, DEFAULT_LIMIT, Limit, Name, Pagination},
+    entity::{Creator, CreatorRole, DEFAULT_LIMIT, Filter, Limit, Name},
     error::DatabaseError,
 };
 
@@ -74,7 +74,7 @@ impl Database {
         .inspect_err(DatabaseError::log_internal)?;
 
         if row.is_none() {
-            return Err(DatabaseError::CreatorNotFound);
+            return Err(DatabaseError::not_found::<Creator>());
         }
 
         Ok(())
@@ -94,29 +94,29 @@ impl Database {
 
         match row {
             Some(row) => Creator::try_from(row),
-            None => Err(DatabaseError::CreatorNotFound),
+            None => Err(DatabaseError::not_found::<Creator>()),
         }
     }
 
-    #[instrument(name = "db.creator.list", skip_all, fields(after = ?pagination.after))]
+    #[instrument(name = "db.creator.list", skip_all, fields(filter = ?filter))]
     pub async fn get_creators(
         &self,
-        pagination: &Pagination,
+        filter: &Filter,
     ) -> Result<(Vec<Creator>, Option<Uuid>), DatabaseError> {
-        self.get_creators_inner(pagination)
+        self.get_creators_inner(filter)
             .await
             .inspect_err(DatabaseError::log_internal)
     }
 
     async fn get_creators_inner(
         &self,
-        pagination: &Pagination,
+        filter: &Filter,
     ) -> Result<(Vec<Creator>, Option<Uuid>), DatabaseError> {
-        let limit = pagination.limit.map_or(DEFAULT_LIMIT, Limit::as_u32);
+        let limit = filter.limit.map_or(DEFAULT_LIMIT, Limit::as_u32);
         let mut builder: QueryBuilder<Postgres> =
             QueryBuilder::new("select id, first_name, last_name, role, created_at from creators");
 
-        if let Some(id) = pagination.after {
+        if let Some(id) = filter.after {
             builder.push(" where id < ").push_bind(id);
         }
 
@@ -153,7 +153,7 @@ impl Database {
             .inspect_err(DatabaseError::log_internal)?;
 
         if row.is_none() {
-            return Err(DatabaseError::CreatorNotFound);
+            return Err(DatabaseError::not_found::<Creator>());
         }
 
         Ok(())

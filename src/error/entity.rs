@@ -54,6 +54,12 @@ pub enum EntityError {
 
     #[error("Limit {0} is out of range [1, {1}]")]
     LimitOutOfRange(u32, u32),
+
+    #[error("Chapter number {0} must be within [{1}, {2}] with at most {3} decimal places")]
+    ChapterNumberOutOfRange(f32, f32, f32, i32),
+
+    #[error("Chapter volume {0} must be within [{1}, {2}]")]
+    ChapterVolumeOutOfRange(i16, i16, i16),
 }
 
 impl IntoResponse for EntityError {
