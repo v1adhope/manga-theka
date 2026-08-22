@@ -105,9 +105,13 @@ The physical position of a `Chapter Page` within its `Chapter Release`, starting
 _Avoid_: Number, Position, Rank (see `Chapter Number` for the semantic counterpart)
 
 **Chapter Release**:
-A single-language set of `Chapter Page`s submitted in one upload. A `Chapter` may have multiple Releases -- different languages, or competing releases in the same language. The release itself (its `Chapter` and language) is fixed after creation; its pages can be individually replaced, inserted, removed, or reordered. Always a translation -- its language can never be the `Book`'s original publication language.
-_Avoid_: Scan, Scanlation, Version
+A single-language, ordered set of `Chapter Page`s belonging to a `Chapter`. A `Chapter` may have multiple Releases -- different languages, or competing releases in the same language. Its `Chapter` and language are fixed after creation; its pages are changed by declaring a new whole order. Published once it holds at least one `Chapter Page`, and unlisted before that. Always a translation -- its language can never be the `Book`'s original publication language.
+_Avoid_: Scan, Scanlation, Version, Draft (for an unpublished one)
 
 **Chapter Page**:
-A single image belonging to a `Chapter Release`, addressed to readers by its `Sort Order` (as `page_number`) rather than its id. Individually replaceable, insertable, removable, and reorderable within its Release.
+A single image holding a position in its `Chapter Release`, addressed to readers by its `Sort Order` (as `page_number`) rather than its id. A Release's pages change together, as a redeclared order, rather than one at a time.
 _Avoid_: Page image, Scan page
+
+**Staged Page**:
+An image uploaded into a `Chapter Release` but not yet given a `Sort Order`, and so not yet part of what readers see. Becomes a `Chapter Page` when a declared order includes it, and ceases to exist when one leaves it out.
+_Avoid_: Draft page, Pending page, Unordered page
