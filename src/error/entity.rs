@@ -3,6 +3,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use thiserror::Error;
+use uuid::Uuid;
 
 #[derive(Debug, Error)]
 #[non_exhaustive]
@@ -60,12 +61,45 @@ pub enum EntityError {
 
     #[error("Chapter volume {0} must be within [{1}, {2}]")]
     ChapterVolumeOutOfRange(i16, i16, i16),
+
+    #[error("'{0}' is not a valid page extension")]
+    InvalidPageExtension(String),
+
+    #[error("Release version {0} can't be negative")]
+    ReleaseVersionOutOfRange(i32),
+
+    #[error("'{0}' is not a well-formed entity tag")]
+    ReleaseVersionIsMalformed(String),
+
+    #[error("If-Match is required to commit a release")]
+    ReleaseVersionIsAbsent,
+
+    #[error("Page order can't be empty")]
+    PageOrderIsEmpty,
+
+    #[error("Page order of {0} pages exceeds the {1}-page limit")]
+    PageOrderExceedsLimit(usize, usize),
+
+    #[error("Page '{0}' is declared more than once")]
+    PageOrderHasDuplicates(Uuid),
+
+    #[error("Upload of {0} parts exceeds the {1}-part limit")]
+    UploadPartsExceedLimit(usize, usize),
+
+    #[error("Release already holds {0} of {1} allowed pages")]
+    ReleaseRowsExceedLimit(usize, usize),
+
+    #[error("Page exceeds the {0}-byte limit")]
+    PageExceedsByteLimit(usize),
 }
 
 impl IntoResponse for EntityError {
     fn into_response(self) -> Response {
         match self {
             Self::UnsupportedImageFormat => (StatusCode::UNSUPPORTED_MEDIA_TYPE, self.to_string()),
+            Self::PageExceedsByteLimit(_) => (StatusCode::PAYLOAD_TOO_LARGE, self.to_string()),
+            Self::ReleaseVersionIsAbsent => (StatusCode::PRECONDITION_REQUIRED, self.to_string()),
+            Self::ReleaseVersionIsMalformed(_) => (StatusCode::BAD_REQUEST, self.to_string()),
             _ => (StatusCode::UNPROCESSABLE_ENTITY, self.to_string()),
         }
         .into_response()

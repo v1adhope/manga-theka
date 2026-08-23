@@ -6,17 +6,14 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
-    entity::{ContentRating, Creator, Entity, Label, Language, validate_name},
+    entity::{
+        ContentRating, Creator, Entity, Label, Language, is_jpeg, is_png, is_webp, validate_name,
+    },
     error::EntityError,
 };
 
 pub const COVER_MAX_BYTES: usize = 5 * 1024 * 1024;
 pub const COVER_PRESIGN_TTL: Duration = Duration::from_secs(300);
-
-const JPEG_SOI: [u8; 3] = [0xFF, 0xD8, 0xFF];
-const PNG_SIGNATURE: [u8; 8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-const RIFF_MAGIC: [u8; 4] = *b"RIFF";
-const WEBP_FORM_TYPE: [u8; 4] = *b"WEBP";
 
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
 pub enum BookStatus {
@@ -136,13 +133,13 @@ impl TryFrom<&[u8]> for CoverExtension {
     type Error = EntityError;
 
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
-        if bytes.starts_with(&JPEG_SOI) {
+        if is_jpeg(bytes) {
             return Ok(Self::Jpg);
         }
-        if bytes.starts_with(&PNG_SIGNATURE) {
+        if is_png(bytes) {
             return Ok(Self::Png);
         }
-        if bytes.len() >= 12 && bytes.starts_with(&RIFF_MAGIC) && bytes[8..12] == WEBP_FORM_TYPE {
+        if is_webp(bytes) {
             return Ok(Self::Webp);
         }
 

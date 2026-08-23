@@ -392,14 +392,21 @@ impl Database {
     }
 
     async fn delete_book_inner(&self, id: Uuid) -> Result<(), DatabaseError> {
+        let mut tx = self.pool.begin().await?;
+
+        sqlx::query_file!("queries/delete_book_releases.sql", id)
+            .execute(&mut *tx)
+            .await?;
+
         let row = sqlx::query_file!("queries/delete_book.sql", id)
-            .fetch_optional(&self.pool)
+            .fetch_optional(&mut *tx)
             .await?;
 
         if row.is_none() {
             return Err(DatabaseError::not_found::<Book>());
         }
 
+        tx.commit().await?;
         Ok(())
     }
 

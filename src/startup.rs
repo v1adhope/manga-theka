@@ -8,14 +8,16 @@ use tokio::signal;
 use crate::{
     config::Config,
     database::{self, Database},
-    entity::COVER_MAX_BYTES,
+    entity::{COVER_MAX_BYTES, UPLOAD_MAX_BYTES},
     object_storage::{self, ObjectStorage},
     route::{
-        delete_book, delete_book_cover, delete_chapter, delete_creator, get_book,
-        get_book_cover_image, get_book_covers, get_books, get_chapter, get_chapters,
-        get_content_ratings, get_creator, get_creators, get_labels, get_languages, healthz,
-        store_book, store_book_cover, store_chapter, store_creator, update_book,
-        update_book_main_cover, update_chapter, update_creator,
+        commit_chapter_release, delete_book, delete_book_cover, delete_chapter,
+        delete_chapter_release, delete_creator, get_book, get_book_cover_image, get_book_covers,
+        get_books, get_chapter, get_chapter_page_image, get_chapter_pages, get_chapter_release,
+        get_chapter_releases, get_chapters, get_content_ratings, get_creator, get_creators,
+        get_labels, get_languages, get_staged_chapter_pages, healthz, store_book, store_book_cover,
+        store_chapter, store_chapter_release, store_creator, update_book, update_book_main_cover,
+        update_chapter, update_creator, upload_chapter_pages,
     },
     service::Service,
 };
@@ -32,10 +34,13 @@ impl App {
         database.migrate().await;
 
         let client = object_storage::client(&cfg.object_storage).await;
-        let storage = ObjectStorage::new(client, cfg.object_storage.covers_bucket.clone());
-        storage.ensure_bucket().await;
+        let covers = ObjectStorage::new(client.clone(), cfg.object_storage.covers_bucket.clone());
+        covers.ensure_bucket().await;
+        let release_pages =
+            ObjectStorage::new(client, cfg.object_storage.release_pages_bucket.clone());
+        release_pages.ensure_bucket().await;
 
-        let service = Service::new(database, storage);
+        let service = Service::new(database, covers, release_pages);
 
         let router = Router::new()
             .route("/healthz", get(healthz))
@@ -70,6 +75,25 @@ impl App {
             .route(
                 "/chapters/{id}",
                 get(get_chapter).put(update_chapter).delete(delete_chapter),
+            )
+            .route(
+                "/chapters/{id}/releases",
+                post(store_chapter_release).get(get_chapter_releases),
+            )
+            .route(
+                "/releases/{id}",
+                get(get_chapter_release).delete(delete_chapter_release),
+            )
+            .route(
+                "/releases/{id}/upload",
+                post(upload_chapter_pages).layer(DefaultBodyLimit::max(UPLOAD_MAX_BYTES)),
+            )
+            .route("/releases/{id}/commit", post(commit_chapter_release))
+            .route("/releases/{id}/pages", get(get_chapter_pages))
+            .route("/releases/{id}/staged", get(get_staged_chapter_pages))
+            .route(
+                "/releases/{id}/pages/{page_id}/image",
+                get(get_chapter_page_image),
             )
             .with_state(service);
 

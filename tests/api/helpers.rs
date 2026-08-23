@@ -14,7 +14,7 @@ use manga_theka::{
     entity::{
         AlternativeTitle, Book, BookCoverQuery, BookLink, BookName, Chapter, ChapterLocalization,
         ChapterName, ChapterNumber, ChapterVolume, ContentRating, CoverExtension, CoverUrl,
-        Creator, Description, Label, Language, LinkUrl, Name,
+        Creator, Description, Label, Language, LinkUrl, Name, PageExtension,
     },
     object_storage,
     startup::App,
@@ -26,7 +26,7 @@ use tower::ServiceExt;
 use tracing_log::log::LevelFilter;
 use uuid::Uuid;
 
-use crate::fakers::{BookFaker, ChapterFaker};
+use crate::fakers::{BookFaker, ChapterFaker, LANGUAGES};
 
 static TRACING: LazyLock<()> = LazyLock::new(|| {
     telemetry::init_subscriber("info");
@@ -82,6 +82,34 @@ pub async fn assert_stored(resp: Response) -> Uuid {
     Uuid::parse_str(id).expect("data.id must be a uuid")
 }
 
+pub async fn staged_ids(app: &TestApp, release_id: Uuid, parts: &[&[u8]]) -> Vec<Uuid> {
+    let resp = app.post_upload(release_id, parts).await;
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let wrapper: RespWrapper<Vec<serde_json::Value>> = serde_json::from_slice(&bytes).unwrap();
+
+    wrapper
+        .data
+        .iter()
+        .map(|p| Uuid::parse_str(p["id"].as_str().unwrap()).unwrap())
+        .collect()
+}
+
+pub async fn page_ids_in_order(app: &TestApp, release_id: Uuid) -> Vec<Uuid> {
+    let resp = app.get_pages(release_id).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let wrapper: RespWrapper<Vec<serde_json::Value>> = serde_json::from_slice(&bytes).unwrap();
+
+    wrapper
+        .data
+        .iter()
+        .map(|p| Uuid::parse_str(p["id"].as_str().unwrap()).unwrap())
+        .collect()
+}
+
 pub fn label_keys(labels: &[Label]) -> Vec<(Uuid, &str, &str)> {
     let mut keys: Vec<(Uuid, &str, &str)> = labels
         .iter()
@@ -127,6 +155,7 @@ pub struct TestApp {
     pub router: Router,
     pub s3: aws_sdk_s3::Client,
     pub covers_bucket: String,
+    pub release_pages_bucket: String,
 }
 
 impl TestApp {
@@ -135,6 +164,7 @@ impl TestApp {
 
         let db_name = Uuid::now_v7().to_string();
         let covers_bucket = format!("covers-{}", Uuid::now_v7());
+        let release_pages_bucket = format!("release-pages-{}", Uuid::now_v7());
         let cfg = Config::from_env_pairs([
             ("APP_DATABASE__USERNAME", "postgres"),
             ("APP_DATABASE__PASSWORD", "postgres"),
@@ -146,6 +176,10 @@ impl TestApp {
             ("APP_OBJECT_STORAGE__ACCESS_KEY", "rustfsadmin"),
             ("APP_OBJECT_STORAGE__SECRET_KEY", "rustfsadmin"),
             ("APP_OBJECT_STORAGE__COVERS_BUCKET", covers_bucket.as_str()),
+            (
+                "APP_OBJECT_STORAGE__RELEASE_PAGES_BUCKET",
+                release_pages_bucket.as_str(),
+            ),
             // Ignored pairs
             ("APP_ADDR", "0.0.0.0:0"),
             ("APP_LOG_LEVEL", "info"),
@@ -159,6 +193,7 @@ impl TestApp {
             router: app.router(),
             s3,
             covers_bucket,
+            release_pages_bucket,
         }
     }
 
@@ -180,20 +215,20 @@ impl TestApp {
         database::pool(cfg).await
     }
 
-    pub async fn object_exists(&self, key: Uuid) -> bool {
+    pub async fn object_exists(&self, bucket: &str, key: Uuid) -> bool {
         self.s3
             .head_object()
-            .bucket(&self.covers_bucket)
+            .bucket(bucket)
             .key(key.to_string())
             .send()
             .await
             .is_ok()
     }
 
-    pub async fn object_content_type(&self, key: Uuid) -> String {
+    pub async fn object_content_type(&self, bucket: &str, key: Uuid) -> String {
         self.s3
             .head_object()
-            .bucket(&self.covers_bucket)
+            .bucket(bucket)
             .key(key.to_string())
             .send()
             .await
@@ -203,13 +238,13 @@ impl TestApp {
             .to_owned()
     }
 
-    pub async fn objects_count(&self) -> usize {
+    pub async fn objects_count(&self, bucket: &str) -> usize {
         self.s3
             .list_objects_v2()
-            .bucket(&self.covers_bucket)
+            .bucket(bucket)
             .send()
             .await
-            .expect("failed to list the covers bucket")
+            .expect("failed to list the bucket")
             .contents()
             .len()
     }
@@ -721,5 +756,253 @@ values($1, $2, $3, $4, $5);
 
         let bytes = resp.into_body().collect().await.unwrap().to_bytes();
         serde_json::from_slice(&bytes).expect("failed to parse chapter page")
+    }
+}
+
+pub const MULTIPART_BOUNDARY: &str = "manga-theka-test-boundary";
+
+pub fn multipart_content_type() -> String {
+    format!("multipart/form-data; boundary={MULTIPART_BOUNDARY}")
+}
+
+pub fn multipart_body(parts: &[&[u8]]) -> Vec<u8> {
+    let mut body: Vec<u8> = Vec::new();
+
+    for (i, part) in parts.iter().enumerate() {
+        body.extend_from_slice(format!("--{MULTIPART_BOUNDARY}\r\n").as_bytes());
+        body.extend_from_slice(
+            format!(
+                "Content-Disposition: form-data; name=\"page{i}\"; filename=\"page{i}\"\r\n\r\n"
+            )
+            .as_bytes(),
+        );
+        body.extend_from_slice(part);
+        body.extend_from_slice(b"\r\n");
+    }
+    body.extend_from_slice(format!("--{MULTIPART_BOUNDARY}--\r\n").as_bytes());
+
+    body
+}
+
+impl TestApp {
+    pub async fn translation_language(&self, book_id: Uuid) -> Uuid {
+        let publication = sqlx::query_scalar!(
+            r#"
+select publication_language
+from books
+where id = $1;
+        "#,
+            book_id
+        )
+        .fetch_one(&self.pool)
+        .await
+        .expect("failed to read book publication language");
+
+        LANGUAGES
+            .iter()
+            .map(|l| l.id)
+            .find(|id| *id != publication)
+            .expect("the language catalog must hold a translation language")
+    }
+
+    pub async fn insert_release(&self, chapter_id: Uuid, language_id: Uuid) -> Uuid {
+        let id = Uuid::now_v7();
+
+        sqlx::query!(
+            r#"
+insert into chapter_releases(id, chapter_id, language_id, version)
+values($1, $2, $3, 0);
+        "#,
+            id,
+            chapter_id,
+            language_id
+        )
+        .execute(&self.pool)
+        .await
+        .expect("failed to insert factory chapter release");
+
+        id
+    }
+
+    pub async fn insert_random_release(&self, book_id: Uuid, chapter_id: Uuid) -> Uuid {
+        let language_id = self.translation_language(book_id).await;
+
+        self.insert_release(chapter_id, language_id).await
+    }
+
+    pub async fn insert_page(
+        &self,
+        release_id: Uuid,
+        sort_order: Option<i16>,
+        image: &'static [u8],
+    ) -> Uuid {
+        let id = Uuid::now_v7();
+        let extension =
+            PageExtension::try_from(image).expect("factory page must be a supported image");
+
+        sqlx::query!(
+            r#"
+insert into chapter_pages(id, release_id, sort_order, extension)
+values($1, $2, $3, $4);
+        "#,
+            id,
+            release_id,
+            sort_order,
+            extension.as_ref()
+        )
+        .execute(&self.pool)
+        .await
+        .expect("failed to insert factory chapter page");
+
+        self.s3
+            .put_object()
+            .bucket(&self.release_pages_bucket)
+            .key(id.to_string())
+            .content_type(extension.content_type())
+            .content_disposition(extension.content_disposition(id))
+            .body(ByteStream::from_static(image))
+            .send()
+            .await
+            .expect("failed to upload factory chapter page");
+
+        id
+    }
+
+    pub async fn fetch_release_version(&self, release_id: Uuid) -> i32 {
+        sqlx::query_scalar!(
+            r#"
+select version
+from chapter_releases
+where id = $1;
+        "#,
+            release_id
+        )
+        .fetch_one(&self.pool)
+        .await
+        .expect("failed to read chapter release version")
+    }
+
+    pub async fn fetch_page_order(&self, release_id: Uuid) -> Vec<(Uuid, Option<i16>)> {
+        sqlx::query!(
+            r#"
+select id, sort_order
+from chapter_pages
+where release_id = $1
+order by sort_order nulls last, id;
+        "#,
+            release_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .expect("failed to read chapter pages")
+        .into_iter()
+        .map(|r| (r.id, r.sort_order))
+        .collect()
+    }
+
+    pub async fn post_release(&self, chapter_id: Uuid, language_id: Uuid) -> Response {
+        let body = serde_json::json!({ "languageId": language_id }).to_string();
+        let req = Request::post(format!("/chapters/{chapter_id}/releases"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body))
+            .unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap()
+    }
+
+    pub async fn get_releases(&self, chapter_id: Uuid) -> Response {
+        let req = Request::get(format!("/chapters/{chapter_id}/releases"))
+            .body(Body::empty())
+            .unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap()
+    }
+
+    pub async fn get_release(&self, id: Uuid) -> Response {
+        let req = Request::get(format!("/releases/{id}"))
+            .body(Body::empty())
+            .unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap()
+    }
+
+    pub async fn get_release_etag(&self, release_id: Uuid) -> String {
+        let resp = self.get_release(release_id).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        resp.headers()
+            .get(header::ETAG)
+            .expect("a release read must carry a validator")
+            .to_str()
+            .unwrap()
+            .to_owned()
+    }
+
+    pub async fn post_upload(&self, release_id: Uuid, parts: &[&[u8]]) -> Response {
+        let req = Request::post(format!("/releases/{release_id}/upload"))
+            .header(header::CONTENT_TYPE, multipart_content_type())
+            .body(Body::from(multipart_body(parts)))
+            .unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap()
+    }
+
+    pub async fn post_commit(
+        &self,
+        release_id: Uuid,
+        if_match: Option<&str>,
+        page_order: &[Uuid],
+    ) -> Response {
+        let body = serde_json::json!({ "pageOrder": page_order }).to_string();
+        let mut req = Request::post(format!("/releases/{release_id}/commit"))
+            .header(header::CONTENT_TYPE, "application/json");
+
+        if let Some(validator) = if_match {
+            req = req.header(header::IF_MATCH, validator);
+        }
+
+        let req = req.body(Body::from(body)).unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap()
+    }
+
+    pub async fn get_pages(&self, release_id: Uuid) -> Response {
+        let req = Request::get(format!("/releases/{release_id}/pages"))
+            .body(Body::empty())
+            .unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap()
+    }
+
+    pub async fn get_staged(&self, release_id: Uuid) -> Response {
+        let req = Request::get(format!("/releases/{release_id}/staged"))
+            .body(Body::empty())
+            .unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap()
+    }
+
+    pub async fn get_page_image(&self, release_id: Uuid, page_id: Uuid) -> Response {
+        let req = Request::get(format!("/releases/{release_id}/pages/{page_id}/image"))
+            .body(Body::empty())
+            .unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap()
+    }
+
+    pub async fn delete_book(&self, id: Uuid) -> Response {
+        let req = Request::delete(format!("/books/{id}"))
+            .body(Body::empty())
+            .unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap()
+    }
+
+    pub async fn delete_release(&self, id: Uuid) -> Response {
+        let req = Request::delete(format!("/releases/{id}"))
+            .body(Body::empty())
+            .unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap()
     }
 }

@@ -19,6 +19,9 @@ pub enum AppError {
 
     #[error(transparent)]
     ServiceError(#[from] ServiceError),
+
+    #[error(transparent)]
+    MultipartError(#[from] axum::extract::multipart::MultipartError),
 }
 
 impl IntoResponse for AppError {
@@ -26,6 +29,7 @@ impl IntoResponse for AppError {
         match self {
             Self::EntityError(e) => e.into_response(),
             Self::ServiceError(e) => e.into_response(),
+            Self::MultipartError(e) => e.into_response(),
         }
     }
 }

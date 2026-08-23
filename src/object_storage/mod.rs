@@ -1,5 +1,6 @@
 mod book;
 mod object;
+mod release;
 
 use std::time::Duration;
 
@@ -9,7 +10,7 @@ use aws_sdk_s3::{
     config::{Credentials, Region, timeout::TimeoutConfig},
 };
 use secrecy::ExposeSecret;
-use tokio::sync::Semaphore;
+use tokio::{sync::Semaphore, time::sleep};
 
 use crate::config;
 
@@ -19,6 +20,8 @@ const OPERATION_TIMEOUT: Duration = Duration::from_secs(15);
 // RustFS accepts at most 8 bucket creations in flight, so hold that ceiling here and
 // let the rest queue.
 const BUCKET_CREATION_LIMIT: usize = 8;
+const BUCKET_CREATION_ATTEMPTS: u32 = 5;
+const BUCKET_CREATION_BACKOFF: Duration = Duration::from_millis(250);
 
 static BUCKET_CREATION: Semaphore = Semaphore::const_new(BUCKET_CREATION_LIMIT);
 
@@ -83,11 +86,29 @@ impl ObjectStorage {
             .await
             .expect("bucket creation semaphore has been closed");
 
-        self.client
-            .create_bucket()
-            .bucket(&self.bucket)
-            .send()
-            .await
-            .expect("bucket has not been ensured");
+        for attempt in 1..=BUCKET_CREATION_ATTEMPTS {
+            let err = match self
+                .client
+                .create_bucket()
+                .bucket(&self.bucket)
+                .send()
+                .await
+            {
+                Ok(_) => return,
+                Err(e) => e,
+            };
+
+            if let Some(service) = err.as_service_error()
+                && (service.is_bucket_already_exists() || service.is_bucket_already_owned_by_you())
+            {
+                return;
+            }
+
+            if attempt == BUCKET_CREATION_ATTEMPTS {
+                panic!("bucket has not been ensured: {err:?}");
+            }
+
+            sleep(BUCKET_CREATION_BACKOFF * attempt).await;
+        }
     }
 }

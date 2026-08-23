@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update chapter_releases\nset version = version + 1\nwhere id = $1 and version = $2\nreturning version;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "chapter_releases",
+            "name": "version"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "4b4a9b2ab8b2bc0d04c0f8034a8b794a111a3400b5c8bf99eeef82961e529d48"
+}

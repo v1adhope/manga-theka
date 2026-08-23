@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into chapter_releases(id, chapter_id, language_id, version)\nselect $1, c.id, $3, 0\nfrom chapters c\njoin books b on b.id = c.book_id\nwhere c.id = $2 and b.publication_language <> $3\nreturning id;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "chapter_releases",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f69aa224c1f9dead6df11d0f978277f09e175451c6fb6fda708e7398a919ca6a"
+}

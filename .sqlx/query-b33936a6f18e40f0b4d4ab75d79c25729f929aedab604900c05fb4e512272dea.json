@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from chapter_releases\nwhere chapter_id = $1;\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b33936a6f18e40f0b4d4ab75d79c25729f929aedab604900c05fb4e512272dea"
+}

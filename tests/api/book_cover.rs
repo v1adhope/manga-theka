@@ -22,7 +22,7 @@ async fn store_book_cover_is_sniffed_not_trusted_from_content_type() {
 
     let resp = app.router.clone().oneshot(req).await.unwrap();
     let cover_id = assert_stored(resp).await;
-    let content_type = app.object_content_type(cover_id).await;
+    let content_type = app.object_content_type(&app.covers_bucket, cover_id).await;
 
     assert_eq!(content_type, "image/png");
 }
@@ -40,7 +40,7 @@ async fn store_book_cover_with_unknown_format_returns_415() {
     let resp = app.router.clone().oneshot(req).await.unwrap();
     assert_error(resp, StatusCode::UNSUPPORTED_MEDIA_TYPE).await;
 
-    let obj_count = app.objects_count().await;
+    let obj_count = app.objects_count(&app.covers_bucket).await;
     let covers = app.fetch_covers(book_id).await;
 
     assert_eq!(obj_count, 0);
@@ -62,7 +62,7 @@ async fn store_book_cover_under_the_limit_passes() {
     let resp = app.router.clone().oneshot(req).await.unwrap();
     let cover_id = assert_stored(resp).await;
 
-    let obj_exists = app.object_exists(cover_id).await;
+    let obj_exists = app.object_exists(&app.covers_bucket, cover_id).await;
     assert!(obj_exists);
 }
 
@@ -81,7 +81,7 @@ async fn store_book_cover_with_oversized_body_returns_413() {
     let resp = app.router.clone().oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::PAYLOAD_TOO_LARGE);
 
-    let obj_count = app.objects_count().await;
+    let obj_count = app.objects_count(&app.covers_bucket).await;
     assert_eq!(obj_count, 0);
 }
 
@@ -96,7 +96,7 @@ async fn store_book_cover_for_unknown_book_returns_404() {
     let resp = app.router.clone().oneshot(req).await.unwrap();
     assert_error(resp, StatusCode::NOT_FOUND).await;
 
-    let obj_count = app.objects_count().await;
+    let obj_count = app.objects_count(&app.covers_bucket).await;
     assert_eq!(obj_count, 0,);
 }
 
@@ -283,8 +283,8 @@ async fn delete_book_cover_removes_it_from_the_gallery_and_purges_the_object() {
 
     let covers = app.fetch_covers(book_id).await;
     let cover_ids: Vec<Uuid> = covers.iter().map(|c| c.id).collect();
-    let first_obj_exists = app.object_exists(first_id).await;
-    let second_obj_exists = app.object_exists(second_id).await;
+    let first_obj_exists = app.object_exists(&app.covers_bucket, first_id).await;
+    let second_obj_exists = app.object_exists(&app.covers_bucket, second_id).await;
 
     assert_eq!(cover_ids, vec![second_id]);
     assert!(!first_obj_exists);
@@ -313,7 +313,7 @@ async fn delete_book_cover_of_another_book_returns_404() {
     let resp = app.delete_cover(other_book_id, cover_id).await;
     assert_error(resp, StatusCode::NOT_FOUND).await;
 
-    let obj_exists = app.object_exists(cover_id).await;
+    let obj_exists = app.object_exists(&app.covers_bucket, cover_id).await;
     assert!(obj_exists);
 }
 
@@ -354,8 +354,8 @@ async fn delete_book_removes_its_covers_and_purges_their_objects() {
     let resp = app.get_covers(book_id).await;
     assert_error(resp, StatusCode::NOT_FOUND).await;
 
-    let first_obj_exists = app.object_exists(first_id).await;
-    let second_obj_exists = app.object_exists(second_id).await;
+    let first_obj_exists = app.object_exists(&app.covers_bucket, first_id).await;
+    let second_obj_exists = app.object_exists(&app.covers_bucket, second_id).await;
 
     assert!(!first_obj_exists);
     assert!(!second_obj_exists);

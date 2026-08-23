@@ -4,17 +4,23 @@ mod content_rating;
 mod creator;
 mod label;
 mod language;
+mod release;
 
 use crate::{database::Database, object_storage::ObjectStorage};
 
 #[derive(Debug, Clone)]
 pub struct Service {
     pub database: Database,
-    pub storage: ObjectStorage,
+    pub covers: ObjectStorage,
+    pub release_pages: ObjectStorage,
 }
 
 impl Service {
-    pub fn new(database: Database, storage: ObjectStorage) -> Self {
-        Self { database, storage }
+    pub fn new(database: Database, covers: ObjectStorage, release_pages: ObjectStorage) -> Self {
+        Self {
+            database,
+            covers,
+            release_pages,
+        }
     }
 }

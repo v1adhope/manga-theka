@@ -5,6 +5,7 @@ mod creator;
 mod healthz;
 mod label;
 mod language;
+mod release;
 
 pub use book::*;
 pub use chapter::*;
@@ -13,6 +14,7 @@ pub use creator::*;
 pub use healthz::*;
 pub use label::*;
 pub use language::*;
+pub use release::*;
 
 use axum::{Json, http::StatusCode};
 use serde::{Deserialize, Serialize};

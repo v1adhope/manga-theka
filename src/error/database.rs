@@ -4,7 +4,7 @@ use axum::{
 };
 use thiserror::Error;
 
-use crate::entity::{Book, Entity};
+use crate::entity::{Book, ChapterRelease, Entity};
 
 #[derive(Error, Debug)]
 #[non_exhaustive]
@@ -45,6 +45,15 @@ pub enum DatabaseError {
 
     #[error("Another cover was promoted concurrently")]
     BookCoverMainConflict(#[source] sqlx::Error),
+
+    #[error("Chapter release language must differ from the book's publication language")]
+    ChapterReleaseLanguageIsPublicationLanguage,
+
+    #[error("Chapter release has been modified since it was read")]
+    ChapterReleaseVersionIsStale,
+
+    #[error("Declared page order names a page outside the release")]
+    PageOrderIsForeign,
 
     #[error("Database invariant corrupted on field '{field}': {msg}")]
     InvariantCorrupted { field: &'static str, msg: String },
@@ -241,6 +250,27 @@ impl From<sqlx::Error> for DatabaseError {
                         source: err,
                     };
                 }
+                Some("fk_chapter_pages_chapter_releases_release_id") => {
+                    return Self::not_found::<ChapterRelease>();
+                }
+                Some("fk_chapter_releases_languages_language_id") => {
+                    return Self::DoesNotExist {
+                        field: "Chapter release language",
+                        source: err,
+                    };
+                }
+                Some("enum_chapter_pages_extension") => {
+                    return Self::DoesNotExist {
+                        field: "Chapter page extension",
+                        source: err,
+                    };
+                }
+                Some("check_range_chapter_pages_sort_order") => {
+                    return Self::OutOfRange {
+                        field: "Chapter page sort order",
+                        source: err,
+                    };
+                }
                 _ => {}
             }
         }
@@ -256,12 +286,17 @@ impl IntoResponse for DatabaseError {
                 "Something went wrong".to_string(),
             ),
             Self::NotFound { .. } => (StatusCode::NOT_FOUND, self.to_string()),
+            Self::ChapterReleaseVersionIsStale => {
+                (StatusCode::PRECONDITION_FAILED, self.to_string())
+            }
             Self::AlreadyExists { .. } | Self::CreatorInUse(_) | Self::BookCoverMainConflict(_) => {
                 (StatusCode::CONFLICT, self.to_string())
             }
-            Self::OutOfRange { .. } | Self::DoesNotExist { .. } | Self::Duplication { .. } => {
-                (StatusCode::UNPROCESSABLE_ENTITY, self.to_string())
-            }
+            Self::OutOfRange { .. }
+            | Self::DoesNotExist { .. }
+            | Self::Duplication { .. }
+            | Self::ChapterReleaseLanguageIsPublicationLanguage
+            | Self::PageOrderIsForeign => (StatusCode::UNPROCESSABLE_ENTITY, self.to_string()),
         }
         .into_response()
     }

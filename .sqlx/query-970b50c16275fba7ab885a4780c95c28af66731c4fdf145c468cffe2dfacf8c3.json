@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into chapter_pages(id, release_id, sort_order, extension)\nvalues($1, $2, null, $3);\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "970b50c16275fba7ab885a4780c95c28af66731c4fdf145c468cffe2dfacf8c3"
+}
