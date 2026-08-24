@@ -57,8 +57,6 @@ tasks:
       - task: audit
       - task: machete
       - task: test
-      - task: build
-      - task: code-cov
 
   up:
     desc: Build and start docker compose services in detached mode
