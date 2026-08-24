@@ -36,13 +36,6 @@ impl Service {
     }
 
     pub async fn delete_chapter(&self, id: Uuid) -> Result<(), ServiceError> {
-        let page_ids = self.database.get_chapter_page_ids(id).await?;
-
-        self.database.delete_chapter(id).await?;
-
-        self.release_pages
-            .delete_many(&page_ids)
-            .await
-            .map_err(Into::into)
+        self.database.delete_chapter(id).await.map_err(Into::into)
     }
 }

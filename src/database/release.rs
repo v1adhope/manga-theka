@@ -382,22 +382,4 @@ impl Database {
 
         Ok(())
     }
-
-    #[instrument(name = "db.chapter_page.ids_by_chapter", skip_all, fields(chapter.id = %chapter_id))]
-    pub async fn get_chapter_page_ids(&self, chapter_id: Uuid) -> Result<Vec<Uuid>, DatabaseError> {
-        sqlx::query_file_scalar!("queries/get_chapter_page_ids.sql", chapter_id)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(DatabaseError::from)
-            .inspect_err(DatabaseError::log_internal)
-    }
-
-    #[instrument(name = "db.chapter_page.ids_by_book", skip_all, fields(book.id = %book_id))]
-    pub async fn get_book_page_ids(&self, book_id: Uuid) -> Result<Vec<Uuid>, DatabaseError> {
-        sqlx::query_file_scalar!("queries/get_book_page_ids.sql", book_id)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(DatabaseError::from)
-            .inspect_err(DatabaseError::log_internal)
-    }
 }

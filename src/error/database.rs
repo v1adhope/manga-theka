@@ -46,6 +46,9 @@ pub enum DatabaseError {
     #[error("Another cover was promoted concurrently")]
     BookCoverMainConflict(#[source] sqlx::Error),
 
+    #[error("Chapter has one or more releases")]
+    ChapterInUse(#[source] sqlx::Error),
+
     #[error("Chapter release language must differ from the book's publication language")]
     ChapterReleaseLanguageIsPublicationLanguage,
 
@@ -250,6 +253,9 @@ impl From<sqlx::Error> for DatabaseError {
                         source: err,
                     };
                 }
+                Some("fk_chapter_releases_chapters_chapter_id") => {
+                    return Self::ChapterInUse(err);
+                }
                 Some("fk_chapter_pages_chapter_releases_release_id") => {
                     return Self::not_found::<ChapterRelease>();
                 }
@@ -289,9 +295,10 @@ impl IntoResponse for DatabaseError {
             Self::ChapterReleaseVersionIsStale => {
                 (StatusCode::PRECONDITION_FAILED, self.to_string())
             }
-            Self::AlreadyExists { .. } | Self::CreatorInUse(_) | Self::BookCoverMainConflict(_) => {
-                (StatusCode::CONFLICT, self.to_string())
-            }
+            Self::AlreadyExists { .. }
+            | Self::CreatorInUse(_)
+            | Self::ChapterInUse(_)
+            | Self::BookCoverMainConflict(_) => (StatusCode::CONFLICT, self.to_string()),
             Self::OutOfRange { .. }
             | Self::DoesNotExist { .. }
             | Self::Duplication { .. }

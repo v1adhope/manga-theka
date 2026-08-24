@@ -685,7 +685,7 @@ async fn delete_chapter_release_twice_returns_404() {
 }
 
 #[tokio::test]
-async fn delete_chapter_purges_its_releases_pages_and_images() {
+async fn delete_chapter_holding_a_release_returns_409() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
     let chapter_id = app.insert_random_chapter(book_id).await;
@@ -693,16 +693,34 @@ async fn delete_chapter_purges_its_releases_pages_and_images() {
     let page_id = app.insert_page(release_id, Some(1), COVER_PNG).await;
 
     let resp = app.delete_chapter(chapter_id).await;
-    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+    assert_error(resp, StatusCode::CONFLICT).await;
 
     let resp = app.get_release(release_id).await;
-    assert_error(resp, StatusCode::NOT_FOUND).await;
+    assert_eq!(resp.status(), StatusCode::OK);
 
-    assert!(!app.object_exists(&app.release_pages_bucket, page_id).await);
+    assert!(app.object_exists(&app.release_pages_bucket, page_id).await);
 }
 
 #[tokio::test]
-async fn delete_book_purges_its_chapters_releases_pages_and_images() {
+async fn delete_chapter_passes_once_its_releases_are_deleted() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+    let chapter_id = app.insert_random_chapter(book_id).await;
+    let release_id = app.insert_random_release(book_id, chapter_id).await;
+    app.insert_page(release_id, Some(1), COVER_PNG).await;
+
+    let resp = app.delete_release(release_id).await;
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    let resp = app.delete_chapter(chapter_id).await;
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    let sample = app.fetch_chapter_sample(chapter_id).await;
+    assert!(sample.number.is_none());
+}
+
+#[tokio::test]
+async fn delete_book_holding_a_release_returns_409() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
     let chapter_id = app.insert_random_chapter(book_id).await;
@@ -710,12 +728,54 @@ async fn delete_book_purges_its_chapters_releases_pages_and_images() {
     let page_id = app.insert_page(release_id, Some(1), COVER_PNG).await;
 
     let resp = app.delete_book(book_id).await;
-    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+    assert_error(resp, StatusCode::CONFLICT).await;
 
     let resp = app.get_release(release_id).await;
-    assert_error(resp, StatusCode::NOT_FOUND).await;
+    assert_eq!(resp.status(), StatusCode::OK);
 
-    assert!(!app.object_exists(&app.release_pages_bucket, page_id).await);
+    assert!(app.object_exists(&app.release_pages_bucket, page_id).await);
+}
+
+#[tokio::test]
+async fn delete_book_passes_once_its_releases_are_deleted() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+    let chapter_id = app.insert_random_chapter(book_id).await;
+    let release_id = app.insert_random_release(book_id, chapter_id).await;
+    app.insert_page(release_id, Some(1), COVER_PNG).await;
+
+    let resp = app.delete_release(release_id).await;
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    let resp = app.delete_book(book_id).await;
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    let sample = app.fetch_book_sample(book_id).await;
+    assert!(sample.name.is_none());
+}
+
+#[tokio::test]
+async fn delete_book_holding_an_unlisted_release_returns_409() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+    let chapter_id = app.insert_random_chapter(book_id).await;
+    let draft_id = app.insert_random_release(book_id, chapter_id).await;
+
+    let resp = app.get_releases(chapter_id).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let wrapper: RespWrapper<Vec<serde_json::Value>> = serde_json::from_slice(&bytes).unwrap();
+    assert!(wrapper.data.is_empty());
+
+    let resp = app.delete_chapter(chapter_id).await;
+    assert_error(resp, StatusCode::CONFLICT).await;
+
+    let resp = app.delete_book(book_id).await;
+    assert_error(resp, StatusCode::CONFLICT).await;
+
+    let resp = app.get_release(draft_id).await;
+    assert_eq!(resp.status(), StatusCode::OK);
 }
 
 #[tokio::test]

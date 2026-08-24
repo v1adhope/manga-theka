@@ -1,7 +1,7 @@
 use uuid::Uuid;
 
 use crate::{
-    entity::{Book, BookCover, BookCoverQuery, COVER_PRESIGN_TTL, Filter},
+    entity::{Book, BookCover, BookCoverQuery, Filter},
     error::ServiceError,
     service::Service,
 };
@@ -34,23 +34,19 @@ impl Service {
 
     pub async fn delete_book(&self, id: Uuid) -> Result<(), ServiceError> {
         let cover_ids = self.database.get_book_cover_ids(id).await?;
-        let page_ids = self.database.get_book_page_ids(id).await?;
 
         self.database.delete_book(id).await?;
 
-        let covers = self.covers.delete_many(&cover_ids).await;
-        let pages = self.release_pages.delete_many(&page_ids).await;
-
-        covers?;
-        pages?;
-
-        Ok(())
+        self.storage
+            .delete_book_covers(&cover_ids)
+            .await
+            .map_err(Into::into)
     }
 
     pub async fn store_book_cover(&self, item: &BookCover) -> Result<(), ServiceError> {
         self.database.ensure_book_exists(item.book_id).await?;
 
-        self.covers.upload_book_cover(item).await?;
+        self.storage.upload_book_cover(item).await?;
 
         self.database
             .store_book_cover(item)
@@ -77,8 +73,8 @@ impl Service {
     ) -> Result<String, ServiceError> {
         self.database.ensure_book_cover_exists(book_id, id).await?;
 
-        self.covers
-            .presign(&id.to_string(), COVER_PRESIGN_TTL)
+        self.storage
+            .presign_book_cover(id)
             .await
             .map_err(Into::into)
     }
@@ -93,6 +89,9 @@ impl Service {
     pub async fn delete_book_cover(&self, book_id: Uuid, id: Uuid) -> Result<(), ServiceError> {
         self.database.delete_book_cover(book_id, id).await?;
 
-        self.covers.delete(id).await.map_err(Into::into)
+        self.storage
+            .delete_book_covers(&[id])
+            .await
+            .map_err(Into::into)
     }
 }

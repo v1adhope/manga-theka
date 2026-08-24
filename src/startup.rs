@@ -34,13 +34,14 @@ impl App {
         database.migrate().await;
 
         let client = object_storage::client(&cfg.object_storage).await;
-        let covers = ObjectStorage::new(client.clone(), cfg.object_storage.covers_bucket.clone());
-        covers.ensure_bucket().await;
-        let release_pages =
-            ObjectStorage::new(client, cfg.object_storage.release_pages_bucket.clone());
-        release_pages.ensure_bucket().await;
+        let storage = ObjectStorage::new(
+            client,
+            cfg.object_storage.covers_bucket.clone(),
+            cfg.object_storage.release_pages_bucket.clone(),
+        );
+        storage.ensure_buckets().await;
 
-        let service = Service::new(database, covers, release_pages);
+        let service = Service::new(database, storage);
 
         let router = Router::new()
             .route("/healthz", get(healthz))

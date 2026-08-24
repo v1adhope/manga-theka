@@ -2,8 +2,8 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        ChapterPage, ChapterPageQuery, ChapterRelease, ChapterReleaseQuery, PAGE_PRESIGN_TTL,
-        PageOrder, ReleaseVersion, StagedPageQuery,
+        ChapterPage, ChapterPageQuery, ChapterRelease, ChapterReleaseQuery, PageOrder,
+        ReleaseVersion, StagedPageQuery,
     },
     error::ServiceError,
     service::Service,
@@ -51,7 +51,7 @@ impl Service {
     }
 
     pub async fn store_chapter_page(&self, item: &ChapterPage) -> Result<(), ServiceError> {
-        self.release_pages.upload_chapter_page(item).await?;
+        self.storage.upload_chapter_page(item).await?;
 
         self.database
             .store_chapter_page(item)
@@ -70,7 +70,7 @@ impl Service {
             .commit_chapter_release(id, version, order)
             .await?;
 
-        let _ = self.release_pages.delete_many(&removed).await;
+        let _ = self.storage.delete_chapter_pages(&removed).await;
 
         Ok(())
     }
@@ -108,8 +108,8 @@ impl Service {
             .ensure_chapter_page_exists(release_id, id)
             .await?;
 
-        self.release_pages
-            .presign(&id.to_string(), PAGE_PRESIGN_TTL)
+        self.storage
+            .presign_chapter_page(id)
             .await
             .map_err(Into::into)
     }
@@ -119,8 +119,8 @@ impl Service {
 
         self.database.delete_chapter_release(id).await?;
 
-        self.release_pages
-            .delete_many(&page_ids)
+        self.storage
+            .delete_chapter_pages(&page_ids)
             .await
             .map_err(Into::into)
     }

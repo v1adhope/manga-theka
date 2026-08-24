@@ -14,9 +14,10 @@ use crate::{error::ObjectStorageError, object_storage::ObjectStorage};
 const DELETE_BATCH_MAX: usize = 1000;
 
 impl ObjectStorage {
-    #[instrument(name = "object_storage.object.upload", skip_all, fields(bucket = %self.bucket, key = %key))]
-    pub async fn upload(
+    #[instrument(name = "object_storage.object.upload", skip_all, fields(bucket = %bucket, key = %key))]
+    pub(super) async fn upload(
         &self,
+        bucket: &str,
         key: &str,
         body: Bytes,
         content_type: &str,
@@ -24,7 +25,7 @@ impl ObjectStorage {
     ) -> Result<(), ObjectStorageError> {
         self.client
             .put_object()
-            .bucket(&self.bucket)
+            .bucket(bucket)
             .key(key)
             .content_type(content_type)
             .content_disposition(content_disposition)
@@ -37,21 +38,31 @@ impl ObjectStorage {
         Ok(())
     }
 
-    #[instrument(name = "object_storage.object.presign", skip_all, fields(bucket = %self.bucket, key = %key))]
-    pub async fn presign(&self, key: &str, ttl: Duration) -> Result<String, ObjectStorageError> {
-        self.presign_inner(key, ttl)
+    #[instrument(name = "object_storage.object.presign", skip_all, fields(bucket = %bucket, key = %key))]
+    pub(super) async fn presign(
+        &self,
+        bucket: &str,
+        key: &str,
+        ttl: Duration,
+    ) -> Result<String, ObjectStorageError> {
+        self.presign_inner(bucket, key, ttl)
             .await
             .map_err(ObjectStorageError::Presign)
             .inspect_err(ObjectStorageError::log_internal)
     }
 
-    async fn presign_inner(&self, key: &str, ttl: Duration) -> anyhow::Result<String> {
+    async fn presign_inner(
+        &self,
+        bucket: &str,
+        key: &str,
+        ttl: Duration,
+    ) -> anyhow::Result<String> {
         let presigning = PresigningConfig::expires_in(ttl)?;
 
         let req = self
             .client
             .get_object()
-            .bucket(&self.bucket)
+            .bucket(bucket)
             .key(key)
             .presigned(presigning)
             .await?;
@@ -59,20 +70,19 @@ impl ObjectStorage {
         Ok(req.uri().to_owned())
     }
 
-    #[instrument(name = "object_storage.object.delete", skip_all, fields(bucket = %self.bucket, key = %key))]
-    pub async fn delete(&self, key: Uuid) -> Result<(), ObjectStorageError> {
-        self.delete_many(&[key]).await
-    }
-
-    #[instrument(name = "object_storage.object.delete_many", skip_all, fields(bucket = %self.bucket, keys = keys.len()))]
-    pub async fn delete_many(&self, keys: &[Uuid]) -> Result<(), ObjectStorageError> {
-        self.delete_many_inner(keys)
+    #[instrument(name = "object_storage.object.delete_many", skip_all, fields(bucket = %bucket, keys = keys.len()))]
+    pub(super) async fn delete_many(
+        &self,
+        bucket: &str,
+        keys: &[Uuid],
+    ) -> Result<(), ObjectStorageError> {
+        self.delete_many_inner(bucket, keys)
             .await
             .map_err(ObjectStorageError::Delete)
             .inspect_err(ObjectStorageError::log_internal)
     }
 
-    async fn delete_many_inner(&self, keys: &[Uuid]) -> anyhow::Result<()> {
+    async fn delete_many_inner(&self, bucket: &str, keys: &[Uuid]) -> anyhow::Result<()> {
         if keys.is_empty() {
             return Ok(());
         }
@@ -91,7 +101,7 @@ impl ObjectStorage {
             let res = self
                 .client
                 .delete_objects()
-                .bucket(&self.bucket)
+                .bucket(bucket)
                 .delete(delete)
                 .send()
                 .await?;

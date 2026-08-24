@@ -11,16 +11,11 @@ use crate::{database::Database, object_storage::ObjectStorage};
 #[derive(Debug, Clone)]
 pub struct Service {
     pub database: Database,
-    pub covers: ObjectStorage,
-    pub release_pages: ObjectStorage,
+    pub storage: ObjectStorage,
 }
 
 impl Service {
-    pub fn new(database: Database, covers: ObjectStorage, release_pages: ObjectStorage) -> Self {
-        Self {
-            database,
-            covers,
-            release_pages,
-        }
+    pub fn new(database: Database, storage: ObjectStorage) -> Self {
+        Self { database, storage }
     }
 }
