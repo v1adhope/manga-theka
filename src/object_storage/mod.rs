@@ -14,8 +14,7 @@ use tokio::sync::Semaphore;
 
 use crate::config;
 
-const COVER_PRESIGN_TTL: Duration = Duration::from_secs(300);
-const PAGE_PRESIGN_TTL: Duration = Duration::from_secs(300);
+const DEFAULT_PRESIGN_TTL: Duration = Duration::from_secs(300);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
 const OPERATION_ATTEMPT_TIMEOUT: Duration = Duration::from_secs(5);
 const OPERATION_TIMEOUT: Duration = Duration::from_secs(15);

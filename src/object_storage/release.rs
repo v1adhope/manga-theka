@@ -4,7 +4,7 @@ use uuid::Uuid;
 use crate::{
     entity::ChapterPage,
     error::ObjectStorageError,
-    object_storage::{ObjectStorage, PAGE_PRESIGN_TTL},
+    object_storage::{DEFAULT_PRESIGN_TTL, ObjectStorage},
 };
 
 impl ObjectStorage {
@@ -25,7 +25,7 @@ impl ObjectStorage {
         self.presign(
             &self.release_pages_bucket,
             &id.to_string(),
-            PAGE_PRESIGN_TTL,
+            DEFAULT_PRESIGN_TTL,
         )
         .await
     }

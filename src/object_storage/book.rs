@@ -4,7 +4,7 @@ use uuid::Uuid;
 use crate::{
     entity::BookCover,
     error::ObjectStorageError,
-    object_storage::{COVER_PRESIGN_TTL, ObjectStorage},
+    object_storage::{DEFAULT_PRESIGN_TTL, ObjectStorage},
 };
 
 impl ObjectStorage {
@@ -22,7 +22,7 @@ impl ObjectStorage {
 
     #[instrument(name = "object_storage.book_cover.presign", skip_all, fields(cover.id = %id))]
     pub async fn presign_book_cover(&self, id: Uuid) -> Result<String, ObjectStorageError> {
-        self.presign(&self.covers_bucket, &id.to_string(), COVER_PRESIGN_TTL)
+        self.presign(&self.covers_bucket, &id.to_string(), DEFAULT_PRESIGN_TTL)
             .await
     }
 
