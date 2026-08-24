@@ -2,9 +2,9 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::{
-    entity::{BookCover, COVER_PRESIGN_TTL},
+    entity::BookCover,
     error::ObjectStorageError,
-    object_storage::ObjectStorage,
+    object_storage::{COVER_PRESIGN_TTL, ObjectStorage},
 };
 
 impl ObjectStorage {

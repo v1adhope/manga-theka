@@ -3,7 +3,7 @@ use uuid::Uuid;
 use crate::{
     entity::{
         ChapterPage, ChapterPageQuery, ChapterRelease, ChapterReleaseQuery, PageOrder,
-        ReleaseVersion, StagedPageQuery,
+        StagedPageQuery,
     },
     error::ServiceError,
     service::Service,
@@ -62,13 +62,9 @@ impl Service {
     pub async fn commit_chapter_release(
         &self,
         id: Uuid,
-        version: ReleaseVersion,
         order: &PageOrder,
     ) -> Result<(), ServiceError> {
-        let removed = self
-            .database
-            .commit_chapter_release(id, version, order)
-            .await?;
+        let removed = self.database.commit_chapter_release(id, order).await?;
 
         let _ = self.storage.delete_chapter_pages(&removed).await;
 
@@ -78,11 +74,15 @@ impl Service {
     pub async fn get_chapter_pages(
         &self,
         release_id: Uuid,
-    ) -> Result<(Vec<ChapterPageQuery>, ReleaseVersion), ServiceError> {
-        let release = self.database.get_chapter_release(release_id).await?;
-        let pages = self.database.get_chapter_pages(release_id).await?;
+    ) -> Result<Vec<ChapterPageQuery>, ServiceError> {
+        self.database
+            .ensure_chapter_release_exists(release_id)
+            .await?;
 
-        Ok((pages, release.version))
+        self.database
+            .get_chapter_pages(release_id)
+            .await
+            .map_err(Into::into)
     }
 
     pub async fn get_staged_chapter_pages(

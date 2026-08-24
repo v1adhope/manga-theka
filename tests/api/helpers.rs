@@ -13,8 +13,8 @@ use manga_theka::{
     database,
     entity::{
         AlternativeTitle, Book, BookCoverQuery, BookLink, BookName, Chapter, ChapterLocalization,
-        ChapterName, ChapterNumber, ChapterVolume, ContentRating, CoverExtension, CoverUrl,
-        Creator, Description, Label, Language, LinkUrl, Name, PageExtension,
+        ChapterName, ChapterNumber, ChapterVolume, ContentRating, CoverUrl, Creator, Description,
+        ImageExtension, Label, Language, LinkUrl, Name,
     },
     object_storage,
     startup::App,
@@ -108,6 +108,16 @@ pub async fn page_ids_in_order(app: &TestApp, release_id: Uuid) -> Vec<Uuid> {
         .iter()
         .map(|p| Uuid::parse_str(p["id"].as_str().unwrap()).unwrap())
         .collect()
+}
+
+pub async fn release_version(app: &TestApp, release_id: Uuid) -> i64 {
+    let resp = app.get_release(release_id).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let wrapper: RespWrapper<serde_json::Value> = serde_json::from_slice(&bytes).unwrap();
+
+    wrapper.data["version"].as_i64().unwrap()
 }
 
 pub fn label_keys(labels: &[Label]) -> Vec<(Uuid, &str, &str)> {
@@ -515,7 +525,7 @@ order by id;
     pub async fn insert_cover(&self, book_id: Uuid, image: &'static [u8]) -> Uuid {
         let id = Uuid::now_v7();
         let extension =
-            CoverExtension::try_from(image).expect("factory cover must be a supported image");
+            ImageExtension::try_from(image).expect("factory cover must be a supported image");
 
         sqlx::query!(
             r#"
@@ -838,7 +848,7 @@ values($1, $2, $3, 0);
     ) -> Uuid {
         let id = Uuid::now_v7();
         let extension =
-            PageExtension::try_from(image).expect("factory page must be a supported image");
+            ImageExtension::try_from(image).expect("factory page must be a supported image");
 
         sqlx::query!(
             r#"
@@ -926,18 +936,6 @@ order by sort_order nulls last, id;
         self.router.clone().oneshot(req).await.unwrap()
     }
 
-    pub async fn get_release_etag(&self, release_id: Uuid) -> String {
-        let resp = self.get_release(release_id).await;
-        assert_eq!(resp.status(), StatusCode::OK);
-
-        resp.headers()
-            .get(header::ETAG)
-            .expect("a release read must carry a validator")
-            .to_str()
-            .unwrap()
-            .to_owned()
-    }
-
     pub async fn post_upload(&self, release_id: Uuid, parts: &[&[u8]]) -> Response {
         let req = Request::post(format!("/releases/{release_id}/upload"))
             .header(header::CONTENT_TYPE, multipart_content_type())
@@ -947,21 +945,12 @@ order by sort_order nulls last, id;
         self.router.clone().oneshot(req).await.unwrap()
     }
 
-    pub async fn post_commit(
-        &self,
-        release_id: Uuid,
-        if_match: Option<&str>,
-        page_order: &[Uuid],
-    ) -> Response {
+    pub async fn post_commit(&self, release_id: Uuid, page_order: &[Uuid]) -> Response {
         let body = serde_json::json!({ "pageOrder": page_order }).to_string();
-        let mut req = Request::post(format!("/releases/{release_id}/commit"))
-            .header(header::CONTENT_TYPE, "application/json");
-
-        if let Some(validator) = if_match {
-            req = req.header(header::IF_MATCH, validator);
-        }
-
-        let req = req.body(Body::from(body)).unwrap();
+        let req = Request::post(format!("/releases/{release_id}/commit"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body))
+            .unwrap();
 
         self.router.clone().oneshot(req).await.unwrap()
     }

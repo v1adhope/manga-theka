@@ -8,8 +8,8 @@ use crate::{
     database::{Database, creator::CreatorRow, label::LabelRow},
     entity::{
         AlternativeTitle, Book, BookCover, BookCoverQuery, BookKind, BookLink, BookLinkKind,
-        BookName, BookStatus, ContentRating, CoverExtension, Creator, DEFAULT_LIMIT, Description,
-        Filter, Label, Language, Limit, LinkUrl,
+        BookName, BookStatus, ContentRating, Creator, DEFAULT_LIMIT, Description, Filter,
+        ImageExtension, Label, Language, Limit, LinkUrl,
     },
     error::DatabaseError,
 };
@@ -105,7 +105,7 @@ impl TryFrom<BookCoverRow> for BookCoverQuery {
 
     fn try_from(row: BookCoverRow) -> Result<Self, Self::Error> {
         let url = (row.book_id, row.id).into();
-        let extension: CoverExtension = row
+        let extension: ImageExtension = row
             .extension
             .parse()
             .map_err(|e| DatabaseError::invariant_corrupted("extension", e))?;

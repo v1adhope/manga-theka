@@ -8,8 +8,21 @@ pub use entity::*;
 pub use object_storage::*;
 pub use service::*;
 
-use axum::response::{IntoResponse, Response};
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Response},
+};
 use thiserror::Error;
+
+const INTERNAL_MESSAGE: &str = "Something went wrong";
+
+pub fn error_response(status: StatusCode, message: String) -> Response {
+    if status.is_server_error() {
+        return (status, INTERNAL_MESSAGE.to_string()).into_response();
+    }
+
+    (status, message).into_response()
+}
 
 #[derive(Debug, Error)]
 #[non_exhaustive]
@@ -29,7 +42,7 @@ impl IntoResponse for AppError {
         match self {
             Self::EntityError(e) => e.into_response(),
             Self::ServiceError(e) => e.into_response(),
-            Self::MultipartError(e) => e.into_response(),
+            Self::MultipartError(e) => error_response(e.status(), e.to_string()),
         }
     }
 }

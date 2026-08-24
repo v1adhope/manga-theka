@@ -1,7 +1,7 @@
 use axum::{
     Json,
     extract::{Multipart, Path, State, multipart::Field},
-    http::{HeaderMap, StatusCode, header},
+    http::{StatusCode, header},
     response::IntoResponse,
 };
 use bytes::{Bytes, BytesMut};
@@ -10,8 +10,8 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        ChapterPage, ChapterRelease, MAX_PARTS_PER_REQUEST, MAX_RELEASE_ROWS, PAGE_MAX_BYTES,
-        PageExtension, PageOrder, ReleaseVersion, StagedPageQuery,
+        ChapterPage, ChapterRelease, ImageExtension, MAX_PARTS_PER_REQUEST, MAX_RELEASE_ROWS,
+        PAGE_MAX_BYTES, PageOrder, StagedPageQuery,
     },
     error::{AppError, EntityError},
     route::{StoreResp, json_data_response},
@@ -55,15 +55,10 @@ pub async fn get_chapter_releases(
 pub async fn get_chapter_release(
     State(service): State<Service>,
     Path(id): Path<Uuid>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let release = service.get_chapter_release(id).await?;
-    let etag = release.version.to_string();
 
-    Ok((
-        StatusCode::OK,
-        [(header::ETAG, etag)],
-        Json(serde_json::json!({ "data": release })),
-    ))
+    Ok(json_data_response(StatusCode::OK, release))
 }
 
 pub async fn upload_chapter_pages(
@@ -89,7 +84,7 @@ pub async fn upload_chapter_pages(
         }
 
         let content = collect_part(field).await?;
-        let extension = PageExtension::try_from(content.as_ref())?;
+        let extension = ImageExtension::try_from(content.as_ref())?;
         let page = ChapterPage {
             id: Uuid::now_v7(),
             release_id,
@@ -132,43 +127,22 @@ pub struct CommitReq {
 pub async fn commit_chapter_release(
     State(service): State<Service>,
     Path(id): Path<Uuid>,
-    headers: HeaderMap,
     Json(req): Json<CommitReq>,
 ) -> Result<StatusCode, AppError> {
-    let version = if_match(&headers)?;
     let order = PageOrder::try_from(req.page_order)?;
 
-    service.commit_chapter_release(id, version, &order).await?;
+    service.commit_chapter_release(id, &order).await?;
 
     Ok(StatusCode::NO_CONTENT)
-}
-
-fn if_match(headers: &HeaderMap) -> Result<ReleaseVersion, EntityError> {
-    let raw = headers
-        .get(header::IF_MATCH)
-        .ok_or(EntityError::ReleaseVersionIsAbsent)?;
-
-    raw.to_str()
-        .map_err(|_| {
-            EntityError::ReleaseVersionIsMalformed(
-                String::from_utf8_lossy(raw.as_bytes()).into_owned(),
-            )
-        })?
-        .parse()
 }
 
 pub async fn get_chapter_pages(
     State(service): State<Service>,
     Path(release_id): Path<Uuid>,
-) -> Result<impl IntoResponse, AppError> {
-    let (pages, version) = service.get_chapter_pages(release_id).await?;
-    let etag = version.to_string();
+) -> Result<(StatusCode, impl IntoResponse), AppError> {
+    let pages = service.get_chapter_pages(release_id).await?;
 
-    Ok((
-        StatusCode::OK,
-        [(header::ETAG, etag)],
-        Json(serde_json::json!({ "data": pages })),
-    ))
+    Ok(json_data_response(StatusCode::OK, pages))
 }
 
 pub async fn get_staged_chapter_pages(

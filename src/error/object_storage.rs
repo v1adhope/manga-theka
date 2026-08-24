@@ -4,6 +4,8 @@ use axum::{
 };
 use thiserror::Error;
 
+use crate::error::error_response;
+
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum ObjectStorageError {
@@ -25,10 +27,6 @@ impl ObjectStorageError {
 
 impl IntoResponse for ObjectStorageError {
     fn into_response(self) -> Response {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Something went wrong".to_string(),
-        )
-            .into_response()
+        error_response(StatusCode::INTERNAL_SERVER_ERROR, self.to_string())
     }
 }

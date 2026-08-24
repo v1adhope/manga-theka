@@ -4,7 +4,10 @@ use axum::{
 };
 use thiserror::Error;
 
-use crate::entity::{Book, ChapterRelease, Entity};
+use crate::{
+    entity::{Book, ChapterRelease, Entity},
+    error::error_response,
+};
 
 #[derive(Error, Debug)]
 #[non_exhaustive]
@@ -37,23 +40,21 @@ pub enum DatabaseError {
         source: sqlx::Error,
     },
 
+    #[error("{field} is in use")]
+    InUse {
+        field: &'static str,
+        #[source]
+        source: sqlx::Error,
+    },
+
     #[error("{entity} not found")]
     NotFound { entity: &'static str },
-
-    #[error("Creator is attached to one or more books")]
-    CreatorInUse(#[source] sqlx::Error),
 
     #[error("Another cover was promoted concurrently")]
     BookCoverMainConflict(#[source] sqlx::Error),
 
-    #[error("Chapter has one or more releases")]
-    ChapterInUse(#[source] sqlx::Error),
-
     #[error("Chapter release language must differ from the book's publication language")]
     ChapterReleaseLanguageIsPublicationLanguage,
-
-    #[error("Chapter release has been modified since it was read")]
-    ChapterReleaseVersionIsStale,
 
     #[error("Declared page order names a page outside the release")]
     PageOrderIsForeign,
@@ -113,7 +114,10 @@ impl From<sqlx::Error> for DatabaseError {
                     };
                 }
                 Some("fk_book_creators_creators_creator_id") => {
-                    return Self::CreatorInUse(err);
+                    return Self::InUse {
+                        field: "Creator",
+                        source: err,
+                    };
                 }
                 Some("check_length_books_name") => {
                     return Self::OutOfRange {
@@ -254,7 +258,10 @@ impl From<sqlx::Error> for DatabaseError {
                     };
                 }
                 Some("fk_chapter_releases_chapters_chapter_id") => {
-                    return Self::ChapterInUse(err);
+                    return Self::InUse {
+                        field: "Chapter",
+                        source: err,
+                    };
                 }
                 Some("fk_chapter_pages_chapter_releases_release_id") => {
                     return Self::not_found::<ChapterRelease>();
@@ -286,25 +293,19 @@ impl From<sqlx::Error> for DatabaseError {
 
 impl IntoResponse for DatabaseError {
     fn into_response(self) -> Response {
-        match self {
-            Self::Unknown(_) | Self::InvariantCorrupted { .. } => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Something went wrong".to_string(),
-            ),
-            Self::NotFound { .. } => (StatusCode::NOT_FOUND, self.to_string()),
-            Self::ChapterReleaseVersionIsStale => {
-                (StatusCode::PRECONDITION_FAILED, self.to_string())
+        let status = match self {
+            Self::Unknown(_) | Self::InvariantCorrupted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::NotFound { .. } => StatusCode::NOT_FOUND,
+            Self::AlreadyExists { .. } | Self::InUse { .. } | Self::BookCoverMainConflict(_) => {
+                StatusCode::CONFLICT
             }
-            Self::AlreadyExists { .. }
-            | Self::CreatorInUse(_)
-            | Self::ChapterInUse(_)
-            | Self::BookCoverMainConflict(_) => (StatusCode::CONFLICT, self.to_string()),
             Self::OutOfRange { .. }
             | Self::DoesNotExist { .. }
             | Self::Duplication { .. }
             | Self::ChapterReleaseLanguageIsPublicationLanguage
-            | Self::PageOrderIsForeign => (StatusCode::UNPROCESSABLE_ENTITY, self.to_string()),
-        }
-        .into_response()
+            | Self::PageOrderIsForeign => StatusCode::UNPROCESSABLE_ENTITY,
+        };
+
+        error_response(status, self.to_string())
     }
 }

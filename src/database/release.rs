@@ -4,8 +4,8 @@ use uuid::Uuid;
 use crate::{
     database::Database,
     entity::{
-        Chapter, ChapterPage, ChapterPageQuery, ChapterRelease, ChapterReleaseQuery, Language,
-        PageExtension, PageOrder, ReleaseVersion, StagedPageQuery,
+        Chapter, ChapterPage, ChapterPageQuery, ChapterRelease, ChapterReleaseQuery,
+        ImageExtension, Language, PageOrder, ReleaseVersion, StagedPageQuery,
     },
     error::DatabaseError,
 };
@@ -17,7 +17,6 @@ struct ChapterReleaseRow {
     language_id: Uuid,
     language_code: String,
     language_name: String,
-    page_count: i64,
 }
 
 impl TryFrom<ChapterReleaseRow> for ChapterReleaseQuery {
@@ -35,7 +34,6 @@ impl TryFrom<ChapterReleaseRow> for ChapterReleaseQuery {
                 code: row.language_code,
                 name: row.language_name,
             },
-            page_count: row.page_count,
             version,
         })
     }
@@ -53,7 +51,7 @@ impl TryFrom<ChapterPageRow> for ChapterPageQuery {
 
     fn try_from(row: ChapterPageRow) -> Result<Self, Self::Error> {
         let url = (row.release_id, row.sort_order).into();
-        let extension: PageExtension = row
+        let extension: ImageExtension = row
             .extension
             .parse()
             .map_err(|e| DatabaseError::invariant_corrupted("extension", e))?;
@@ -76,7 +74,7 @@ impl TryFrom<StagedPageRow> for StagedPageQuery {
     type Error = DatabaseError;
 
     fn try_from(row: StagedPageRow) -> Result<Self, Self::Error> {
-        let extension: PageExtension = row
+        let extension: ImageExtension = row
             .extension
             .parse()
             .map_err(|e| DatabaseError::invariant_corrupted("extension", e))?;
@@ -195,14 +193,13 @@ impl Database {
         Ok(())
     }
 
-    #[instrument(name = "db.chapter_release.commit", skip_all, fields(release.id = %id, pages = order.len()))]
+    #[instrument(name = "db.chapter_release.commit", skip_all, fields(release.id = %id, pages = order.as_slice().len()))]
     pub async fn commit_chapter_release(
         &self,
         id: Uuid,
-        version: ReleaseVersion,
         order: &PageOrder,
     ) -> Result<Vec<Uuid>, DatabaseError> {
-        self.commit_chapter_release_inner(id, version, order)
+        self.commit_chapter_release_inner(id, order)
             .await
             .inspect_err(DatabaseError::log_internal)
     }
@@ -210,28 +207,15 @@ impl Database {
     async fn commit_chapter_release_inner(
         &self,
         id: Uuid,
-        version: ReleaseVersion,
         order: &PageOrder,
     ) -> Result<Vec<Uuid>, DatabaseError> {
         let mut tx = self.pool.begin().await?;
 
-        let bumped = sqlx::query_file!(
-            "queries/bump_chapter_release_version.sql",
-            id,
-            version.as_i32()
-        )
-        .fetch_optional(&mut *tx)
-        .await?;
+        let bumped = sqlx::query_file!("queries/bump_chapter_release_version.sql", id)
+            .fetch_optional(&mut *tx)
+            .await?;
 
         if bumped.is_none() {
-            let probe = sqlx::query_file!("queries/chapter_release_exists.sql", id)
-                .fetch_one(&mut *tx)
-                .await?;
-
-            if probe.exists {
-                return Err(DatabaseError::ChapterReleaseVersionIsStale);
-            }
-
             return Err(DatabaseError::not_found::<ChapterRelease>());
         }
 
@@ -239,7 +223,7 @@ impl Database {
             .execute(&mut *tx)
             .await?;
 
-        if ordered.rows_affected() as usize != order.len() {
+        if ordered.rows_affected() as usize != order.as_slice().len() {
             return Err(DatabaseError::PageOrderIsForeign);
         }
 

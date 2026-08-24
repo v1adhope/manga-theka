@@ -4,7 +4,8 @@ use uuid::Uuid;
 
 use crate::fakers::{COVER_JPG, COVER_PNG, COVER_WEBP};
 use crate::helpers::{
-    RespWrapper, TestApp, assert_error, assert_stored, page_ids_in_order, staged_ids,
+    RespWrapper, TestApp, assert_error, assert_stored, page_ids_in_order, release_version,
+    staged_ids,
 };
 
 #[tokio::test]
@@ -225,8 +226,7 @@ async fn commit_chapter_release_publishes_it_in_the_declared_order() {
     let staged = staged_ids(&app, release_id, &[COVER_PNG, COVER_JPG, COVER_WEBP]).await;
     let declared = vec![staged[2], staged[0], staged[1]];
 
-    let etag = app.get_release_etag(release_id).await;
-    let resp = app.post_commit(release_id, Some(&etag), &declared).await;
+    let resp = app.post_commit(release_id, &declared).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     assert_eq!(page_ids_in_order(&app, release_id).await, declared);
@@ -234,53 +234,27 @@ async fn commit_chapter_release_publishes_it_in_the_declared_order() {
 }
 
 #[tokio::test]
-async fn commit_chapter_release_without_a_validator_returns_428() {
-    let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
-    let chapter_id = app.insert_random_chapter(book_id).await;
-    let release_id = app.insert_random_release(book_id, chapter_id).await;
-    let staged = staged_ids(&app, release_id, &[COVER_PNG]).await;
-
-    let resp = app.post_commit(release_id, None, &staged).await;
-    assert_error(resp, StatusCode::PRECONDITION_REQUIRED).await;
-
-    assert_eq!(app.fetch_release_version(release_id).await, 0);
-}
-
-#[tokio::test]
-async fn commit_chapter_release_with_a_stale_validator_returns_412_and_changes_nothing() {
+async fn recommitting_a_chapter_release_redeclares_the_order_and_bumps_the_version() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
     let chapter_id = app.insert_random_chapter(book_id).await;
     let release_id = app.insert_random_release(book_id, chapter_id).await;
 
     let staged = staged_ids(&app, release_id, &[COVER_PNG, COVER_JPG]).await;
-    let etag = app.get_release_etag(release_id).await;
 
-    let resp = app.post_commit(release_id, Some(&etag), &staged).await;
+    let resp = app.post_commit(release_id, &staged).await;
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+    assert_eq!(app.fetch_release_version(release_id).await, 1);
+
+    let resp = app.post_commit(release_id, &staged[..1]).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let resp = app.post_commit(release_id, Some(&etag), &staged[..1]).await;
-    assert_error(resp, StatusCode::PRECONDITION_FAILED).await;
-
-    assert_eq!(page_ids_in_order(&app, release_id).await, staged);
-    assert_eq!(app.fetch_release_version(release_id).await, 1);
+    assert_eq!(page_ids_in_order(&app, release_id).await, staged[..1]);
+    assert_eq!(app.fetch_release_version(release_id).await, 2);
     assert!(
-        app.object_exists(&app.release_pages_bucket, staged[1])
+        !app.object_exists(&app.release_pages_bucket, staged[1])
             .await
     );
-}
-
-#[tokio::test]
-async fn commit_chapter_release_with_a_malformed_validator_returns_400() {
-    let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
-    let chapter_id = app.insert_random_chapter(book_id).await;
-    let release_id = app.insert_random_release(book_id, chapter_id).await;
-    let staged = staged_ids(&app, release_id, &[COVER_PNG]).await;
-
-    let resp = app.post_commit(release_id, Some("0"), &staged).await;
-    assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
 
 #[tokio::test]
@@ -294,10 +268,9 @@ async fn commit_chapter_release_naming_a_foreign_page_returns_422() {
     let staged = staged_ids(&app, release_id, &[COVER_PNG]).await;
     let foreign = staged_ids(&app, other_release_id, &[COVER_JPG]).await;
 
-    let etag = app.get_release_etag(release_id).await;
     let declared = vec![staged[0], foreign[0]];
 
-    let resp = app.post_commit(release_id, Some(&etag), &declared).await;
+    let resp = app.post_commit(release_id, &declared).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 
     assert_eq!(app.fetch_release_version(release_id).await, 0);
@@ -315,10 +288,9 @@ async fn commit_chapter_release_naming_a_page_twice_returns_422() {
     let release_id = app.insert_random_release(book_id, chapter_id).await;
     let staged = staged_ids(&app, release_id, &[COVER_PNG]).await;
 
-    let etag = app.get_release_etag(release_id).await;
     let declared = vec![staged[0], staged[0]];
 
-    let resp = app.post_commit(release_id, Some(&etag), &declared).await;
+    let resp = app.post_commit(release_id, &declared).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
 
@@ -330,9 +302,7 @@ async fn commit_chapter_release_with_an_empty_order_returns_422() {
     let release_id = app.insert_random_release(book_id, chapter_id).await;
     staged_ids(&app, release_id, &[COVER_PNG]).await;
 
-    let etag = app.get_release_etag(release_id).await;
-
-    let resp = app.post_commit(release_id, Some(&etag), &[]).await;
+    let resp = app.post_commit(release_id, &[]).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
 
@@ -340,9 +310,7 @@ async fn commit_chapter_release_with_an_empty_order_returns_422() {
 async fn commit_chapter_release_for_unknown_release_returns_404() {
     let app = TestApp::new().await;
 
-    let resp = app
-        .post_commit(Uuid::now_v7(), Some("\"0\""), &[Uuid::now_v7()])
-        .await;
+    let resp = app.post_commit(Uuid::now_v7(), &[Uuid::now_v7()]).await;
     assert_error(resp, StatusCode::NOT_FOUND).await;
 }
 
@@ -357,10 +325,9 @@ async fn commit_chapter_release_moves_a_page_onto_a_position_another_page_still_
     let second = app.insert_page(release_id, Some(2), COVER_JPG).await;
     let third = app.insert_page(release_id, Some(3), COVER_WEBP).await;
 
-    let etag = app.get_release_etag(release_id).await;
     let declared = vec![third, first, second];
 
-    let resp = app.post_commit(release_id, Some(&etag), &declared).await;
+    let resp = app.post_commit(release_id, &declared).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     assert_eq!(page_ids_in_order(&app, release_id).await, declared);
@@ -377,9 +344,7 @@ async fn commit_chapter_release_removes_undeclared_pages_and_their_images() {
     let dropped = app.insert_page(release_id, Some(2), COVER_JPG).await;
     let staged = app.insert_page(release_id, None, COVER_WEBP).await;
 
-    let etag = app.get_release_etag(release_id).await;
-
-    let resp = app.post_commit(release_id, Some(&etag), &[kept]).await;
+    let resp = app.post_commit(release_id, &[kept]).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     assert_eq!(page_ids_in_order(&app, release_id).await, vec![kept]);
@@ -399,11 +364,7 @@ async fn commit_chapter_release_leaves_the_remaining_pages_contiguous_from_one()
     let second = app.insert_page(release_id, Some(2), COVER_JPG).await;
     let third = app.insert_page(release_id, Some(3), COVER_WEBP).await;
 
-    let etag = app.get_release_etag(release_id).await;
-
-    let resp = app
-        .post_commit(release_id, Some(&etag), &[first, third])
-        .await;
+    let resp = app.post_commit(release_id, &[first, third]).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     assert_eq!(
@@ -424,10 +385,9 @@ async fn commit_chapter_release_inserts_a_staged_page_at_the_declared_position()
     let second = app.insert_page(release_id, Some(2), COVER_JPG).await;
     let inserted = staged_ids(&app, release_id, &[COVER_WEBP]).await[0];
 
-    let etag = app.get_release_etag(release_id).await;
     let declared = vec![first, inserted, second];
 
-    let resp = app.post_commit(release_id, Some(&etag), &declared).await;
+    let resp = app.post_commit(release_id, &declared).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     assert_eq!(page_ids_in_order(&app, release_id).await, declared);
@@ -444,10 +404,9 @@ async fn commit_chapter_release_leaves_untouched_pages_with_their_identifiers_an
     let superseded = app.insert_page(release_id, Some(2), COVER_JPG).await;
     let replacement = staged_ids(&app, release_id, &[COVER_WEBP]).await[0];
 
-    let etag = app.get_release_etag(release_id).await;
     let declared = vec![kept, replacement];
 
-    let resp = app.post_commit(release_id, Some(&etag), &declared).await;
+    let resp = app.post_commit(release_id, &declared).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     assert_eq!(page_ids_in_order(&app, release_id).await, declared);
@@ -478,7 +437,7 @@ async fn get_chapter_releases_hides_releases_that_were_never_committed() {
 }
 
 #[tokio::test]
-async fn get_chapter_releases_lists_committed_releases_with_language_and_page_count() {
+async fn get_chapter_releases_lists_committed_releases_with_their_language() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
     let chapter_id = app.insert_random_chapter(book_id).await;
@@ -495,7 +454,6 @@ async fn get_chapter_releases_lists_committed_releases_with_language_and_page_co
     let wrapper: RespWrapper<Vec<serde_json::Value>> = serde_json::from_slice(&bytes).unwrap();
 
     assert_eq!(wrapper.data.len(), 1);
-    assert_eq!(wrapper.data[0]["pageCount"], 2);
     assert_eq!(
         wrapper.data[0]["language"]["id"].as_str().unwrap(),
         language_id.to_string()
@@ -511,19 +469,18 @@ async fn get_chapter_releases_for_unknown_chapter_returns_404() {
 }
 
 #[tokio::test]
-async fn get_chapter_release_carries_its_validator() {
+async fn get_chapter_release_carries_its_version() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
     let chapter_id = app.insert_random_chapter(book_id).await;
     let release_id = app.insert_random_release(book_id, chapter_id).await;
 
-    assert_eq!(app.get_release_etag(release_id).await, "\"0\"");
+    assert_eq!(release_version(&app, release_id).await, 0);
 
     let staged = staged_ids(&app, release_id, &[COVER_PNG]).await;
-    let etag = app.get_release_etag(release_id).await;
-    app.post_commit(release_id, Some(&etag), &staged).await;
+    app.post_commit(release_id, &staged).await;
 
-    assert_eq!(app.get_release_etag(release_id).await, "\"1\"");
+    assert_eq!(release_version(&app, release_id).await, 1);
 }
 
 #[tokio::test]
@@ -547,10 +504,6 @@ async fn get_chapter_pages_lists_committed_pages_with_position_addressed_links()
 
     let resp = app.get_pages(release_id).await;
     assert_eq!(resp.status(), StatusCode::OK);
-    assert_eq!(
-        resp.headers().get(header::ETAG).unwrap().to_str().unwrap(),
-        "\"0\""
-    );
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
     let wrapper: RespWrapper<Vec<serde_json::Value>> = serde_json::from_slice(&bytes).unwrap();
@@ -591,7 +544,6 @@ async fn get_staged_chapter_pages_lists_only_pages_absent_from_the_committed_lis
 
     let resp = app.get_staged(release_id).await;
     assert_eq!(resp.status(), StatusCode::OK);
-    assert!(resp.headers().get(header::ETAG).is_none());
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
     let wrapper: RespWrapper<Vec<serde_json::Value>> = serde_json::from_slice(&bytes).unwrap();
@@ -798,14 +750,10 @@ returning id;
     .await
     .unwrap();
 
-    let etag = app.get_release_etag(release_id).await;
-
-    let resp = app.post_commit(release_id, Some(&etag), &staged).await;
+    let resp = app.post_commit(release_id, &staged).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 
-    let resp = app
-        .post_commit(release_id, Some(&etag), &staged[..200])
-        .await;
+    let resp = app.post_commit(release_id, &staged[..200]).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 }
 

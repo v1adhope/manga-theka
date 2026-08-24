@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::{
     entity::{
         AlternativeTitle, Book, BookCover, BookKind, BookLink, BookLinkKind, BookName, BookStatus,
-        ContentRating, CoverExtension, Description, Filter, Language, LinkUrl,
+        ContentRating, Description, Filter, ImageExtension, Language, LinkUrl,
     },
     error::{AppError, EntityError},
     route::{PaginationQuery, StoreResp, json_data_response, json_response},
@@ -205,7 +205,7 @@ pub async fn store_book_cover(
     Path(book_id): Path<Uuid>,
     body: Bytes,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    let extension = CoverExtension::try_from(body.as_ref())?;
+    let extension = ImageExtension::try_from(body.as_ref())?;
     let cover = BookCover {
         id: Uuid::now_v7(),
         book_id,

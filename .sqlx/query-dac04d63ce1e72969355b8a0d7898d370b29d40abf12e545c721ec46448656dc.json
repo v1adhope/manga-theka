@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select r.id, r.chapter_id, r.version,\n       l.id as language_id, l.code as language_code, l.name as language_name,\n       count(p.id) as \"page_count!\"\nfrom chapter_releases r\njoin languages l on l.id = r.language_id\njoin chapter_pages p on p.release_id = r.id and p.sort_order is not null\nwhere r.chapter_id = $1\ngroup by r.id, l.id\norder by r.id;\n",
+  "query": "select r.id, r.chapter_id, r.version,\n       l.id as language_id, l.code as language_code, l.name as language_name\nfrom chapter_releases r\njoin languages l on l.id = r.language_id\nwhere r.id = $1;\n",
   "describe": {
     "columns": [
       {
@@ -68,12 +68,6 @@
             "name": "name"
           }
         }
-      },
-      {
-        "ordinal": 6,
-        "name": "page_count!",
-        "type_info": "Int8",
-        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -87,9 +81,8 @@
       false,
       false,
       false,
-      false,
-      null
+      false
     ]
   },
-  "hash": "d54c45f403a08d32b7cc8425506ec39ad00d1d03c6bdac3f3eca0621f695a1c1"
+  "hash": "dac04d63ce1e72969355b8a0d7898d370b29d40abf12e545c721ec46448656dc"
 }

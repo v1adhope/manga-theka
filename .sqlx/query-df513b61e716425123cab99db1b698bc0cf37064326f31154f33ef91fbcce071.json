@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "update chapter_releases\nset version = version + 1\nwhere id = $1 and version = $2\nreturning version;\n",
+  "query": "update chapter_releases\nset version = version + 1\nwhere id = $1\nreturning version;\n",
   "describe": {
     "columns": [
       {
@@ -17,13 +17,12 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid",
-        "Int4"
+        "Uuid"
       ]
     },
     "nullable": [
       false
     ]
   },
-  "hash": "4b4a9b2ab8b2bc0d04c0f8034a8b794a111a3400b5c8bf99eeef82961e529d48"
+  "hash": "df513b61e716425123cab99db1b698bc0cf37064326f31154f33ef91fbcce071"
 }

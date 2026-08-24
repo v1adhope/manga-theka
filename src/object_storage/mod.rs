@@ -14,6 +14,8 @@ use tokio::sync::Semaphore;
 
 use crate::config;
 
+const COVER_PRESIGN_TTL: Duration = Duration::from_secs(300);
+const PAGE_PRESIGN_TTL: Duration = Duration::from_secs(300);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
 const OPERATION_ATTEMPT_TIMEOUT: Duration = Duration::from_secs(5);
 const OPERATION_TIMEOUT: Duration = Duration::from_secs(15);
@@ -72,8 +74,9 @@ impl ObjectStorage {
     }
 
     pub async fn ensure_buckets(&self) {
-        self.ensure_bucket(&self.covers_bucket).await;
-        self.ensure_bucket(&self.release_pages_bucket).await;
+        for bucket in [&self.covers_bucket, &self.release_pages_bucket] {
+            self.ensure_bucket(bucket).await;
+        }
     }
 
     async fn ensure_bucket(&self, bucket: &str) {

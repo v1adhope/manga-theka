@@ -5,6 +5,8 @@ use axum::{
 use thiserror::Error;
 use uuid::Uuid;
 
+use crate::error::error_response;
+
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum EntityError {
@@ -32,8 +34,8 @@ pub enum EntityError {
     #[error("'{0}' is not a valid book link kind")]
     InvalidBookLinkKind(String),
 
-    #[error("'{0}' is not a valid cover extension")]
-    InvalidCoverExtension(String),
+    #[error("'{0}' is not a valid image extension")]
+    InvalidImageExtension(String),
 
     #[error("Image must be JPEG, PNG, or WebP")]
     UnsupportedImageFormat,
@@ -62,17 +64,8 @@ pub enum EntityError {
     #[error("Chapter volume {0} must be within [{1}, {2}]")]
     ChapterVolumeOutOfRange(i16, i16, i16),
 
-    #[error("'{0}' is not a valid page extension")]
-    InvalidPageExtension(String),
-
     #[error("Release version {0} can't be negative")]
     ReleaseVersionOutOfRange(i32),
-
-    #[error("'{0}' is not a well-formed entity tag")]
-    ReleaseVersionIsMalformed(String),
-
-    #[error("If-Match is required to commit a release")]
-    ReleaseVersionIsAbsent,
 
     #[error("Page order can't be empty")]
     PageOrderIsEmpty,
@@ -95,13 +88,12 @@ pub enum EntityError {
 
 impl IntoResponse for EntityError {
     fn into_response(self) -> Response {
-        match self {
-            Self::UnsupportedImageFormat => (StatusCode::UNSUPPORTED_MEDIA_TYPE, self.to_string()),
-            Self::PageExceedsByteLimit(_) => (StatusCode::PAYLOAD_TOO_LARGE, self.to_string()),
-            Self::ReleaseVersionIsAbsent => (StatusCode::PRECONDITION_REQUIRED, self.to_string()),
-            Self::ReleaseVersionIsMalformed(_) => (StatusCode::BAD_REQUEST, self.to_string()),
-            _ => (StatusCode::UNPROCESSABLE_ENTITY, self.to_string()),
-        }
-        .into_response()
+        let status = match self {
+            Self::UnsupportedImageFormat => StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            Self::PageExceedsByteLimit(_) => StatusCode::PAYLOAD_TOO_LARGE,
+            _ => StatusCode::UNPROCESSABLE_ENTITY,
+        };
+
+        error_response(status, self.to_string())
     }
 }
