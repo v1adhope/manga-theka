@@ -8,6 +8,11 @@ use uuid::Uuid;
 use crate::error::EntityError;
 
 pub const DEFAULT_IMAGE_MAX_BYTES: usize = 5 * 1024 * 1024;
+pub const MAX_PARTS_PER_REQUEST: usize = 10;
+pub const UPLOAD_MAX_BYTES: usize =
+    MAX_PARTS_PER_REQUEST * (DEFAULT_IMAGE_MAX_BYTES + PART_HEADROOM_BYTES);
+
+const PART_HEADROOM_BYTES: usize = 1024;
 
 // Magic bytes for sniffing the real format, since client-supplied extension/content-type can't be trusted.
 const JPEG_SOI: [u8; 3] = [0xFF, 0xD8, 0xFF];

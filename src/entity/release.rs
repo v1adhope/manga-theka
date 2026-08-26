@@ -4,17 +4,12 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    entity::{DEFAULT_IMAGE_MAX_BYTES, Entity, Image, ImageExtension, Language},
+    entity::{Entity, Image, ImageExtension, Language, MAX_PARTS_PER_REQUEST},
     error::EntityError,
 };
 
-pub const MAX_PARTS_PER_REQUEST: usize = 10;
 pub const MAX_COMMITTED_PAGES: usize = 200;
 pub const MAX_RELEASE_ROWS: usize = 400;
-pub const UPLOAD_MAX_BYTES: usize =
-    MAX_PARTS_PER_REQUEST * (DEFAULT_IMAGE_MAX_BYTES + PART_HEADROOM_BYTES);
-
-const PART_HEADROOM_BYTES: usize = 1024;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
