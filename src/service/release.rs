@@ -2,12 +2,18 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        ChapterPage, ChapterPageQuery, ChapterRelease, ChapterReleaseQuery, MAX_RELEASE_ROWS,
-        PageOrder, StagedPageQuery,
+        ChapterPage, ChapterPageQuery, ChapterRelease, ChapterReleaseQuery, ImageExtension,
+        MAX_RELEASE_ROWS, PageOrder, StagedPageQuery,
     },
     error::{EntityError, ServiceError},
     service::{Service, concurrency::run_concurrently},
 };
+
+struct UploadedPage {
+    release_id: Uuid,
+    id: Uuid,
+    extension: ImageExtension,
+}
 
 impl Service {
     pub async fn store_chapter_release(&self, item: &ChapterRelease) -> Result<(), ServiceError> {
@@ -68,14 +74,27 @@ impl Service {
         }
 
         let storage = self.storage.clone();
-        let database = self.database.clone();
-        run_concurrently(pages, UPLOAD_CONCURRENCY, move |page| {
+        let uploaded = run_concurrently(pages, UPLOAD_CONCURRENCY, move |page| {
             let storage = storage.clone();
-            let database = database.clone();
             async move {
                 storage.upload_chapter_page(&page).await?;
-                database.store_chapter_page(&page).await?;
-                Ok::<Uuid, ServiceError>(page.image.id)
+                Ok::<UploadedPage, ServiceError>(UploadedPage {
+                    release_id: page.release_id,
+                    id: page.image.id,
+                    extension: page.image.extension,
+                })
+            }
+        })
+        .await?;
+
+        let database = self.database.clone();
+        run_concurrently(uploaded, UPLOAD_CONCURRENCY, move |page| {
+            let database = database.clone();
+            async move {
+                database
+                    .store_chapter_page(page.release_id, page.id, page.extension)
+                    .await?;
+                Ok::<Uuid, ServiceError>(page.id)
             }
         })
         .await
