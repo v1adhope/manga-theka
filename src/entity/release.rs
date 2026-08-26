@@ -100,6 +100,7 @@ pub struct ChapterReleaseQuery {
     pub id: Uuid,
     pub chapter_id: Uuid,
     pub language: Language,
+    pub page_count: i64,
     pub version: u16,
 }
 

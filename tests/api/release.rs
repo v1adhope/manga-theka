@@ -428,7 +428,7 @@ async fn get_chapter_releases_hides_releases_that_were_never_committed() {
 }
 
 #[tokio::test]
-async fn get_chapter_releases_lists_committed_releases_with_their_language() {
+async fn get_chapter_releases_lists_committed_releases_with_language_and_page_count() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
     let chapter_id = app.insert_random_chapter(book_id).await;
@@ -445,6 +445,7 @@ async fn get_chapter_releases_lists_committed_releases_with_their_language() {
     let wrapper: RespWrapper<Vec<serde_json::Value>> = serde_json::from_slice(&bytes).unwrap();
 
     assert_eq!(wrapper.data.len(), 1);
+    assert_eq!(wrapper.data[0]["pageCount"], 2);
     assert_eq!(
         wrapper.data[0]["language"]["id"].as_str().unwrap(),
         language_id.to_string()
