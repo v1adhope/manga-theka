@@ -8,7 +8,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
-    entity::{ChapterRelease, MAX_PARTS_PER_REQUEST, PageOrder},
+    entity::{ChapterPages, ChapterRelease, MAX_PARTS_PER_REQUEST, PageOrder},
     error::{AppError, RouteError},
     route::{StoreResp, collect_image_part, json_data_response},
     service::Service,
@@ -76,7 +76,9 @@ pub async fn upload_chapter_pages(
         return Err(RouteError::ImagePartMissing.into());
     }
 
-    let ids = service.store_chapter_pages(release_id, images).await?;
+    let pages = ChapterPages { release_id, images };
+
+    let ids = service.store_chapter_pages(pages).await?;
 
     Ok(json_data_response(StatusCode::CREATED, ids))
 }

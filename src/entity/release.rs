@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    entity::{DEFAULT_IMAGE_MAX_BYTES, Entity, ImageExtension, Language},
+    entity::{DEFAULT_IMAGE_MAX_BYTES, Entity, Image, ImageExtension, Language},
     error::EntityError,
 };
 
@@ -112,6 +112,12 @@ pub struct ChapterPage;
 
 impl Entity for ChapterPage {
     const NAME: &'static str = "Chapter page";
+}
+
+#[derive(Debug)]
+pub struct ChapterPages {
+    pub release_id: Uuid,
+    pub images: Vec<Image>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

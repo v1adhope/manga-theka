@@ -2,8 +2,8 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        ChapterPageQuery, ChapterRelease, ChapterReleaseQuery, Image, ImageExtension, PageOrder,
-        StagedPageQuery,
+        ChapterPageQuery, ChapterPages, ChapterRelease, ChapterReleaseQuery, ImageExtension,
+        PageOrder, StagedPageQuery,
     },
     error::ServiceError,
     service::{Service, concurrency::run_concurrently},
@@ -55,12 +55,10 @@ impl Service {
             .map_err(Into::into)
     }
 
-    pub async fn store_chapter_pages(
-        &self,
-        release_id: Uuid,
-        images: Vec<Image>,
-    ) -> Result<Vec<Uuid>, ServiceError> {
+    pub async fn store_chapter_pages(&self, item: ChapterPages) -> Result<Vec<Uuid>, ServiceError> {
         const UPLOAD_CONCURRENCY: usize = 5;
+
+        let ChapterPages { release_id, images } = item;
 
         if images.is_empty() {
             return Ok(Vec::new());
