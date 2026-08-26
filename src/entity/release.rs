@@ -16,22 +16,6 @@ pub const UPLOAD_MAX_BYTES: usize =
 
 const PART_HEADROOM_BYTES: usize = 1024;
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct ReleaseVersion(i32);
-
-impl TryFrom<i32> for ReleaseVersion {
-    type Error = EntityError;
-
-    fn try_from(v: i32) -> Result<Self, Self::Error> {
-        if v < 0 {
-            return Err(EntityError::ReleaseVersionOutOfRange(v));
-        }
-
-        Ok(Self(v))
-    }
-}
-
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct PageUrl(String);
@@ -121,7 +105,7 @@ pub struct ChapterReleaseQuery {
     pub id: Uuid,
     pub chapter_id: Uuid,
     pub language: Language,
-    pub version: ReleaseVersion,
+    pub version: u16,
 }
 
 pub struct ChapterPage;
@@ -152,7 +136,7 @@ mod tests {
 
     use crate::entity::{
         ChapterRelease, MAX_COMMITTED_PAGES, MAX_PARTS_PER_REQUEST, MAX_RELEASE_ROWS, PageOrder,
-        PageUrl, ReleaseVersion,
+        PageUrl,
     };
 
     #[test]
@@ -176,12 +160,6 @@ mod tests {
     #[test]
     fn part_capacity_over_the_ceiling_is_rejected() {
         let res = ChapterRelease::ensure_part_capacity(MAX_PARTS_PER_REQUEST + 1);
-        assert!(res.is_err());
-    }
-
-    #[test]
-    fn negative_release_version_is_rejected() {
-        let res = ReleaseVersion::try_from(-1);
         assert!(res.is_err());
     }
 
