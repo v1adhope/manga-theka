@@ -116,19 +116,34 @@ pub struct ChapterPages {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChapterPageQuery {
-    pub id: Uuid,
-    pub page_number: i16,
-    pub extension: ImageExtension,
-    pub url: PageUrl,
+#[serde(
+    tag = "status",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum ChapterPageQuery {
+    Committed {
+        id: Uuid,
+        page_number: i16,
+        extension: ImageExtension,
+        url: PageUrl,
+    },
+    Staged {
+        id: Uuid,
+        extension: ImageExtension,
+    },
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct StagedPageQuery {
-    pub id: Uuid,
-    pub extension: ImageExtension,
+pub enum PageStatus {
+    Staged,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChapterPageParams {
+    pub status: Option<PageStatus>,
 }
 
 #[cfg(test)]

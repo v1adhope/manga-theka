@@ -960,7 +960,7 @@ order by sort_order nulls last, id;
     }
 
     pub async fn get_staged(&self, release_id: Uuid) -> Response {
-        let req = Request::get(format!("/releases/{release_id}/staged"))
+        let req = Request::get(format!("/releases/{release_id}/pages?status=staged"))
             .body(Body::empty())
             .unwrap();
 

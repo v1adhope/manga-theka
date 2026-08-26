@@ -15,9 +15,9 @@ use crate::{
         delete_chapter_release, delete_creator, get_book, get_book_cover_image, get_book_covers,
         get_books, get_chapter, get_chapter_page_image, get_chapter_pages, get_chapter_release,
         get_chapter_releases, get_chapters, get_content_ratings, get_creator, get_creators,
-        get_labels, get_languages, get_staged_chapter_pages, healthz, store_book, store_book_cover,
-        store_chapter, store_chapter_release, store_creator, update_book, update_book_main_cover,
-        update_chapter, update_creator, upload_chapter_pages,
+        get_labels, get_languages, healthz, store_book, store_book_cover, store_chapter,
+        store_chapter_release, store_creator, update_book, update_book_main_cover, update_chapter,
+        update_creator, upload_chapter_pages,
     },
     service::Service,
 };
@@ -92,7 +92,6 @@ impl App {
             )
             .route("/releases/{id}/commit", post(commit_chapter_release))
             .route("/releases/{id}/pages", get(get_chapter_pages))
-            .route("/releases/{id}/staged", get(get_staged_chapter_pages))
             .route(
                 "/releases/{id}/pages/{page_id}/image",
                 get(get_chapter_page_image),

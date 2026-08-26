@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::{Multipart, Path, State},
+    extract::{Multipart, Path, Query, State},
     http::{StatusCode, header},
     response::IntoResponse,
 };
@@ -8,7 +8,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
-    entity::{ChapterPages, ChapterRelease, MAX_PARTS_PER_REQUEST, PageOrder},
+    entity::{ChapterPageParams, ChapterPages, ChapterRelease, MAX_PARTS_PER_REQUEST, PageOrder},
     error::{AppError, RouteError},
     route::{StoreResp, collect_image_part, json_data_response},
     service::Service,
@@ -104,17 +104,9 @@ pub async fn commit_chapter_release(
 pub async fn get_chapter_pages(
     State(service): State<Service>,
     Path(release_id): Path<Uuid>,
+    Query(params): Query<ChapterPageParams>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    let pages = service.get_chapter_pages(release_id).await?;
-
-    Ok(json_data_response(StatusCode::OK, pages))
-}
-
-pub async fn get_staged_chapter_pages(
-    State(service): State<Service>,
-    Path(release_id): Path<Uuid>,
-) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    let pages = service.get_staged_chapter_pages(release_id).await?;
+    let pages = service.get_chapter_pages(release_id, params).await?;
 
     Ok(json_data_response(StatusCode::OK, pages))
 }

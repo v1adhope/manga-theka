@@ -2,8 +2,8 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        ChapterPageQuery, ChapterPages, ChapterRelease, ChapterReleaseQuery, ImageExtension,
-        PageOrder, StagedPageQuery,
+        ChapterPageParams, ChapterPageQuery, ChapterPages, ChapterRelease, ChapterReleaseQuery,
+        ImageExtension, PageOrder,
     },
     error::ServiceError,
     service::{Service, concurrency::run_concurrently},
@@ -108,27 +108,14 @@ impl Service {
     pub async fn get_chapter_pages(
         &self,
         release_id: Uuid,
+        params: ChapterPageParams,
     ) -> Result<Vec<ChapterPageQuery>, ServiceError> {
         self.database
             .ensure_chapter_release_exists(release_id)
             .await?;
 
         self.database
-            .get_chapter_pages(release_id)
-            .await
-            .map_err(Into::into)
-    }
-
-    pub async fn get_staged_chapter_pages(
-        &self,
-        release_id: Uuid,
-    ) -> Result<Vec<StagedPageQuery>, ServiceError> {
-        self.database
-            .ensure_chapter_release_exists(release_id)
-            .await?;
-
-        self.database
-            .get_staged_chapter_pages(release_id)
+            .get_chapter_pages(release_id, params)
             .await
             .map_err(Into::into)
     }

@@ -4,8 +4,8 @@ use uuid::Uuid;
 use crate::{
     database::Database,
     entity::{
-        Chapter, ChapterPage, ChapterPageQuery, ChapterRelease, ChapterReleaseQuery,
-        ImageExtension, Language, PageOrder, StagedPageQuery,
+        Chapter, ChapterPage, ChapterPageParams, ChapterPageQuery, ChapterRelease,
+        ChapterReleaseQuery, ImageExtension, Language, PageOrder, PageStatus,
     },
     error::DatabaseError,
 };
@@ -56,11 +56,11 @@ impl TryFrom<ChapterPageRow> for ChapterPageQuery {
             .parse()
             .map_err(|e| DatabaseError::invariant_corrupted("extension", e))?;
 
-        Ok(ChapterPageQuery {
-            url,
+        Ok(ChapterPageQuery::Committed {
             id: row.id,
             page_number: row.sort_order,
             extension,
+            url,
         })
     }
 }
@@ -70,7 +70,7 @@ struct StagedPageRow {
     extension: String,
 }
 
-impl TryFrom<StagedPageRow> for StagedPageQuery {
+impl TryFrom<StagedPageRow> for ChapterPageQuery {
     type Error = DatabaseError;
 
     fn try_from(row: StagedPageRow) -> Result<Self, Self::Error> {
@@ -79,7 +79,7 @@ impl TryFrom<StagedPageRow> for StagedPageQuery {
             .parse()
             .map_err(|e| DatabaseError::invariant_corrupted("extension", e))?;
 
-        Ok(StagedPageQuery {
+        Ok(ChapterPageQuery::Staged {
             id: row.id,
             extension,
         })
@@ -298,8 +298,9 @@ impl Database {
     pub async fn get_chapter_pages(
         &self,
         release_id: Uuid,
+        params: ChapterPageParams,
     ) -> Result<Vec<ChapterPageQuery>, DatabaseError> {
-        self.get_chapter_pages_inner(release_id)
+        self.get_chapter_pages_inner(release_id, params)
             .await
             .inspect_err(DatabaseError::log_internal)
     }
@@ -307,50 +308,32 @@ impl Database {
     async fn get_chapter_pages_inner(
         &self,
         release_id: Uuid,
+        params: ChapterPageParams,
     ) -> Result<Vec<ChapterPageQuery>, DatabaseError> {
-        let rows =
-            sqlx::query_file_as!(ChapterPageRow, "queries/get_chapter_pages.sql", release_id)
+        match params.status {
+            Some(PageStatus::Staged) => {
+                let rows = sqlx::query_file_as!(
+                    StagedPageRow,
+                    "queries/get_staged_chapter_pages.sql",
+                    release_id
+                )
                 .fetch_all(&self.pool)
                 .await?;
 
-        let mut pages: Vec<ChapterPageQuery> = Vec::with_capacity(rows.len());
-        for row in rows {
-            let page: ChapterPageQuery = row.try_into()?;
-            pages.push(page);
+                rows.into_iter().map(TryInto::try_into).collect()
+            }
+            None => {
+                let rows = sqlx::query_file_as!(
+                    ChapterPageRow,
+                    "queries/get_chapter_pages.sql",
+                    release_id
+                )
+                .fetch_all(&self.pool)
+                .await?;
+
+                rows.into_iter().map(TryInto::try_into).collect()
+            }
         }
-
-        Ok(pages)
-    }
-
-    #[instrument(name = "db.chapter_page.staged", skip_all, fields(release.id = %release_id))]
-    pub async fn get_staged_chapter_pages(
-        &self,
-        release_id: Uuid,
-    ) -> Result<Vec<StagedPageQuery>, DatabaseError> {
-        self.get_staged_chapter_pages_inner(release_id)
-            .await
-            .inspect_err(DatabaseError::log_internal)
-    }
-
-    async fn get_staged_chapter_pages_inner(
-        &self,
-        release_id: Uuid,
-    ) -> Result<Vec<StagedPageQuery>, DatabaseError> {
-        let rows = sqlx::query_file_as!(
-            StagedPageRow,
-            "queries/get_staged_chapter_pages.sql",
-            release_id
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        let mut pages: Vec<StagedPageQuery> = Vec::with_capacity(rows.len());
-        for row in rows {
-            let page: StagedPageQuery = row.try_into()?;
-            pages.push(page);
-        }
-
-        Ok(pages)
     }
 
     #[instrument(name = "db.chapter_page.exists", skip_all, fields(release.id = %release_id, page.id = %id))]
