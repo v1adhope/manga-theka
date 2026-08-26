@@ -6,6 +6,7 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use axum::response::Response;
+use axum_test::multipart::{MultipartForm, Part};
 use fake::Fake;
 use http_body_util::BodyExt;
 use manga_theka::{
@@ -156,6 +157,7 @@ pub fn localization_keys(localizations: &[ChapterLocalization]) -> Vec<(Uuid, &s
     keys
 }
 
+// TODO: migrate this to axum_test::TestServer/TestResponse.
 pub struct TestApp {
     pub pool: PgPool,
     pub router: Router,
@@ -697,6 +699,16 @@ values($1, $2, $3, $4, $5);
         .expect("failed to insert factory creator");
     }
 
+    pub async fn post_cover(&self, book_id: Uuid, image: &[u8]) -> Response {
+        let form = multipart_body(&[image]);
+        let req = Request::post(format!("/books/{book_id}/covers"))
+            .header(header::CONTENT_TYPE, form.content_type())
+            .body(Body::from(form))
+            .unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap()
+    }
+
     pub async fn get_covers(&self, book_id: Uuid) -> Response {
         let req = Request::get(format!("/books/{book_id}/covers"))
             .body(Body::empty())
@@ -765,29 +777,16 @@ values($1, $2, $3, $4, $5);
     }
 }
 
-pub const MULTIPART_BOUNDARY: &str = "manga-theka-test-boundary";
-
-pub fn multipart_content_type() -> String {
-    format!("multipart/form-data; boundary={MULTIPART_BOUNDARY}")
-}
-
-pub fn multipart_body(parts: &[&[u8]]) -> Vec<u8> {
-    let mut body: Vec<u8> = Vec::new();
-
-    for (i, part) in parts.iter().enumerate() {
-        body.extend_from_slice(format!("--{MULTIPART_BOUNDARY}\r\n").as_bytes());
-        body.extend_from_slice(
-            format!(
-                "Content-Disposition: form-data; name=\"page{i}\"; filename=\"page{i}\"\r\n\r\n"
+pub fn multipart_body(parts: &[&[u8]]) -> MultipartForm {
+    parts
+        .iter()
+        .enumerate()
+        .fold(MultipartForm::new(), |form, (i, part)| {
+            form.add_part(
+                format!("page{i}"),
+                Part::bytes(part.to_vec()).file_name(format!("page{i}")),
             )
-            .as_bytes(),
-        );
-        body.extend_from_slice(part);
-        body.extend_from_slice(b"\r\n");
-    }
-    body.extend_from_slice(format!("--{MULTIPART_BOUNDARY}--\r\n").as_bytes());
-
-    body
+        })
 }
 
 impl TestApp {
@@ -933,9 +932,10 @@ order by sort_order nulls last, id;
     }
 
     pub async fn post_upload(&self, release_id: Uuid, parts: &[&[u8]]) -> Response {
+        let form = multipart_body(parts);
         let req = Request::post(format!("/releases/{release_id}/upload"))
-            .header(header::CONTENT_TYPE, multipart_content_type())
-            .body(Body::from(multipart_body(parts)))
+            .header(header::CONTENT_TYPE, form.content_type())
+            .body(Body::from(form))
             .unwrap();
 
         self.router.clone().oneshot(req).await.unwrap()

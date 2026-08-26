@@ -147,7 +147,7 @@ async fn upload_chapter_pages_with_an_oversized_part_returns_413() {
 }
 
 #[tokio::test]
-async fn upload_chapter_pages_keeps_earlier_parts_when_a_later_one_fails() {
+async fn upload_chapter_pages_stores_nothing_when_a_later_part_fails() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
     let chapter_id = app.insert_random_chapter(book_id).await;
@@ -158,9 +158,7 @@ async fn upload_chapter_pages_keeps_earlier_parts_when_a_later_one_fails() {
         .await;
     assert_error(resp, StatusCode::UNSUPPORTED_MEDIA_TYPE).await;
 
-    let staged = app.fetch_page_order(release_id).await;
-    assert_eq!(staged.len(), 2);
-    assert!(staged.iter().all(|(_, sort_order)| sort_order.is_none()));
+    assert!(app.fetch_page_order(release_id).await.is_empty());
 }
 
 #[tokio::test]
