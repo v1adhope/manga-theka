@@ -2,20 +2,24 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::{
-    entity::ChapterPage,
+    entity::Image,
     error::ObjectStorageError,
     object_storage::{DEFAULT_PRESIGN_TTL, ObjectStorage},
 };
 
 impl ObjectStorage {
-    #[instrument(name = "object_storage.chapter_page.upload", skip_all, fields(release.id = %item.release_id, page.id = %item.image.id))]
-    pub async fn upload_chapter_page(&self, item: &ChapterPage) -> Result<(), ObjectStorageError> {
+    #[instrument(name = "object_storage.chapter_page.upload", skip_all, fields(release.id = %release_id, page.id = %image.id))]
+    pub async fn upload_chapter_page(
+        &self,
+        release_id: Uuid,
+        image: &Image,
+    ) -> Result<(), ObjectStorageError> {
         self.upload(
             &self.release_pages_bucket,
-            &item.image.id.to_string(),
-            item.image.content.to_bytes(),
-            item.image.extension.content_type(),
-            &item.image.content_disposition(),
+            &image.id.to_string(),
+            image.content.to_bytes(),
+            image.extension.content_type(),
+            &image.content_disposition(),
         )
         .await
     }

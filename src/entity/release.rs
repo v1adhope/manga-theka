@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    entity::{DEFAULT_IMAGE_MAX_BYTES, Entity, Image, ImageExtension, Language},
+    entity::{DEFAULT_IMAGE_MAX_BYTES, Entity, ImageExtension, Language},
     error::EntityError,
 };
 
@@ -93,6 +93,17 @@ impl Entity for ChapterRelease {
     const NAME: &'static str = "Chapter release";
 }
 
+impl ChapterRelease {
+    pub fn ensure_row_capacity(existing: usize, incoming: usize) -> Result<(), EntityError> {
+        let total = existing + incoming;
+        if total > MAX_RELEASE_ROWS {
+            return Err(EntityError::ReleaseRowsExceedLimit(total, MAX_RELEASE_ROWS));
+        }
+
+        Ok(())
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChapterReleaseQuery {
@@ -102,11 +113,7 @@ pub struct ChapterReleaseQuery {
     pub version: ReleaseVersion,
 }
 
-#[derive(Debug)]
-pub struct ChapterPage {
-    pub release_id: Uuid,
-    pub image: Image,
-}
+pub struct ChapterPage;
 
 impl Entity for ChapterPage {
     const NAME: &'static str = "Chapter page";
@@ -132,7 +139,21 @@ pub struct StagedPageQuery {
 mod tests {
     use uuid::Uuid;
 
-    use crate::entity::{MAX_COMMITTED_PAGES, PageOrder, PageUrl, ReleaseVersion};
+    use crate::entity::{
+        ChapterRelease, MAX_COMMITTED_PAGES, MAX_RELEASE_ROWS, PageOrder, PageUrl, ReleaseVersion,
+    };
+
+    #[test]
+    fn row_capacity_at_the_ceiling_is_valid() {
+        let res = ChapterRelease::ensure_row_capacity(MAX_RELEASE_ROWS - 1, 1);
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn row_capacity_over_the_ceiling_is_rejected() {
+        let res = ChapterRelease::ensure_row_capacity(MAX_RELEASE_ROWS, 1);
+        assert!(res.is_err());
+    }
 
     #[test]
     fn negative_release_version_is_rejected() {

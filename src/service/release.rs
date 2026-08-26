@@ -2,15 +2,14 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        ChapterPage, ChapterPageQuery, ChapterRelease, ChapterReleaseQuery, ImageExtension,
-        MAX_RELEASE_ROWS, PageOrder, StagedPageQuery,
+        ChapterPageQuery, ChapterRelease, ChapterReleaseQuery, Image, ImageExtension, PageOrder,
+        StagedPageQuery,
     },
-    error::{EntityError, ServiceError},
+    error::ServiceError,
     service::{Service, concurrency::run_concurrently},
 };
 
 struct UploadedPage {
-    release_id: Uuid,
     id: Uuid,
     extension: ImageExtension,
 }
@@ -59,29 +58,25 @@ impl Service {
     pub async fn store_chapter_pages(
         &self,
         release_id: Uuid,
-        pages: Vec<ChapterPage>,
+        images: Vec<Image>,
     ) -> Result<Vec<Uuid>, ServiceError> {
         const UPLOAD_CONCURRENCY: usize = 5;
 
-        if pages.is_empty() {
+        if images.is_empty() {
             return Ok(Vec::new());
         }
 
         let existing = self.database.count_chapter_pages(release_id).await? as usize;
-        let total = existing + pages.len();
-        if total > MAX_RELEASE_ROWS {
-            return Err(EntityError::ReleaseRowsExceedLimit(total, MAX_RELEASE_ROWS).into());
-        }
+        ChapterRelease::ensure_row_capacity(existing, images.len())?;
 
         let storage = self.storage.clone();
-        let uploaded = run_concurrently(pages, UPLOAD_CONCURRENCY, move |page| {
+        let uploaded = run_concurrently(images, UPLOAD_CONCURRENCY, move |image| {
             let storage = storage.clone();
             async move {
-                storage.upload_chapter_page(&page).await?;
+                storage.upload_chapter_page(release_id, &image).await?;
                 Ok::<UploadedPage, ServiceError>(UploadedPage {
-                    release_id: page.release_id,
-                    id: page.image.id,
-                    extension: page.image.extension,
+                    id: image.id,
+                    extension: image.extension,
                 })
             }
         })
@@ -92,7 +87,7 @@ impl Service {
             let database = database.clone();
             async move {
                 database
-                    .store_chapter_page(page.release_id, page.id, page.extension)
+                    .store_chapter_page(release_id, page.id, page.extension)
                     .await?;
                 Ok::<Uuid, ServiceError>(page.id)
             }

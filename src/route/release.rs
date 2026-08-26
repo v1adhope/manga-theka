@@ -10,8 +10,8 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        ChapterPage, ChapterRelease, DEFAULT_IMAGE_MAX_BYTES, Image, ImageContent,
-        MAX_PARTS_PER_REQUEST, PageOrder,
+        ChapterRelease, DEFAULT_IMAGE_MAX_BYTES, Image, ImageContent, MAX_PARTS_PER_REQUEST,
+        PageOrder,
     },
     error::{AppError, EntityError},
     route::{StoreResp, json_data_response},
@@ -68,31 +68,21 @@ pub async fn upload_chapter_pages(
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     service.ensure_chapter_release_exists(release_id).await?;
 
-    let mut pages = Vec::new();
-    let mut failure = None;
+    let mut images = Vec::with_capacity(MAX_PARTS_PER_REQUEST);
 
     while let Some(field) = multipart.next_field().await? {
-        if pages.len() >= MAX_PARTS_PER_REQUEST {
-            failure = Some(
-                EntityError::UploadPartsExceedLimit(pages.len() + 1, MAX_PARTS_PER_REQUEST).into(),
-            );
-            break;
+        if images.len() >= MAX_PARTS_PER_REQUEST {
+            return Err(EntityError::UploadPartsExceedLimit(
+                images.len() + 1,
+                MAX_PARTS_PER_REQUEST,
+            )
+            .into());
         }
 
-        match collect_part(field).await {
-            Ok(image) => pages.push(ChapterPage { release_id, image }),
-            Err(e) => {
-                failure = Some(e);
-                break;
-            }
-        }
+        images.push(collect_part(field).await?);
     }
 
-    let ids = service.store_chapter_pages(release_id, pages).await?;
-
-    if let Some(err) = failure {
-        return Err(err);
-    }
+    let ids = service.store_chapter_pages(release_id, images).await?;
 
     Ok(json_data_response(StatusCode::CREATED, ids))
 }
