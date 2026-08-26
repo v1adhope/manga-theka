@@ -1,19 +1,18 @@
 use std::collections::HashSet;
 
-use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    entity::{Entity, ImageExtension, Language},
+    entity::{DEFAULT_IMAGE_MAX_BYTES, Entity, Image, ImageExtension, Language},
     error::EntityError,
 };
 
-pub const PAGE_MAX_BYTES: usize = 5 * 1024 * 1024;
 pub const MAX_PARTS_PER_REQUEST: usize = 10;
 pub const MAX_COMMITTED_PAGES: usize = 200;
 pub const MAX_RELEASE_ROWS: usize = 400;
-pub const UPLOAD_MAX_BYTES: usize = MAX_PARTS_PER_REQUEST * (PAGE_MAX_BYTES + PART_HEADROOM_BYTES);
+pub const UPLOAD_MAX_BYTES: usize =
+    MAX_PARTS_PER_REQUEST * (DEFAULT_IMAGE_MAX_BYTES + PART_HEADROOM_BYTES);
 
 const PART_HEADROOM_BYTES: usize = 1024;
 
@@ -105,20 +104,12 @@ pub struct ChapterReleaseQuery {
 
 #[derive(Debug)]
 pub struct ChapterPage {
-    pub id: Uuid,
     pub release_id: Uuid,
-    pub extension: ImageExtension,
-    pub content: Bytes,
+    pub image: Image,
 }
 
 impl Entity for ChapterPage {
     const NAME: &'static str = "Chapter page";
-}
-
-impl ChapterPage {
-    pub fn content_disposition(&self) -> String {
-        self.extension.content_disposition(self.id)
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

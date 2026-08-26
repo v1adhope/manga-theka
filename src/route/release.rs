@@ -4,14 +4,14 @@ use axum::{
     http::{StatusCode, header},
     response::IntoResponse,
 };
-use bytes::{Bytes, BytesMut};
+use bytes::BytesMut;
 use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
     entity::{
-        ChapterPage, ChapterRelease, ImageExtension, MAX_PARTS_PER_REQUEST, MAX_RELEASE_ROWS,
-        PAGE_MAX_BYTES, PageOrder, StagedPageQuery,
+        ChapterPage, ChapterRelease, DEFAULT_IMAGE_MAX_BYTES, Image, ImageContent,
+        MAX_PARTS_PER_REQUEST, PageOrder,
     },
     error::{AppError, EntityError},
     route::{StoreResp, json_data_response},
@@ -68,54 +68,51 @@ pub async fn upload_chapter_pages(
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     service.ensure_chapter_release_exists(release_id).await?;
 
-    let mut rows = service.count_chapter_pages(release_id).await? as usize;
-    let mut staged: Vec<StagedPageQuery> = Vec::new();
+    let mut pages = Vec::new();
+    let mut failure = None;
 
     while let Some(field) = multipart.next_field().await? {
-        if staged.len() >= MAX_PARTS_PER_REQUEST {
-            return Err(EntityError::UploadPartsExceedLimit(
-                staged.len() + 1,
-                MAX_PARTS_PER_REQUEST,
-            )
-            .into());
-        }
-        if rows >= MAX_RELEASE_ROWS {
-            return Err(EntityError::ReleaseRowsExceedLimit(rows, MAX_RELEASE_ROWS).into());
+        if pages.len() >= MAX_PARTS_PER_REQUEST {
+            failure = Some(
+                EntityError::UploadPartsExceedLimit(pages.len() + 1, MAX_PARTS_PER_REQUEST).into(),
+            );
+            break;
         }
 
-        let content = collect_part(field).await?;
-        let extension = ImageExtension::try_from(content.as_ref())?;
-        let page = ChapterPage {
-            id: Uuid::now_v7(),
-            release_id,
-            extension,
-            content,
-        };
-
-        service.store_chapter_page(&page).await?;
-
-        rows += 1;
-        staged.push(StagedPageQuery {
-            id: page.id,
-            extension: page.extension,
-        });
+        match collect_part(field).await {
+            Ok(image) => pages.push(ChapterPage { release_id, image }),
+            Err(e) => {
+                failure = Some(e);
+                break;
+            }
+        }
     }
 
-    Ok(json_data_response(StatusCode::CREATED, staged))
+    let ids = service.store_chapter_pages(release_id, pages).await?;
+
+    if let Some(err) = failure {
+        return Err(err);
+    }
+
+    Ok(json_data_response(StatusCode::CREATED, ids))
 }
 
-async fn collect_part(mut field: Field<'_>) -> Result<Bytes, AppError> {
+async fn collect_part(mut field: Field<'_>) -> Result<Image, AppError> {
+    let file_name = field.file_name().map(str::to_owned);
     let mut content = BytesMut::new();
 
     while let Some(chunk) = field.chunk().await? {
-        if content.len() + chunk.len() > PAGE_MAX_BYTES {
-            return Err(EntityError::PageExceedsByteLimit(PAGE_MAX_BYTES).into());
+        if content.len() + chunk.len() > DEFAULT_IMAGE_MAX_BYTES {
+            return Err(EntityError::ImageExceedsByteLimit(DEFAULT_IMAGE_MAX_BYTES).into());
         }
 
         content.extend_from_slice(&chunk);
     }
 
-    Ok(content.freeze())
+    let content = ImageContent::try_from(content.freeze())?;
+    let image = Image::new(Uuid::now_v7(), content, file_name)?;
+
+    Ok(image)
 }
 
 #[derive(Debug, Deserialize)]

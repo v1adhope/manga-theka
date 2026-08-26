@@ -82,15 +82,15 @@ pub enum EntityError {
     #[error("Release already holds {0} of {1} allowed pages")]
     ReleaseRowsExceedLimit(usize, usize),
 
-    #[error("Page exceeds the {0}-byte limit")]
-    PageExceedsByteLimit(usize),
+    #[error("Image exceeds the {0}-byte limit")]
+    ImageExceedsByteLimit(usize),
 }
 
 impl IntoResponse for EntityError {
     fn into_response(self) -> Response {
         let status = match self {
             Self::UnsupportedImageFormat => StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            Self::PageExceedsByteLimit(_) => StatusCode::PAYLOAD_TOO_LARGE,
+            Self::ImageExceedsByteLimit(_) => StatusCode::PAYLOAD_TOO_LARGE,
             _ => StatusCode::UNPROCESSABLE_ENTITY,
         };
 

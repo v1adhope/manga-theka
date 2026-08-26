@@ -2,11 +2,11 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        ChapterPage, ChapterPageQuery, ChapterRelease, ChapterReleaseQuery, PageOrder,
-        StagedPageQuery,
+        ChapterPage, ChapterPageQuery, ChapterRelease, ChapterReleaseQuery, MAX_RELEASE_ROWS,
+        PageOrder, StagedPageQuery,
     },
-    error::ServiceError,
-    service::Service,
+    error::{EntityError, ServiceError},
+    service::{Service, concurrency::run_concurrently},
 };
 
 impl Service {
@@ -50,13 +50,35 @@ impl Service {
             .map_err(Into::into)
     }
 
-    pub async fn store_chapter_page(&self, item: &ChapterPage) -> Result<(), ServiceError> {
-        self.storage.upload_chapter_page(item).await?;
+    pub async fn store_chapter_pages(
+        &self,
+        release_id: Uuid,
+        pages: Vec<ChapterPage>,
+    ) -> Result<Vec<Uuid>, ServiceError> {
+        const UPLOAD_CONCURRENCY: usize = 5;
 
-        self.database
-            .store_chapter_page(item)
-            .await
-            .map_err(Into::into)
+        if pages.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let existing = self.database.count_chapter_pages(release_id).await? as usize;
+        let total = existing + pages.len();
+        if total > MAX_RELEASE_ROWS {
+            return Err(EntityError::ReleaseRowsExceedLimit(total, MAX_RELEASE_ROWS).into());
+        }
+
+        let storage = self.storage.clone();
+        let database = self.database.clone();
+        run_concurrently(pages, UPLOAD_CONCURRENCY, move |page| {
+            let storage = storage.clone();
+            let database = database.clone();
+            async move {
+                storage.upload_chapter_page(&page).await?;
+                database.store_chapter_page(&page).await?;
+                Ok::<Uuid, ServiceError>(page.image.id)
+            }
+        })
+        .await
     }
 
     pub async fn commit_chapter_release(

@@ -75,7 +75,7 @@ async fn store_chapter_release_allows_competing_releases_in_one_language() {
 }
 
 #[tokio::test]
-async fn upload_chapter_pages_stages_every_part_and_returns_their_identifiers() {
+async fn upload_chapter_pages_stages_every_part_and_returns_their_identifiers_in_order() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
     let chapter_id = app.insert_random_chapter(book_id).await;
@@ -87,18 +87,11 @@ async fn upload_chapter_pages_stages_every_part_and_returns_their_identifiers() 
     assert_eq!(resp.status(), StatusCode::CREATED);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<serde_json::Value>> = serde_json::from_slice(&bytes).unwrap();
+    let wrapper: RespWrapper<Vec<Uuid>> = serde_json::from_slice(&bytes).unwrap();
 
-    let extensions: Vec<&str> = wrapper
-        .data
-        .iter()
-        .map(|p| p["extension"].as_str().unwrap())
-        .collect();
-    assert_eq!(extensions, vec!["Png", "Jpg", "Webp"]);
-
-    for page in &wrapper.data {
-        let id = Uuid::parse_str(page["id"].as_str().unwrap()).unwrap();
-        assert!(app.object_exists(&app.release_pages_bucket, id).await);
+    assert_eq!(wrapper.data.len(), 3);
+    for id in &wrapper.data {
+        assert!(app.object_exists(&app.release_pages_bucket, *id).await);
     }
 }
 
@@ -113,8 +106,8 @@ async fn upload_chapter_pages_sniffs_the_format_rather_than_trusting_the_part() 
     assert_eq!(resp.status(), StatusCode::CREATED);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<serde_json::Value>> = serde_json::from_slice(&bytes).unwrap();
-    let id = Uuid::parse_str(wrapper.data[0]["id"].as_str().unwrap()).unwrap();
+    let wrapper: RespWrapper<Vec<Uuid>> = serde_json::from_slice(&bytes).unwrap();
+    let id = wrapper.data[0];
 
     let content_type = app.object_content_type(&app.release_pages_bucket, id).await;
     assert_eq!(content_type, "image/png");

@@ -1,4 +1,3 @@
-use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use time::OffsetDateTime;
@@ -6,11 +5,11 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
-    entity::{ContentRating, Creator, Entity, ImageExtension, Label, Language, validate_name},
+    entity::{
+        ContentRating, Creator, Entity, Image, ImageExtension, Label, Language, validate_name,
+    },
     error::EntityError,
 };
-
-pub const COVER_MAX_BYTES: usize = 5 * 1024 * 1024;
 
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
 pub enum BookStatus {
@@ -218,21 +217,13 @@ pub struct AlternativeTitle {
 
 #[derive(Debug)]
 pub struct BookCover {
-    pub id: Uuid,
     pub book_id: Uuid,
-    pub extension: ImageExtension,
-    pub content: Bytes,
+    pub image: Image,
     pub is_main: bool,
 }
 
 impl Entity for BookCover {
     const NAME: &'static str = "Book cover";
-}
-
-impl BookCover {
-    pub fn content_disposition(&self) -> String {
-        self.extension.content_disposition(self.id)
-    }
 }
 
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
@@ -264,24 +255,7 @@ pub struct BookCoverQuery {
 mod tests {
     use uuid::Uuid;
 
-    use crate::entity::{BookCover, BookName, CoverUrl, Description, ImageExtension, LinkUrl};
-    use bytes::Bytes;
-
-    #[test]
-    fn content_disposition_is_inline_with_the_extension_suffixed_filename() {
-        let cover = BookCover {
-            id: Uuid::from_u128(1),
-            book_id: Uuid::from_u128(2),
-            extension: ImageExtension::Webp,
-            content: Bytes::new(),
-            is_main: false,
-        };
-
-        assert_eq!(
-            cover.content_disposition(),
-            "inline; filename=\"00000000-0000-0000-0000-000000000001.webp\""
-        );
-    }
+    use crate::entity::{BookName, CoverUrl, Description, LinkUrl};
 
     #[test]
     fn cover_url_points_at_the_book_scoped_image_route() {

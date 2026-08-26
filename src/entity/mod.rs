@@ -10,6 +10,7 @@ mod chapter;
 mod content_rating;
 mod creator;
 mod filter;
+mod image;
 mod label;
 mod language;
 mod release;
@@ -19,6 +20,7 @@ pub use chapter::*;
 pub use content_rating::*;
 pub use creator::*;
 pub use filter::*;
+pub use image::*;
 pub use label::*;
 pub use language::*;
 pub use release::*;
@@ -26,6 +28,8 @@ pub use release::*;
 pub trait Entity {
     const NAME: &'static str;
 }
+
+pub const DEFAULT_IMAGE_MAX_BYTES: usize = 5 * 1024 * 1024;
 
 const JPEG_SOI: [u8; 3] = [0xFF, 0xD8, 0xFF];
 const PNG_SIGNATURE: [u8; 8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];

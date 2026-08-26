@@ -87,13 +87,9 @@ pub async fn staged_ids(app: &TestApp, release_id: Uuid, parts: &[&[u8]]) -> Vec
     assert_eq!(resp.status(), StatusCode::CREATED);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<serde_json::Value>> = serde_json::from_slice(&bytes).unwrap();
+    let wrapper: RespWrapper<Vec<Uuid>> = serde_json::from_slice(&bytes).unwrap();
 
-    wrapper
-        .data
-        .iter()
-        .map(|p| Uuid::parse_str(p["id"].as_str().unwrap()).unwrap())
-        .collect()
+    wrapper.data
 }
 
 pub async fn page_ids_in_order(app: &TestApp, release_id: Uuid) -> Vec<Uuid> {

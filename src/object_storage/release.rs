@@ -8,14 +8,14 @@ use crate::{
 };
 
 impl ObjectStorage {
-    #[instrument(name = "object_storage.chapter_page.upload", skip_all, fields(release.id = %item.release_id, page.id = %item.id))]
+    #[instrument(name = "object_storage.chapter_page.upload", skip_all, fields(release.id = %item.release_id, page.id = %item.image.id))]
     pub async fn upload_chapter_page(&self, item: &ChapterPage) -> Result<(), ObjectStorageError> {
         self.upload(
             &self.release_pages_bucket,
-            &item.id.to_string(),
-            item.content.clone(),
-            item.extension.content_type(),
-            &item.content_disposition(),
+            &item.image.id.to_string(),
+            item.image.content.to_bytes(),
+            item.image.extension.content_type(),
+            &item.image.content_disposition(),
         )
         .await
     }

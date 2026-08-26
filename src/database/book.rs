@@ -576,13 +576,13 @@ impl Database {
         Ok(())
     }
 
-    #[instrument(name = "db.book_cover.store", skip_all, fields(book.id = %item.book_id, cover.id = %item.id))]
+    #[instrument(name = "db.book_cover.store", skip_all, fields(book.id = %item.book_id, cover.id = %item.image.id))]
     pub async fn store_book_cover(&self, item: &BookCover) -> Result<(), DatabaseError> {
         sqlx::query_file!(
             "queries/store_book_cover.sql",
-            item.id,
+            item.image.id,
             item.book_id,
-            item.extension.as_ref(),
+            item.image.extension.as_ref(),
         )
         .execute(&self.pool)
         .await

@@ -8,7 +8,7 @@ use tokio::signal;
 use crate::{
     config::Config,
     database::{self, Database},
-    entity::{COVER_MAX_BYTES, UPLOAD_MAX_BYTES},
+    entity::{DEFAULT_IMAGE_MAX_BYTES, UPLOAD_MAX_BYTES},
     object_storage::{self, ObjectStorage},
     route::{
         commit_chapter_release, delete_book, delete_book_cover, delete_chapter,
@@ -60,8 +60,9 @@ impl App {
             )
             .route(
                 "/books/{id}/covers",
-                get(get_book_covers)
-                    .merge(post(store_book_cover).layer(DefaultBodyLimit::max(COVER_MAX_BYTES))),
+                get(get_book_covers).merge(
+                    post(store_book_cover).layer(DefaultBodyLimit::max(DEFAULT_IMAGE_MAX_BYTES)),
+                ),
             )
             .route("/books/{id}/covers/{cover_id}", delete(delete_book_cover))
             .route(
