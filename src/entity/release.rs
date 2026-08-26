@@ -102,6 +102,17 @@ impl ChapterRelease {
 
         Ok(())
     }
+
+    pub fn ensure_part_capacity(count: usize) -> Result<(), EntityError> {
+        if count > MAX_PARTS_PER_REQUEST {
+            return Err(EntityError::UploadPartsExceedLimit(
+                count,
+                MAX_PARTS_PER_REQUEST,
+            ));
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -140,7 +151,8 @@ mod tests {
     use uuid::Uuid;
 
     use crate::entity::{
-        ChapterRelease, MAX_COMMITTED_PAGES, MAX_RELEASE_ROWS, PageOrder, PageUrl, ReleaseVersion,
+        ChapterRelease, MAX_COMMITTED_PAGES, MAX_PARTS_PER_REQUEST, MAX_RELEASE_ROWS, PageOrder,
+        PageUrl, ReleaseVersion,
     };
 
     #[test]
@@ -152,6 +164,18 @@ mod tests {
     #[test]
     fn row_capacity_over_the_ceiling_is_rejected() {
         let res = ChapterRelease::ensure_row_capacity(MAX_RELEASE_ROWS, 1);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn part_capacity_at_the_ceiling_is_valid() {
+        let res = ChapterRelease::ensure_part_capacity(MAX_PARTS_PER_REQUEST);
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn part_capacity_over_the_ceiling_is_rejected() {
+        let res = ChapterRelease::ensure_part_capacity(MAX_PARTS_PER_REQUEST + 1);
         assert!(res.is_err());
     }
 

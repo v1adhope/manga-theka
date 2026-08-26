@@ -219,7 +219,6 @@ pub struct AlternativeTitle {
 pub struct BookCover {
     pub book_id: Uuid,
     pub image: Image,
-    pub is_main: bool,
 }
 
 impl Entity for BookCover {

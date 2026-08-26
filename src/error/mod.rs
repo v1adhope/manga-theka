@@ -1,11 +1,13 @@
 mod database;
 mod entity;
 mod object_storage;
+mod route;
 mod service;
 
 pub use database::*;
 pub use entity::*;
 pub use object_storage::*;
+pub use route::*;
 pub use service::*;
 
 use axum::{
@@ -34,7 +36,7 @@ pub enum AppError {
     ServiceError(#[from] ServiceError),
 
     #[error(transparent)]
-    MultipartError(#[from] axum::extract::multipart::MultipartError),
+    RouteError(#[from] RouteError),
 }
 
 impl IntoResponse for AppError {
@@ -42,7 +44,7 @@ impl IntoResponse for AppError {
         match self {
             Self::EntityError(e) => e.into_response(),
             Self::ServiceError(e) => e.into_response(),
-            Self::MultipartError(e) => error_response(e.status(), e.to_string()),
+            Self::RouteError(e) => e.into_response(),
         }
     }
 }

@@ -84,6 +84,9 @@ pub enum EntityError {
 
     #[error("Image exceeds the {0}-byte limit")]
     ImageExceedsByteLimit(usize),
+
+    #[error("Multipart part is missing a file name")]
+    FileNameMissing,
 }
 
 impl IntoResponse for EntityError {

@@ -67,6 +67,7 @@ aws-config = { version = "1", default-features = false, features = [
 ] }
 anyhow = "1"
 regex = "1"
+sanitize-filename = "0.6"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

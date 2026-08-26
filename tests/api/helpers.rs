@@ -541,7 +541,7 @@ values($1, $2, $3, false);
             .bucket(&self.covers_bucket)
             .key(id.to_string())
             .content_type(extension.content_type())
-            .content_disposition(extension.content_disposition(id))
+            .content_disposition(format!("inline; filename=\"{id}.{}\"", extension.as_ref()))
             .body(ByteStream::from_static(image))
             .send()
             .await
@@ -865,7 +865,7 @@ values($1, $2, $3, $4);
             .bucket(&self.release_pages_bucket)
             .key(id.to_string())
             .content_type(extension.content_type())
-            .content_disposition(extension.content_disposition(id))
+            .content_disposition(format!("inline; filename=\"{id}.{}\"", extension.as_ref()))
             .body(ByteStream::from_static(image))
             .send()
             .await

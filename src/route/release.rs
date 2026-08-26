@@ -1,20 +1,16 @@
 use axum::{
     Json,
-    extract::{Multipart, Path, State, multipart::Field},
+    extract::{Multipart, Path, State},
     http::{StatusCode, header},
     response::IntoResponse,
 };
-use bytes::BytesMut;
 use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
-    entity::{
-        ChapterRelease, DEFAULT_IMAGE_MAX_BYTES, Image, ImageContent, MAX_PARTS_PER_REQUEST,
-        PageOrder,
-    },
-    error::{AppError, EntityError},
-    route::{StoreResp, json_data_response},
+    entity::{ChapterRelease, MAX_PARTS_PER_REQUEST, PageOrder},
+    error::{AppError, RouteError},
+    route::{StoreResp, collect_image_part, json_data_response},
     service::Service,
 };
 
@@ -70,39 +66,19 @@ pub async fn upload_chapter_pages(
 
     let mut images = Vec::with_capacity(MAX_PARTS_PER_REQUEST);
 
-    while let Some(field) = multipart.next_field().await? {
-        if images.len() >= MAX_PARTS_PER_REQUEST {
-            return Err(EntityError::UploadPartsExceedLimit(
-                images.len() + 1,
-                MAX_PARTS_PER_REQUEST,
-            )
-            .into());
-        }
+    while let Some(field) = multipart.next_field().await.map_err(RouteError::from)? {
+        ChapterRelease::ensure_part_capacity(images.len() + 1)?;
 
-        images.push(collect_part(field).await?);
+        images.push(collect_image_part(field).await?);
+    }
+
+    if images.is_empty() {
+        return Err(RouteError::ImagePartMissing.into());
     }
 
     let ids = service.store_chapter_pages(release_id, images).await?;
 
     Ok(json_data_response(StatusCode::CREATED, ids))
-}
-
-async fn collect_part(mut field: Field<'_>) -> Result<Image, AppError> {
-    let file_name = field.file_name().map(str::to_owned);
-    let mut content = BytesMut::new();
-
-    while let Some(chunk) = field.chunk().await? {
-        if content.len() + chunk.len() > DEFAULT_IMAGE_MAX_BYTES {
-            return Err(EntityError::ImageExceedsByteLimit(DEFAULT_IMAGE_MAX_BYTES).into());
-        }
-
-        content.extend_from_slice(&chunk);
-    }
-
-    let content = ImageContent::try_from(content.freeze())?;
-    let image = Image::new(Uuid::now_v7(), content, file_name)?;
-
-    Ok(image)
 }
 
 #[derive(Debug, Deserialize)]
