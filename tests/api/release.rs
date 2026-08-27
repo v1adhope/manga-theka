@@ -7,7 +7,6 @@ use uuid::Uuid;
 use crate::fakers::{BookFaker, COVER_JPG, COVER_PNG, COVER_WEBP};
 use crate::helpers::{
     RespWrapper, TestApp, assert_error, assert_stored, page_ids_in_order, release_version,
-    staged_ids,
 };
 
 #[tokio::test]
@@ -212,7 +211,9 @@ async fn commit_chapter_release_publishes_it_in_the_declared_order() {
     let chapter_id = app.insert_random_chapter(book_id).await;
     let release_id = app.insert_random_release(book_id, chapter_id).await;
 
-    let staged = staged_ids(&app, release_id, &[COVER_PNG, COVER_JPG, COVER_WEBP]).await;
+    let staged = app
+        .insert_staged_pages(release_id, &[COVER_PNG, COVER_JPG, COVER_WEBP])
+        .await;
     let declared = vec![staged[2], staged[0], staged[1]];
 
     let resp = app.post_commit(release_id, &declared).await;
@@ -229,7 +230,9 @@ async fn recommitting_a_chapter_release_redeclares_the_order_and_bumps_the_versi
     let chapter_id = app.insert_random_chapter(book_id).await;
     let release_id = app.insert_random_release(book_id, chapter_id).await;
 
-    let staged = staged_ids(&app, release_id, &[COVER_PNG, COVER_JPG]).await;
+    let staged = app
+        .insert_staged_pages(release_id, &[COVER_PNG, COVER_JPG])
+        .await;
 
     let resp = app.post_commit(release_id, &staged).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
@@ -254,8 +257,10 @@ async fn commit_chapter_release_naming_a_foreign_page_returns_422() {
     let release_id = app.insert_random_release(book_id, chapter_id).await;
     let other_release_id = app.insert_random_release(book_id, chapter_id).await;
 
-    let staged = staged_ids(&app, release_id, &[COVER_PNG]).await;
-    let foreign = staged_ids(&app, other_release_id, &[COVER_JPG]).await;
+    let staged = app.insert_staged_pages(release_id, &[COVER_PNG]).await;
+    let foreign = app
+        .insert_staged_pages(other_release_id, &[COVER_JPG])
+        .await;
 
     let declared = vec![staged[0], foreign[0]];
 
@@ -275,7 +280,7 @@ async fn commit_chapter_release_naming_a_page_twice_returns_422() {
     let book_id = app.insert_random_book().await;
     let chapter_id = app.insert_random_chapter(book_id).await;
     let release_id = app.insert_random_release(book_id, chapter_id).await;
-    let staged = staged_ids(&app, release_id, &[COVER_PNG]).await;
+    let staged = app.insert_staged_pages(release_id, &[COVER_PNG]).await;
 
     let declared = vec![staged[0], staged[0]];
 
@@ -289,7 +294,7 @@ async fn commit_chapter_release_with_an_empty_order_returns_422() {
     let book_id = app.insert_random_book().await;
     let chapter_id = app.insert_random_chapter(book_id).await;
     let release_id = app.insert_random_release(book_id, chapter_id).await;
-    staged_ids(&app, release_id, &[COVER_PNG]).await;
+    app.insert_staged_pages(release_id, &[COVER_PNG]).await;
 
     let resp = app.post_commit(release_id, &[]).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
@@ -372,7 +377,7 @@ async fn commit_chapter_release_inserts_a_staged_page_at_the_declared_position()
 
     let first = app.insert_page(release_id, Some(1), COVER_PNG).await;
     let second = app.insert_page(release_id, Some(2), COVER_JPG).await;
-    let inserted = staged_ids(&app, release_id, &[COVER_WEBP]).await[0];
+    let inserted = app.insert_staged_pages(release_id, &[COVER_WEBP]).await[0];
 
     let declared = vec![first, inserted, second];
 
@@ -391,7 +396,7 @@ async fn commit_chapter_release_leaves_untouched_pages_with_their_identifiers_an
 
     let kept = app.insert_page(release_id, Some(1), COVER_PNG).await;
     let superseded = app.insert_page(release_id, Some(2), COVER_JPG).await;
-    let replacement = staged_ids(&app, release_id, &[COVER_WEBP]).await[0];
+    let replacement = app.insert_staged_pages(release_id, &[COVER_WEBP]).await[0];
 
     let declared = vec![kept, replacement];
 
@@ -467,7 +472,7 @@ async fn get_chapter_release_carries_its_version() {
 
     assert_eq!(release_version(&app, release_id).await, 0);
 
-    let staged = staged_ids(&app, release_id, &[COVER_PNG]).await;
+    let staged = app.insert_staged_pages(release_id, &[COVER_PNG]).await;
     app.post_commit(release_id, &staged).await;
 
     assert_eq!(release_version(&app, release_id).await, 1);

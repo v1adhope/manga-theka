@@ -83,16 +83,6 @@ pub async fn assert_stored(resp: Response) -> Uuid {
     Uuid::parse_str(id).expect("data.id must be a uuid")
 }
 
-pub async fn staged_ids(app: &TestApp, release_id: Uuid, parts: &[&[u8]]) -> Vec<Uuid> {
-    let resp = app.post_upload_pages(release_id, parts).await;
-    assert_eq!(resp.status(), StatusCode::CREATED);
-
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<Uuid>> = serde_json::from_slice(&bytes).unwrap();
-
-    wrapper.data
-}
-
 pub async fn page_ids_in_order(app: &TestApp, release_id: Uuid) -> Vec<Uuid> {
     let resp = app.get_pages(release_id).await;
     assert_eq!(resp.status(), StatusCode::OK);
@@ -837,7 +827,7 @@ values($1, $2, $3, 0);
         &self,
         release_id: Uuid,
         sort_order: Option<i16>,
-        image: &'static [u8],
+        image: &[u8],
     ) -> Uuid {
         let id = Uuid::now_v7();
         let extension =
@@ -863,12 +853,21 @@ values($1, $2, $3, $4);
             .key(id.to_string())
             .content_type(extension.content_type())
             .content_disposition(format!("inline; filename=\"{id}.{}\"", extension.as_ref()))
-            .body(ByteStream::from_static(image))
+            .body(ByteStream::from(image.to_vec()))
             .send()
             .await
             .expect("failed to upload factory chapter page");
 
         id
+    }
+
+    pub async fn insert_staged_pages(&self, release_id: Uuid, parts: &[&[u8]]) -> Vec<Uuid> {
+        let mut ids = Vec::with_capacity(parts.len());
+        for part in parts {
+            ids.push(self.insert_page(release_id, None, part).await);
+        }
+
+        ids
     }
 
     pub async fn fetch_release_version(&self, release_id: Uuid) -> i32 {
