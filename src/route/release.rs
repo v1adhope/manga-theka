@@ -65,20 +65,24 @@ pub async fn upload_chapter_pages(
     service.ensure_chapter_release_exists(release_id).await?;
 
     let mut images = Vec::with_capacity(MAX_PARTS_PER_REQUEST);
-    let mut ids = Vec::with_capacity(MAX_PARTS_PER_REQUEST);
 
     while let Some(field) = multipart.next_field().await.map_err(RouteError::from)? {
         ChapterRelease::ensure_part_capacity(images.len() + 1)?;
 
-        let image = collect_image_part(field).await?;
-        ids.push(image.id);
-        images.push(image);
+        images.push(collect_image_part(field).await?);
     }
 
     let pages = ChapterPages {
         release_id,
         images: images.try_into()?,
     };
+
+    let ids: Vec<Uuid> = pages
+        .images
+        .as_slice()
+        .iter()
+        .map(|image| image.id)
+        .collect();
 
     service.store_chapter_pages(pages).await?;
 
