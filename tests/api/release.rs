@@ -340,7 +340,7 @@ async fn commit_chapter_release_removes_undeclared_pages_and_their_images() {
 }
 
 #[tokio::test]
-async fn commit_chapter_release_leaves_the_remaining_pages_contiguous_from_one() {
+async fn commit_chapter_release_closes_the_gap_left_by_a_dropped_page() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
     let chapter_id = app.insert_random_chapter(book_id).await;
