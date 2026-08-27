@@ -43,13 +43,13 @@ impl Service {
             .map_err(Into::into)
     }
 
-    pub async fn store_book_cover(&self, item: &BookCover) -> Result<(), ServiceError> {
+    pub async fn store_book_cover(&self, item: BookCover) -> Result<(), ServiceError> {
         self.database.ensure_book_exists(item.book_id).await?;
 
-        self.storage.upload_book_cover(item).await?;
+        self.storage.upload_book_cover(&item).await?;
 
         self.database
-            .store_book_cover(item)
+            .store_book_cover(&item)
             .await
             .map_err(Into::into)
     }

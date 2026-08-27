@@ -25,18 +25,16 @@ pub async fn store_chapter_release(
     Path(chapter_id): Path<Uuid>,
     Json(req): Json<ChapterReleaseReq>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
+    let id = Uuid::now_v7();
     let release = ChapterRelease {
-        id: Uuid::now_v7(),
+        id,
         chapter_id,
         language_id: req.language_id,
     };
 
-    service.store_chapter_release(&release).await?;
+    service.store_chapter_release(release).await?;
 
-    Ok(json_data_response(
-        StatusCode::CREATED,
-        StoreResp { id: release.id },
-    ))
+    Ok(json_data_response(StatusCode::CREATED, StoreResp { id }))
 }
 
 pub async fn get_chapter_releases(

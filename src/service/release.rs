@@ -11,9 +11,9 @@ use crate::{
 };
 
 impl Service {
-    pub async fn store_chapter_release(&self, item: &ChapterRelease) -> Result<(), ServiceError> {
+    pub async fn store_chapter_release(&self, item: ChapterRelease) -> Result<(), ServiceError> {
         self.database
-            .store_chapter_release(item)
+            .store_chapter_release(&item)
             .await
             .map_err(Into::into)
     }

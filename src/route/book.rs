@@ -212,14 +212,12 @@ pub async fn store_book_cover(
 
     let image = collect_image_part(field).await?;
 
+    let id = image.id;
     let cover = BookCover { book_id, image };
 
-    service.store_book_cover(&cover).await?;
+    service.store_book_cover(cover).await?;
 
-    Ok(json_data_response(
-        StatusCode::CREATED,
-        StoreResp { id: cover.image.id },
-    ))
+    Ok(json_data_response(StatusCode::CREATED, StoreResp { id }))
 }
 
 pub async fn get_book_covers(
