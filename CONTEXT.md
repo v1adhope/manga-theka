@@ -51,7 +51,7 @@ The single canonical, always-present English name of a `Book`, stored directly o
 _Avoid_: Title, Localized name
 
 **Alternative Title**:
-A supplementary name for a `Book` in any language -- the original non-English title or an official translation. Unlike `Chapter Name`, a `Book` may have many `Alternative Title`s in the same language.
+A supplementary name for a `Book` in any language -- the original non-English title or an official translation. Unlike `Chapter Localization`, a `Book` may have many `Alternative Title`s in the same language.
 _Avoid_: Translation, Localization
 
 **Book Kind**:
@@ -86,6 +86,10 @@ _Avoid_: Chapter Title
 A `Chapter Name`'s rendering in a specific language, one row per language including English (mirrored in). Unlike `Alternative Title`, at most one per language.
 _Avoid_: Chapter Translation
 
+**Chapter Volume**:
+The volume a `Chapter` belongs to within its `Book`, as a whole number 0-1000. Nullable -- not every `Book` is split into volumes.
+_Avoid_: Tankobon, Part, Book (in the print sense)
+
 **Label**:
 A Genre or Tag applied to a `Book`, drawn from one shared catalog distinguished only by its type.
 _Avoid_: Genre, Tag (as separate concepts), Category
@@ -105,7 +109,7 @@ The physical position of a `Chapter Page` within its `Chapter Release`, starting
 _Avoid_: Number, Position, Rank (see `Chapter Number` for the semantic counterpart)
 
 **Chapter Release**:
-A single-language, ordered set of `Chapter Page`s belonging to a `Chapter`. A `Chapter` may have multiple Releases -- different languages, or competing releases in the same language. Its `Chapter` and language are fixed after creation; its pages are changed by declaring a new whole order. Published once it holds at least one `Chapter Page`; listed for its `Chapter` from creation regardless, so one that has never been committed appears with a zero page count. Always a translation -- its language can never be the `Book`'s original publication language.
+A single-language, ordered set of `Chapter Page`s belonging to a `Chapter`. A `Chapter` may have multiple Releases -- different languages, or competing releases in the same language. Its `Chapter` and language are fixed after creation; its pages are changed by declaring a new whole order. Carries a revision counter starting at 0, bumped once per commit (never on upload) and exposed read-only as the `version` field. Published once it holds at least one `Chapter Page`; listed for its `Chapter` from creation regardless, so one that has never been committed appears with a zero page count. Always a translation -- its language can never be the `Book`'s original publication language.
 _Avoid_: Scan, Scanlation, Version, Draft (for an unpublished one)
 
 **Chapter Page**:

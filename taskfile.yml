@@ -49,7 +49,7 @@ tasks:
       - cargo tarpaulin --ignore-tests
 
   push-prepare:
-    desc: Run all git pre-push checks (sqlx-prepare, fmt, lint, audit, machete, test, build, coverage)
+    desc: Run all git pre-push checks (sqlx-prepare, fmt, lint, audit, machete, test)
     cmds:
       - task: sqlx-prepare
       - task: fmt
