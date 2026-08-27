@@ -1,8 +1,10 @@
 use axum::http::{StatusCode, header};
+use fake::Fake;
 use http_body_util::BodyExt;
+use manga_theka::entity::Book;
 use uuid::Uuid;
 
-use crate::fakers::{COVER_JPG, COVER_PNG, COVER_WEBP};
+use crate::fakers::{BookFaker, COVER_JPG, COVER_PNG, COVER_WEBP};
 use crate::helpers::{
     RespWrapper, TestApp, assert_error, assert_stored, page_ids_in_order, release_version,
     staged_ids,
@@ -25,17 +27,13 @@ async fn store_chapter_release_mints_an_identifier() {
 #[tokio::test]
 async fn store_chapter_release_in_the_publication_language_returns_422() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
-    let chapter_id = app.insert_random_chapter(book_id).await;
-    let publication_language = sqlx::query_scalar!(
-        "select publication_language from books where id = $1",
-        book_id
-    )
-    .fetch_one(&app.pool)
-    .await
-    .unwrap();
+    let book: Book = BookFaker::default().fake();
+    app.insert_book(&book).await;
+    let chapter_id = app.insert_random_chapter(book.id).await;
 
-    let resp = app.post_release(chapter_id, publication_language).await;
+    let resp = app
+        .post_release(chapter_id, book.publication_language.id)
+        .await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
 
