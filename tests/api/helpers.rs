@@ -84,7 +84,7 @@ pub async fn assert_stored(resp: Response) -> Uuid {
 }
 
 pub async fn staged_ids(app: &TestApp, release_id: Uuid, parts: &[&[u8]]) -> Vec<Uuid> {
-    let resp = app.post_upload(release_id, parts).await;
+    let resp = app.post_upload_pages(release_id, parts).await;
     assert_eq!(resp.status(), StatusCode::CREATED);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -700,7 +700,7 @@ values($1, $2, $3, $4, $5);
     }
 
     pub async fn post_cover(&self, book_id: Uuid, image: &[u8]) -> Response {
-        let form = multipart_body(&[image]);
+        let form = Self::multipart_body(&[image]);
         let req = Request::post(format!("/books/{book_id}/covers"))
             .header(header::CONTENT_TYPE, form.content_type())
             .body(Body::from(form))
@@ -775,21 +775,19 @@ values($1, $2, $3, $4, $5);
         let bytes = resp.into_body().collect().await.unwrap().to_bytes();
         serde_json::from_slice(&bytes).expect("failed to parse chapter page")
     }
-}
 
-pub fn multipart_body(parts: &[&[u8]]) -> MultipartForm {
-    parts
-        .iter()
-        .enumerate()
-        .fold(MultipartForm::new(), |form, (i, part)| {
-            form.add_part(
-                format!("page{i}"),
-                Part::bytes(part.to_vec()).file_name(format!("page{i}")),
-            )
-        })
-}
+    fn multipart_body(parts: &[&[u8]]) -> MultipartForm {
+        parts
+            .iter()
+            .enumerate()
+            .fold(MultipartForm::new(), |form, (i, part)| {
+                form.add_part(
+                    format!("page{i}"),
+                    Part::bytes(part.to_vec()).file_name(format!("page{i}")),
+                )
+            })
+    }
 
-impl TestApp {
     pub async fn non_publication_language(&self, book_id: Uuid) -> Uuid {
         let publication = sqlx::query_scalar!(
             r#"
@@ -931,8 +929,8 @@ order by sort_order nulls last, id;
         self.router.clone().oneshot(req).await.unwrap()
     }
 
-    pub async fn post_upload(&self, release_id: Uuid, parts: &[&[u8]]) -> Response {
-        let form = multipart_body(parts);
+    pub async fn post_upload_pages(&self, release_id: Uuid, parts: &[&[u8]]) -> Response {
+        let form = Self::multipart_body(parts);
         let req = Request::post(format!("/releases/{release_id}/upload"))
             .header(header::CONTENT_TYPE, form.content_type())
             .body(Body::from(form))

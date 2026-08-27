@@ -80,7 +80,7 @@ async fn upload_chapter_pages_stages_every_part_and_returns_their_identifiers_in
     let release_id = app.insert_random_release(book_id, chapter_id).await;
 
     let resp = app
-        .post_upload(release_id, &[COVER_PNG, COVER_JPG, COVER_WEBP])
+        .post_upload_pages(release_id, &[COVER_PNG, COVER_JPG, COVER_WEBP])
         .await;
     assert_eq!(resp.status(), StatusCode::CREATED);
 
@@ -100,7 +100,7 @@ async fn upload_chapter_pages_sniffs_the_format_rather_than_trusting_the_part() 
     let chapter_id = app.insert_random_chapter(book_id).await;
     let release_id = app.insert_random_release(book_id, chapter_id).await;
 
-    let resp = app.post_upload(release_id, &[COVER_PNG]).await;
+    let resp = app.post_upload_pages(release_id, &[COVER_PNG]).await;
     assert_eq!(resp.status(), StatusCode::CREATED);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -119,7 +119,7 @@ async fn upload_chapter_pages_with_an_unknown_format_returns_415() {
     let release_id = app.insert_random_release(book_id, chapter_id).await;
 
     let resp = app
-        .post_upload(release_id, &[b"GIF89a not really an image"])
+        .post_upload_pages(release_id, &[b"GIF89a not really an image"])
         .await;
     assert_error(resp, StatusCode::UNSUPPORTED_MEDIA_TYPE).await;
 
@@ -137,7 +137,7 @@ async fn upload_chapter_pages_with_an_oversized_part_returns_413() {
     let mut oversized = COVER_PNG.to_vec();
     oversized.resize(5 * 1024 * 1024 + 1, 0);
 
-    let resp = app.post_upload(release_id, &[&oversized]).await;
+    let resp = app.post_upload_pages(release_id, &[&oversized]).await;
     assert_eq!(resp.status(), StatusCode::PAYLOAD_TOO_LARGE);
 
     assert_eq!(app.objects_count(&app.release_pages_bucket).await, 0);
@@ -152,7 +152,7 @@ async fn upload_chapter_pages_stores_nothing_when_a_later_part_fails() {
     let release_id = app.insert_random_release(book_id, chapter_id).await;
 
     let resp = app
-        .post_upload(release_id, &[COVER_PNG, COVER_JPG, b"GIF89a"])
+        .post_upload_pages(release_id, &[COVER_PNG, COVER_JPG, b"GIF89a"])
         .await;
     assert_error(resp, StatusCode::UNSUPPORTED_MEDIA_TYPE).await;
 
@@ -168,7 +168,7 @@ async fn upload_chapter_pages_over_the_part_limit_returns_422() {
 
     let parts: Vec<&[u8]> = (0..11).map(|_| COVER_PNG).collect();
 
-    let resp = app.post_upload(release_id, &parts).await;
+    let resp = app.post_upload_pages(release_id, &parts).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
 
@@ -176,7 +176,7 @@ async fn upload_chapter_pages_over_the_part_limit_returns_422() {
 async fn upload_chapter_pages_for_unknown_release_returns_404() {
     let app = TestApp::new().await;
 
-    let resp = app.post_upload(Uuid::now_v7(), &[COVER_PNG]).await;
+    let resp = app.post_upload_pages(Uuid::now_v7(), &[COVER_PNG]).await;
     assert_error(resp, StatusCode::NOT_FOUND).await;
 
     assert_eq!(app.objects_count(&app.release_pages_bucket).await, 0);
@@ -201,7 +201,7 @@ from generate_series(1, 400);
     .await
     .unwrap();
 
-    let resp = app.post_upload(release_id, &[COVER_PNG]).await;
+    let resp = app.post_upload_pages(release_id, &[COVER_PNG]).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
 
