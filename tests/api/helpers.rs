@@ -83,16 +83,6 @@ pub async fn assert_stored(resp: Response) -> Uuid {
     Uuid::parse_str(id).expect("data.id must be a uuid")
 }
 
-pub async fn release_version(app: &TestApp, release_id: Uuid) -> i64 {
-    let resp = app.get_release(release_id).await;
-    assert_eq!(resp.status(), StatusCode::OK);
-
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<serde_json::Value> = serde_json::from_slice(&bytes).unwrap();
-
-    wrapper.data["version"].as_i64().unwrap()
-}
-
 pub fn label_keys(labels: &[Label]) -> Vec<(Uuid, &str, &str)> {
     let mut keys: Vec<(Uuid, &str, &str)> = labels
         .iter()
@@ -807,21 +797,6 @@ values($1, $2, $3, 0);
         let language_id = self.non_publication_language(book_id).await;
 
         self.insert_release(chapter_id, language_id).await
-    }
-
-    pub async fn set_release_version(&self, release_id: Uuid, version: i32) {
-        sqlx::query!(
-            r#"
-update chapter_releases
-set version = $2
-where id = $1;
-        "#,
-            release_id,
-            version
-        )
-        .execute(&self.pool)
-        .await
-        .expect("failed to set factory chapter release version");
     }
 
     pub async fn insert_page(

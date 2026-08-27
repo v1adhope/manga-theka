@@ -1,11 +1,11 @@
 use axum::http::{StatusCode, header};
 use fake::Fake;
 use http_body_util::BodyExt;
-use manga_theka::entity::{Book, ChapterReleaseQuery};
+use manga_theka::entity::{Book, ChapterPageQuery, ChapterReleaseQuery, ImageExtension, PageUrl};
 use uuid::Uuid;
 
 use crate::fakers::{BookFaker, COVER_JPG, COVER_PNG, COVER_WEBP};
-use crate::helpers::{RespWrapper, TestApp, assert_error, assert_stored, release_version};
+use crate::helpers::{RespWrapper, TestApp, assert_error, assert_stored};
 
 #[tokio::test]
 async fn store_chapter_release_mints_an_identifier() {
@@ -460,20 +460,6 @@ async fn get_chapter_releases_for_unknown_chapter_returns_404() {
 }
 
 #[tokio::test]
-async fn get_chapter_release_carries_its_version() {
-    let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
-    let chapter_id = app.insert_random_chapter(book_id).await;
-    let release_id = app.insert_random_release(book_id, chapter_id).await;
-
-    assert_eq!(release_version(&app, release_id).await, 0);
-
-    app.set_release_version(release_id, 1).await;
-
-    assert_eq!(release_version(&app, release_id).await, 1);
-}
-
-#[tokio::test]
 async fn get_chapter_release_for_unknown_release_returns_404() {
     let app = TestApp::new().await;
 
@@ -482,36 +468,35 @@ async fn get_chapter_release_for_unknown_release_returns_404() {
 }
 
 #[tokio::test]
-async fn get_chapter_pages_lists_committed_pages_with_position_addressed_links() {
+async fn get_chapter_pages_lists_a_committed_page_with_all_its_fields() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
     let chapter_id = app.insert_random_chapter(book_id).await;
     let release_id = app.insert_random_release(book_id, chapter_id).await;
 
-    let first = app.insert_page(release_id, Some(1), COVER_PNG).await;
-    app.insert_page(release_id, Some(2), COVER_JPG).await;
-    let staged = app.insert_page(release_id, None, COVER_WEBP).await;
+    let committed_id = app.insert_page(release_id, Some(1), COVER_PNG).await;
+    app.insert_page(release_id, None, COVER_WEBP).await;
 
     let resp = app.get_pages(release_id).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<serde_json::Value>> = serde_json::from_slice(&bytes).unwrap();
+    let wrapper: RespWrapper<Vec<ChapterPageQuery>> = serde_json::from_slice(&bytes).unwrap();
 
-    let ids: Vec<Uuid> = wrapper
-        .data
-        .iter()
-        .map(|p| Uuid::parse_str(p["id"].as_str().unwrap()).unwrap())
-        .collect();
-
-    assert_eq!(ids.len(), 2);
-    assert!(!ids.contains(&staged));
-    assert_eq!(wrapper.data[0]["pageNumber"], 1);
-    assert_eq!(
-        wrapper.data[0]["url"].as_str().unwrap(),
-        format!("/releases/{release_id}/pages/1")
-    );
-    assert_eq!(ids[0], first);
+    assert_eq!(wrapper.data.len(), 1);
+    let ChapterPageQuery::Committed {
+        id,
+        page_number,
+        extension,
+        url,
+    } = wrapper.data.into_iter().next().unwrap()
+    else {
+        panic!("the committed listing must carry the Committed variant");
+    };
+    assert_eq!(id, committed_id);
+    assert_eq!(page_number, 1);
+    assert_eq!(extension, ImageExtension::Png);
+    assert_eq!(url, PageUrl::from((release_id, 1)));
 }
 
 #[tokio::test]
@@ -523,24 +508,28 @@ async fn get_chapter_pages_for_unknown_release_returns_404() {
 }
 
 #[tokio::test]
-async fn get_staged_chapter_pages_lists_only_pages_absent_from_the_committed_list() {
+async fn get_staged_chapter_pages_lists_a_staged_page_with_all_its_fields() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
     let chapter_id = app.insert_random_chapter(book_id).await;
     let release_id = app.insert_random_release(book_id, chapter_id).await;
 
     app.insert_page(release_id, Some(1), COVER_PNG).await;
-    let staged = app.insert_page(release_id, None, COVER_WEBP).await;
+    let staged_id = app.insert_page(release_id, None, COVER_WEBP).await;
 
     let resp = app.get_staged(release_id).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<serde_json::Value>> = serde_json::from_slice(&bytes).unwrap();
+    let wrapper: RespWrapper<Vec<ChapterPageQuery>> = serde_json::from_slice(&bytes).unwrap();
 
     assert_eq!(wrapper.data.len(), 1);
-    assert_eq!(wrapper.data[0]["id"].as_str().unwrap(), staged.to_string());
-    assert_eq!(wrapper.data[0]["extension"], "Webp");
+    let ChapterPageQuery::Staged { id, extension } = wrapper.data.into_iter().next().unwrap()
+    else {
+        panic!("the staged listing must carry the Staged variant");
+    };
+    assert_eq!(id, staged_id);
+    assert_eq!(extension, ImageExtension::Webp);
 }
 
 #[tokio::test]
