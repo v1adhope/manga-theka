@@ -124,9 +124,8 @@ impl Service {
 
         self.database.delete_chapter_release(id).await?;
 
-        self.storage
-            .delete_chapter_pages(&page_ids)
-            .await
-            .map_err(Into::into)
+        let _ = self.storage.delete_chapter_pages(&page_ids).await;
+
+        Ok(())
     }
 }

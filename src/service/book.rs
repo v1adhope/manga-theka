@@ -37,10 +37,9 @@ impl Service {
 
         self.database.delete_book(id).await?;
 
-        self.storage
-            .delete_book_covers(&cover_ids)
-            .await
-            .map_err(Into::into)
+        let _ = self.storage.delete_book_covers(&cover_ids).await;
+
+        Ok(())
     }
 
     pub async fn store_book_cover(&self, item: BookCover) -> Result<(), ServiceError> {
@@ -89,9 +88,8 @@ impl Service {
     pub async fn delete_book_cover(&self, book_id: Uuid, id: Uuid) -> Result<(), ServiceError> {
         self.database.delete_book_cover(book_id, id).await?;
 
-        self.storage
-            .delete_book_covers(&[id])
-            .await
-            .map_err(Into::into)
+        let _ = self.storage.delete_book_covers(&[id]).await;
+
+        Ok(())
     }
 }
