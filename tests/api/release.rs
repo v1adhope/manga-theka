@@ -592,7 +592,7 @@ async fn delete_chapter_release_purges_its_pages_and_images() {
     let resp = app.delete_release(release_id).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    assert!(!app.release_exists(release_id).await);
+    assert!(app.fetch_release_id(release_id).await.is_none());
     assert!(
         !app.object_exists(&app.release_pages_bucket, committed_id)
             .await

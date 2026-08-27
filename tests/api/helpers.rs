@@ -860,16 +860,18 @@ where id = $1;
         .expect("failed to read chapter release version")
     }
 
-    pub async fn release_exists(&self, release_id: Uuid) -> bool {
+    pub async fn fetch_release_id(&self, release_id: Uuid) -> Option<Uuid> {
         sqlx::query_scalar!(
             r#"
-select exists(select 1 from chapter_releases where id = $1) as "exists!";
+select id
+from chapter_releases
+where id = $1;
         "#,
             release_id
         )
-        .fetch_one(&self.pool)
+        .fetch_optional(&self.pool)
         .await
-        .expect("failed to check chapter release existence")
+        .expect("failed to read chapter release id")
     }
 
     pub async fn fetch_page_order(&self, release_id: Uuid) -> Vec<(Uuid, Option<i16>)> {
