@@ -5,9 +5,7 @@ use manga_theka::entity::Book;
 use uuid::Uuid;
 
 use crate::fakers::{BookFaker, COVER_JPG, COVER_PNG, COVER_WEBP};
-use crate::helpers::{
-    RespWrapper, TestApp, assert_error, assert_stored, page_ids_in_order, release_version,
-};
+use crate::helpers::{RespWrapper, TestApp, assert_error, assert_stored, release_version};
 
 #[tokio::test]
 async fn store_chapter_release_mints_an_identifier() {
@@ -219,7 +217,7 @@ async fn commit_chapter_release_publishes_it_in_the_declared_order() {
     let resp = app.post_commit(release_id, &declared).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    assert_eq!(page_ids_in_order(&app, release_id).await, declared);
+    assert_eq!(app.fetch_committed_page_ids(release_id).await, declared);
     assert_eq!(app.fetch_release_version(release_id).await, 1);
 }
 
@@ -241,7 +239,7 @@ async fn recommitting_a_chapter_release_redeclares_the_order_and_bumps_the_versi
     let resp = app.post_commit(release_id, &staged[..1]).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    assert_eq!(page_ids_in_order(&app, release_id).await, staged[..1]);
+    assert_eq!(app.fetch_committed_page_ids(release_id).await, staged[..1]);
     assert_eq!(app.fetch_release_version(release_id).await, 2);
     assert!(
         !app.object_exists(&app.release_pages_bucket, staged[1])
@@ -324,7 +322,7 @@ async fn commit_chapter_release_moves_a_page_onto_a_position_another_page_still_
     let resp = app.post_commit(release_id, &declared).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    assert_eq!(page_ids_in_order(&app, release_id).await, declared);
+    assert_eq!(app.fetch_committed_page_ids(release_id).await, declared);
 }
 
 #[tokio::test]
@@ -341,7 +339,7 @@ async fn commit_chapter_release_removes_undeclared_pages_and_their_images() {
     let resp = app.post_commit(release_id, &[kept]).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    assert_eq!(page_ids_in_order(&app, release_id).await, vec![kept]);
+    assert_eq!(app.fetch_committed_page_ids(release_id).await, vec![kept]);
     assert!(app.object_exists(&app.release_pages_bucket, kept).await);
     assert!(!app.object_exists(&app.release_pages_bucket, dropped).await);
     assert!(!app.object_exists(&app.release_pages_bucket, staged).await);
@@ -384,7 +382,7 @@ async fn commit_chapter_release_inserts_a_staged_page_at_the_declared_position()
     let resp = app.post_commit(release_id, &declared).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    assert_eq!(page_ids_in_order(&app, release_id).await, declared);
+    assert_eq!(app.fetch_committed_page_ids(release_id).await, declared);
 }
 
 #[tokio::test]
@@ -403,7 +401,7 @@ async fn commit_chapter_release_leaves_untouched_pages_with_their_identifiers_an
     let resp = app.post_commit(release_id, &declared).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    assert_eq!(page_ids_in_order(&app, release_id).await, declared);
+    assert_eq!(app.fetch_committed_page_ids(release_id).await, declared);
     assert!(app.object_exists(&app.release_pages_bucket, kept).await);
     assert!(
         !app.object_exists(&app.release_pages_bucket, superseded)
@@ -472,8 +470,7 @@ async fn get_chapter_release_carries_its_version() {
 
     assert_eq!(release_version(&app, release_id).await, 0);
 
-    let staged = app.insert_staged_pages(release_id, &[COVER_PNG]).await;
-    app.post_commit(release_id, &staged).await;
+    app.set_release_version(release_id, 1).await;
 
     assert_eq!(release_version(&app, release_id).await, 1);
 }

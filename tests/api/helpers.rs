@@ -83,20 +83,6 @@ pub async fn assert_stored(resp: Response) -> Uuid {
     Uuid::parse_str(id).expect("data.id must be a uuid")
 }
 
-pub async fn page_ids_in_order(app: &TestApp, release_id: Uuid) -> Vec<Uuid> {
-    let resp = app.get_pages(release_id).await;
-    assert_eq!(resp.status(), StatusCode::OK);
-
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<serde_json::Value>> = serde_json::from_slice(&bytes).unwrap();
-
-    wrapper
-        .data
-        .iter()
-        .map(|p| Uuid::parse_str(p["id"].as_str().unwrap()).unwrap())
-        .collect()
-}
-
 pub async fn release_version(app: &TestApp, release_id: Uuid) -> i64 {
     let resp = app.get_release(release_id).await;
     assert_eq!(resp.status(), StatusCode::OK);
@@ -823,6 +809,21 @@ values($1, $2, $3, 0);
         self.insert_release(chapter_id, language_id).await
     }
 
+    pub async fn set_release_version(&self, release_id: Uuid, version: i32) {
+        sqlx::query!(
+            r#"
+update chapter_releases
+set version = $2
+where id = $1;
+        "#,
+            release_id,
+            version
+        )
+        .execute(&self.pool)
+        .await
+        .expect("failed to set factory chapter release version");
+    }
+
     pub async fn insert_page(
         &self,
         release_id: Uuid,
@@ -900,6 +901,21 @@ order by sort_order nulls last, id;
         .into_iter()
         .map(|r| (r.id, r.sort_order))
         .collect()
+    }
+
+    pub async fn fetch_committed_page_ids(&self, release_id: Uuid) -> Vec<Uuid> {
+        sqlx::query_scalar!(
+            r#"
+select id
+from chapter_pages
+where release_id = $1 and sort_order is not null
+order by sort_order;
+        "#,
+            release_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .expect("failed to read committed chapter page order")
     }
 
     pub async fn post_release(&self, chapter_id: Uuid, language_id: Uuid) -> Response {
