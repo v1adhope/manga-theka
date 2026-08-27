@@ -16,6 +16,7 @@
 - Keep one canonical entity per responsibility in a domain layer — e.g. `Book` for commands, `BookQuery` for reads — instead of operation-specific aliases like `WriteBook`, `BookDetails`, or `BookDto`.
 - A repository owns its own transaction boundary by default. Put begin/commit in the application layer when the atomic unit spans more than one repository or depends on a business decision; in that case give the repository methods involved a `&mut PgConnection` parameter so they can join the caller's transaction.
 - Don't add comments unless asked.
+- Service layer methods take ownership of the entity they act on, even when only forwarding `&item` downstream.
 
 ## Dependencies & Versioning
 
