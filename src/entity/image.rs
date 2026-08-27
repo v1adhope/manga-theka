@@ -178,12 +178,46 @@ impl Image {
     }
 }
 
+#[derive(Debug)]
+pub struct Images(Vec<Image>);
+
+impl TryFrom<Vec<Image>> for Images {
+    type Error = EntityError;
+
+    fn try_from(images: Vec<Image>) -> Result<Self, Self::Error> {
+        if images.is_empty() {
+            return Err(EntityError::ImagesEmpty);
+        }
+        if images.len() > MAX_PARTS_PER_REQUEST {
+            return Err(EntityError::UploadPartsExceedLimit(
+                images.len(),
+                MAX_PARTS_PER_REQUEST,
+            ));
+        }
+
+        Ok(Self(images))
+    }
+}
+
+impl Images {
+    pub fn as_slice(&self) -> &[Image] {
+        &self.0
+    }
+
+    pub fn into_inner(self) -> Vec<Image> {
+        self.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use bytes::Bytes;
     use uuid::Uuid;
 
-    use crate::entity::{DEFAULT_IMAGE_MAX_BYTES, FileName, Image, ImageContent, ImageExtension};
+    use crate::entity::{
+        DEFAULT_IMAGE_MAX_BYTES, FileName, Image, ImageContent, ImageExtension, Images,
+        MAX_PARTS_PER_REQUEST,
+    };
 
     use super::PNG_SIGNATURE;
 
@@ -218,6 +252,36 @@ mod tests {
             content,
             file_name,
         }
+    }
+
+    fn default_image() -> Image {
+        let content = ImageContent::try_from(Bytes::from(PNG_SIGNATURE.to_vec())).unwrap();
+        let file_name = FileName::try_from("page.png".to_owned()).unwrap();
+        image(content, file_name)
+    }
+
+    #[test]
+    fn images_at_the_ceiling_is_valid() {
+        let images: Vec<Image> = (0..MAX_PARTS_PER_REQUEST)
+            .map(|_| default_image())
+            .collect();
+        let res = Images::try_from(images);
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn images_over_the_ceiling_is_rejected() {
+        let images: Vec<Image> = (0..MAX_PARTS_PER_REQUEST + 1)
+            .map(|_| default_image())
+            .collect();
+        let res = Images::try_from(images);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn images_empty_is_rejected() {
+        let res = Images::try_from(Vec::new());
+        assert!(res.is_err());
     }
 
     #[test]

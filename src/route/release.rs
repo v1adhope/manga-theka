@@ -72,11 +72,10 @@ pub async fn upload_chapter_pages(
         images.push(collect_image_part(field).await?);
     }
 
-    if images.is_empty() {
-        return Err(RouteError::ImagePartMissing.into());
-    }
-
-    let pages = ChapterPages { release_id, images };
+    let pages = ChapterPages {
+        release_id,
+        images: images.try_into()?,
+    };
 
     let ids = service.store_chapter_pages(pages).await?;
 

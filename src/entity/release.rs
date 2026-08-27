@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    entity::{Entity, Image, ImageExtension, Language, MAX_PARTS_PER_REQUEST},
+    entity::{Entity, ImageExtension, Images, Language, MAX_PARTS_PER_REQUEST},
     error::EntityError,
 };
 
@@ -113,7 +113,7 @@ impl Entity for ChapterPage {
 #[derive(Debug)]
 pub struct ChapterPages {
     pub release_id: Uuid,
-    pub images: Vec<Image>,
+    pub images: Images,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

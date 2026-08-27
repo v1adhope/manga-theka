@@ -60,15 +60,11 @@ impl Service {
 
         let ChapterPages { release_id, images } = item;
 
-        if images.is_empty() {
-            return Ok(Vec::new());
-        }
-
         let existing = self.database.count_chapter_pages(release_id).await? as usize;
-        ChapterRelease::ensure_row_capacity(existing, images.len())?;
+        ChapterRelease::ensure_row_capacity(existing, images.as_slice().len())?;
 
         let storage = self.storage.clone();
-        let uploaded = run_concurrently(images, UPLOAD_CONCURRENCY, move |image| {
+        let uploaded = run_concurrently(images.into_inner(), UPLOAD_CONCURRENCY, move |image| {
             let storage = storage.clone();
             async move {
                 storage.upload_chapter_page(release_id, &image).await?;

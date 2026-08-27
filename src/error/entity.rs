@@ -76,6 +76,9 @@ pub enum EntityError {
     #[error("Upload of {0} parts exceeds the {1}-part limit")]
     UploadPartsExceedLimit(usize, usize),
 
+    #[error("Upload must contain at least one image")]
+    ImagesEmpty,
+
     #[error("Release already holds {0} of {1} allowed pages")]
     ReleaseRowsExceedLimit(usize, usize),
 
