@@ -131,11 +131,10 @@ impl Database {
             .fetch_optional(&self.pool)
             .await?;
 
-        let Some(row) = row else {
-            return Err(DatabaseError::not_found::<ChapterRelease>());
-        };
-
-        row.try_into()
+        match row {
+            Some(row) => row.try_into(),
+            None => Err(DatabaseError::not_found::<ChapterRelease>()),
+        }
     }
 
     #[instrument(name = "db.chapter_release.list", skip_all, fields(chapter.id = %chapter_id))]
