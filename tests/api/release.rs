@@ -586,20 +586,21 @@ async fn delete_chapter_release_purges_its_pages_and_images() {
     let chapter_id = app.insert_random_chapter(book_id).await;
     let release_id = app.insert_random_release(book_id, chapter_id).await;
 
-    let committed = app.insert_page(release_id, Some(1), COVER_PNG).await;
-    let staged = app.insert_page(release_id, None, COVER_WEBP).await;
+    let committed_id = app.insert_page(release_id, Some(1), COVER_PNG).await;
+    let staged_id = app.insert_page(release_id, None, COVER_WEBP).await;
 
     let resp = app.delete_release(release_id).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let resp = app.get_release(release_id).await;
-    assert_error(resp, StatusCode::NOT_FOUND).await;
-
+    assert!(!app.release_exists(release_id).await);
     assert!(
-        !app.object_exists(&app.release_pages_bucket, committed)
+        !app.object_exists(&app.release_pages_bucket, committed_id)
             .await
     );
-    assert!(!app.object_exists(&app.release_pages_bucket, staged).await);
+    assert!(
+        !app.object_exists(&app.release_pages_bucket, staged_id)
+            .await
+    );
 }
 
 #[tokio::test]
