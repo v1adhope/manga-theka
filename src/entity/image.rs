@@ -11,6 +11,7 @@ pub const DEFAULT_IMAGE_MAX_BYTES: usize = 5 * 1024 * 1024;
 pub const MAX_PARTS_PER_REQUEST: usize = 10;
 pub const UPLOAD_MAX_BYTES: usize =
     MAX_PARTS_PER_REQUEST * (DEFAULT_IMAGE_MAX_BYTES + PART_HEADROOM_BYTES);
+pub const UPLOAD_CHUNK_SIZE: usize = 5;
 
 const PART_HEADROOM_BYTES: usize = 1024;
 
@@ -20,7 +21,7 @@ const PNG_SIGNATURE: [u8; 8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 const RIFF_MAGIC: [u8; 4] = *b"RIFF";
 const WEBP_FORM_TYPE: [u8; 4] = *b"WEBP";
 
-#[derive(Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
 pub enum ImageExtension {
     Jpg,
     Png,
@@ -160,7 +161,7 @@ impl FileName {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Image {
     pub id: Uuid,
     pub extension: ImageExtension,

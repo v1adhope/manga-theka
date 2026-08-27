@@ -4,7 +4,7 @@ use uuid::Uuid;
 use crate::{
     database::Database,
     entity::{
-        Chapter, ChapterPage, ChapterPageParams, ChapterPageQuery, ChapterRelease,
+        Chapter, ChapterPage, ChapterPageParams, ChapterPageQuery, ChapterPages, ChapterRelease,
         ChapterReleaseQuery, ImageExtension, Language, PageOrder, PageStatus,
     },
     error::DatabaseError,
@@ -266,18 +266,22 @@ impl Database {
         Ok(())
     }
 
-    #[instrument(name = "db.chapter_page.store", skip_all, fields(release.id = %release_id, page.id = %id))]
-    pub async fn store_chapter_page(
-        &self,
-        release_id: Uuid,
-        id: Uuid,
-        extension: ImageExtension,
-    ) -> Result<(), DatabaseError> {
+    #[instrument(name = "db.chapter_page.store_many", skip_all, fields(release.id = %item.release_id, pages = item.images.as_slice().len()))]
+    pub async fn store_chapter_pages(&self, item: &ChapterPages) -> Result<(), DatabaseError> {
+        let images = item.images.as_slice();
+        let mut ids = Vec::with_capacity(images.len());
+        let mut extensions = Vec::with_capacity(images.len());
+
+        for image in images {
+            ids.push(image.id);
+            extensions.push(image.extension.as_ref().to_owned());
+        }
+
         sqlx::query_file!(
-            "queries/store_chapter_page.sql",
-            id,
-            release_id,
-            extension.as_ref(),
+            "queries/store_chapter_pages.sql",
+            item.release_id,
+            &ids,
+            &extensions,
         )
         .execute(&self.pool)
         .await

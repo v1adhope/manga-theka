@@ -1,6 +1,5 @@
 mod book;
 mod chapter;
-mod concurrency;
 mod content_rating;
 mod creator;
 mod label;

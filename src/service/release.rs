@@ -1,18 +1,14 @@
+use tokio::task::JoinSet;
 use uuid::Uuid;
 
 use crate::{
     entity::{
         ChapterPageParams, ChapterPageQuery, ChapterPages, ChapterRelease, ChapterReleaseQuery,
-        ImageExtension, PageOrder,
+        PageOrder, UPLOAD_CHUNK_SIZE,
     },
-    error::ServiceError,
-    service::{Service, concurrency::run_concurrently},
+    error::{ObjectStorageError, ServiceError},
+    service::Service,
 };
-
-struct UploadedPage {
-    id: Uuid,
-    extension: ImageExtension,
-}
 
 impl Service {
     pub async fn store_chapter_release(&self, item: &ChapterRelease) -> Result<(), ServiceError> {
@@ -55,38 +51,30 @@ impl Service {
             .map_err(Into::into)
     }
 
-    pub async fn store_chapter_pages(&self, item: ChapterPages) -> Result<Vec<Uuid>, ServiceError> {
-        const UPLOAD_CONCURRENCY: usize = 5;
+    pub async fn store_chapter_pages(&self, item: ChapterPages) -> Result<(), ServiceError> {
+        let existing = self.database.count_chapter_pages(item.release_id).await? as usize;
+        ChapterRelease::ensure_row_capacity(existing, item.images.as_slice().len())?;
 
-        let ChapterPages { release_id, images } = item;
+        for chunk in item.images.as_slice().chunks(UPLOAD_CHUNK_SIZE) {
+            let mut uploads = JoinSet::new();
 
-        let existing = self.database.count_chapter_pages(release_id).await? as usize;
-        ChapterRelease::ensure_row_capacity(existing, images.as_slice().len())?;
+            for image in chunk {
+                let storage = self.storage.clone();
+                let image = image.clone();
+                let release_id = item.release_id;
 
-        let storage = self.storage.clone();
-        let uploaded = run_concurrently(images.into_inner(), UPLOAD_CONCURRENCY, move |image| {
-            let storage = storage.clone();
-            async move {
-                storage.upload_chapter_page(release_id, &image).await?;
-                Ok::<UploadedPage, ServiceError>(UploadedPage {
-                    id: image.id,
-                    extension: image.extension,
-                })
+                uploads.spawn(async move { storage.upload_chapter_page(release_id, &image).await });
             }
-        })
-        .await?;
 
-        let database = self.database.clone();
-        run_concurrently(uploaded, UPLOAD_CONCURRENCY, move |page| {
-            let database = database.clone();
-            async move {
-                database
-                    .store_chapter_page(release_id, page.id, page.extension)
-                    .await?;
-                Ok::<Uuid, ServiceError>(page.id)
+            while let Some(res) = uploads.join_next().await {
+                res.map_err(|e| ObjectStorageError::Upload(e.into()))??;
             }
-        })
-        .await
+        }
+
+        self.database
+            .store_chapter_pages(&item)
+            .await
+            .map_err(Into::into)
     }
 
     pub async fn commit_chapter_release(

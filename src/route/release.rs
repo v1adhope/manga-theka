@@ -65,11 +65,14 @@ pub async fn upload_chapter_pages(
     service.ensure_chapter_release_exists(release_id).await?;
 
     let mut images = Vec::with_capacity(MAX_PARTS_PER_REQUEST);
+    let mut ids = Vec::with_capacity(MAX_PARTS_PER_REQUEST);
 
     while let Some(field) = multipart.next_field().await.map_err(RouteError::from)? {
         ChapterRelease::ensure_part_capacity(images.len() + 1)?;
 
-        images.push(collect_image_part(field).await?);
+        let image = collect_image_part(field).await?;
+        ids.push(image.id);
+        images.push(image);
     }
 
     let pages = ChapterPages {
@@ -77,7 +80,7 @@ pub async fn upload_chapter_pages(
         images: images.try_into()?,
     };
 
-    let ids = service.store_chapter_pages(pages).await?;
+    service.store_chapter_pages(pages).await?;
 
     Ok(json_data_response(StatusCode::CREATED, ids))
 }
