@@ -67,15 +67,15 @@ impl TryFrom<ChapterPageRow> for ChapterPageQuery {
     }
 }
 
-struct StagedPageRow {
+struct StagedChapterPageRow {
     id: Uuid,
     extension: String,
 }
 
-impl TryFrom<StagedPageRow> for ChapterPageQuery {
+impl TryFrom<StagedChapterPageRow> for ChapterPageQuery {
     type Error = DatabaseError;
 
-    fn try_from(row: StagedPageRow) -> Result<Self, Self::Error> {
+    fn try_from(row: StagedChapterPageRow) -> Result<Self, Self::Error> {
         let extension: ImageExtension = row
             .extension
             .parse()
@@ -319,7 +319,7 @@ impl Database {
         match params.status {
             Some(PageStatus::Staged) => {
                 let rows = sqlx::query_file_as!(
-                    StagedPageRow,
+                    StagedChapterPageRow,
                     "queries/get_staged_chapter_pages.sql",
                     release_id
                 )
