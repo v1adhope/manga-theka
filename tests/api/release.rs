@@ -404,7 +404,7 @@ async fn commit_chapter_release_leaves_untouched_pages_with_their_identifiers_an
 }
 
 #[tokio::test]
-async fn get_chapter_releases_hides_releases_that_were_never_committed() {
+async fn get_chapter_releases_lists_a_release_that_was_never_committed() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
     let chapter_id = app.insert_random_chapter(book_id).await;
@@ -415,11 +415,11 @@ async fn get_chapter_releases_hides_releases_that_were_never_committed() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<serde_json::Value>> = serde_json::from_slice(&bytes).unwrap();
-    assert!(wrapper.data.is_empty());
+    let wrapper: RespWrapper<Vec<ChapterReleaseQuery>> = serde_json::from_slice(&bytes).unwrap();
 
-    let resp = app.get_release(draft_id).await;
-    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(wrapper.data.len(), 1);
+    assert_eq!(wrapper.data[0].id, draft_id);
+    assert_eq!(wrapper.data[0].page_count, 0);
 }
 
 #[tokio::test]

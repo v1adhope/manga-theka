@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select r.id, r.chapter_id, r.version,\n       l.id as language_id, l.code as language_code, l.name as language_name,\n       pc.page_count as \"page_count!\"\nfrom chapter_releases r\njoin languages l on l.id = r.language_id\ncross join lateral (select count(*) as page_count\n                     from chapter_pages p\n                     where p.release_id = r.id and p.sort_order is not null) pc\nwhere r.chapter_id = $1\n  and pc.page_count > 0\norder by r.id;\n",
+  "query": "select r.id, r.chapter_id, r.version,\n       l.id as language_id, l.code as language_code, l.name as language_name,\n       (select count(*)\n        from chapter_pages p\n        where p.release_id = r.id and p.sort_order is not null) as \"page_count!\"\nfrom chapter_releases r\njoin languages l on l.id = r.language_id\nwhere r.chapter_id = $1\norder by r.id;\n",
   "describe": {
     "columns": [
       {
@@ -91,5 +91,5 @@
       null
     ]
   },
-  "hash": "9082d63b96ec529170713041177b5b5d3d8b0f6eb1ecf125de9690974da45f32"
+  "hash": "912467d0ef254749de7f1a7198542373b42d289c4b5ef2ab05da8f0a1c27dc62"
 }
