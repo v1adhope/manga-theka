@@ -1,7 +1,7 @@
 use axum::http::{StatusCode, header};
 use fake::Fake;
 use http_body_util::BodyExt;
-use manga_theka::entity::Book;
+use manga_theka::entity::{Book, ChapterReleaseQuery};
 use uuid::Uuid;
 
 use crate::fakers::{BookFaker, COVER_JPG, COVER_PNG, COVER_WEBP};
@@ -423,7 +423,7 @@ async fn get_chapter_releases_hides_releases_that_were_never_committed() {
 }
 
 #[tokio::test]
-async fn get_chapter_releases_lists_committed_releases_with_language_and_page_count() {
+async fn get_chapter_releases_lists_a_committed_release_with_all_its_fields() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
     let chapter_id = app.insert_random_chapter(book_id).await;
@@ -437,14 +437,18 @@ async fn get_chapter_releases_lists_committed_releases_with_language_and_page_co
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<serde_json::Value>> = serde_json::from_slice(&bytes).unwrap();
+    let wrapper: RespWrapper<Vec<ChapterReleaseQuery>> = serde_json::from_slice(&bytes).unwrap();
 
     assert_eq!(wrapper.data.len(), 1);
-    assert_eq!(wrapper.data[0]["pageCount"], 2);
-    assert_eq!(
-        wrapper.data[0]["language"]["id"].as_str().unwrap(),
-        language_id.to_string()
-    );
+
+    let release = &wrapper.data[0];
+    assert_eq!(release.id, release_id);
+    assert_eq!(release.chapter_id, chapter_id);
+    assert_eq!(release.language.id, language_id);
+    assert!(!release.language.code.is_empty());
+    assert!(!release.language.name.is_empty());
+    assert_eq!(release.page_count, 2);
+    assert_eq!(release.version, 0);
 }
 
 #[tokio::test]
