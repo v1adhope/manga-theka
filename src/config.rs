@@ -61,4 +61,5 @@ pub struct ObjectStorage {
     pub access_key: String,
     pub secret_key: SecretString,
     pub covers_bucket: String,
+    pub release_pages_bucket: String,
 }

@@ -1,7 +1,7 @@
 use uuid::Uuid;
 
 use crate::{
-    entity::{Book, BookCover, BookCoverQuery, COVER_PRESIGN_TTL, Filter},
+    entity::{Book, BookCover, BookCoverQuery, Filter},
     error::ServiceError,
     service::Service,
 };
@@ -37,19 +37,18 @@ impl Service {
 
         self.database.delete_book(id).await?;
 
-        self.storage
-            .delete_many(&cover_ids)
-            .await
-            .map_err(Into::into)
+        let _ = self.storage.delete_book_covers(&cover_ids).await;
+
+        Ok(())
     }
 
-    pub async fn store_book_cover(&self, item: &BookCover) -> Result<(), ServiceError> {
+    pub async fn store_book_cover(&self, item: BookCover) -> Result<(), ServiceError> {
         self.database.ensure_book_exists(item.book_id).await?;
 
-        self.storage.upload_book_cover(item).await?;
+        self.storage.upload_book_cover(&item).await?;
 
         self.database
-            .store_book_cover(item)
+            .store_book_cover(&item)
             .await
             .map_err(Into::into)
     }
@@ -74,7 +73,7 @@ impl Service {
         self.database.ensure_book_cover_exists(book_id, id).await?;
 
         self.storage
-            .presign(&id.to_string(), COVER_PRESIGN_TTL)
+            .presign_book_cover(id)
             .await
             .map_err(Into::into)
     }
@@ -89,6 +88,8 @@ impl Service {
     pub async fn delete_book_cover(&self, book_id: Uuid, id: Uuid) -> Result<(), ServiceError> {
         self.database.delete_book_cover(book_id, id).await?;
 
-        self.storage.delete(id).await.map_err(Into::into)
+        let _ = self.storage.delete_book_covers(&[id]).await;
+
+        Ok(())
     }
 }

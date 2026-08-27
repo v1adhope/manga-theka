@@ -5,16 +5,20 @@ mod chapter;
 mod content_rating;
 mod creator;
 mod filter;
+mod image;
 mod label;
 mod language;
+mod release;
 
 pub use book::*;
 pub use chapter::*;
 pub use content_rating::*;
 pub use creator::*;
 pub use filter::*;
+pub use image::*;
 pub use label::*;
 pub use language::*;
+pub use release::*;
 
 pub trait Entity {
     const NAME: &'static str;

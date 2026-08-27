@@ -8,3 +8,4 @@ mod healthz;
 mod helpers;
 mod label;
 mod language;
+mod release;

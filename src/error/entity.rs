@@ -3,6 +3,9 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use thiserror::Error;
+use uuid::Uuid;
+
+use crate::error::error_response;
 
 #[derive(Debug, Error)]
 #[non_exhaustive]
@@ -31,8 +34,8 @@ pub enum EntityError {
     #[error("'{0}' is not a valid book link kind")]
     InvalidBookLinkKind(String),
 
-    #[error("'{0}' is not a valid cover extension")]
-    InvalidCoverExtension(String),
+    #[error("'{0}' is not a valid image extension")]
+    InvalidImageExtension(String),
 
     #[error("Image must be JPEG, PNG, or WebP")]
     UnsupportedImageFormat,
@@ -60,14 +63,40 @@ pub enum EntityError {
 
     #[error("Chapter volume {0} must be within [{1}, {2}]")]
     ChapterVolumeOutOfRange(i16, i16, i16),
+
+    #[error("Page order can't be empty")]
+    PageOrderIsEmpty,
+
+    #[error("Page order of {0} pages exceeds the {1}-page limit")]
+    PageOrderExceedsLimit(usize, usize),
+
+    #[error("Page '{0}' is declared more than once")]
+    PageOrderHasDuplicates(Uuid),
+
+    #[error("Upload of {0} parts exceeds the {1}-part limit")]
+    UploadPartsExceedLimit(usize, usize),
+
+    #[error("Upload must contain at least one image")]
+    ImagesEmpty,
+
+    #[error("Release already holds {0} of {1} allowed pages")]
+    ReleaseRowsExceedLimit(usize, usize),
+
+    #[error("Image exceeds the {0}-byte limit")]
+    ImageExceedsByteLimit(usize),
+
+    #[error("Multipart part is missing a file name")]
+    FileNameMissing,
 }
 
 impl IntoResponse for EntityError {
     fn into_response(self) -> Response {
-        match self {
-            Self::UnsupportedImageFormat => (StatusCode::UNSUPPORTED_MEDIA_TYPE, self.to_string()),
-            _ => (StatusCode::UNPROCESSABLE_ENTITY, self.to_string()),
-        }
-        .into_response()
+        let status = match self {
+            Self::UnsupportedImageFormat => StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            Self::ImageExceedsByteLimit(_) => StatusCode::PAYLOAD_TOO_LARGE,
+            _ => StatusCode::UNPROCESSABLE_ENTITY,
+        };
+
+        error_response(status, self.to_string())
     }
 }

@@ -1,7 +1,6 @@
 use axum::{
     Json,
-    body::Bytes,
-    extract::{Path, Query, State},
+    extract::{Multipart, Path, Query, State},
     http::{StatusCode, header},
     response::IntoResponse,
 };
@@ -12,10 +11,10 @@ use uuid::Uuid;
 use crate::{
     entity::{
         AlternativeTitle, Book, BookCover, BookKind, BookLink, BookLinkKind, BookName, BookStatus,
-        ContentRating, CoverExtension, Description, Filter, Language, LinkUrl,
+        ContentRating, Description, Filter, Language, LinkUrl,
     },
-    error::{AppError, EntityError},
-    route::{PaginationQuery, StoreResp, json_data_response, json_response},
+    error::{AppError, EntityError, RouteError},
+    route::{PaginationQuery, StoreResp, collect_image_part, json_data_response, json_response},
     service::Service,
 };
 
@@ -203,23 +202,22 @@ pub async fn delete_book(
 pub async fn store_book_cover(
     State(service): State<Service>,
     Path(book_id): Path<Uuid>,
-    body: Bytes,
+    mut multipart: Multipart,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    let extension = CoverExtension::try_from(body.as_ref())?;
-    let cover = BookCover {
-        id: Uuid::now_v7(),
-        book_id,
-        extension,
-        content: body,
-        is_main: false,
-    };
+    let field = multipart
+        .next_field()
+        .await
+        .map_err(RouteError::from)?
+        .ok_or(RouteError::ImagePartMissing)?;
 
-    service.store_book_cover(&cover).await?;
+    let image = collect_image_part(field).await?;
 
-    Ok(json_data_response(
-        StatusCode::CREATED,
-        StoreResp { id: cover.id },
-    ))
+    let id = image.id;
+    let cover = BookCover { book_id, image };
+
+    service.store_book_cover(cover).await?;
+
+    Ok(json_data_response(StatusCode::CREATED, StoreResp { id }))
 }
 
 pub async fn get_book_covers(

@@ -1,5 +1,6 @@
 mod book;
 mod object;
+mod release;
 
 use std::time::Duration;
 
@@ -13,6 +14,7 @@ use tokio::sync::Semaphore;
 
 use crate::config;
 
+const DEFAULT_PRESIGN_TTL: Duration = Duration::from_secs(300);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
 const OPERATION_ATTEMPT_TIMEOUT: Duration = Duration::from_secs(5);
 const OPERATION_TIMEOUT: Duration = Duration::from_secs(15);
@@ -57,19 +59,30 @@ pub async fn client(cfg: &config::ObjectStorage) -> Client {
 #[derive(Debug, Clone)]
 pub struct ObjectStorage {
     client: Client,
-    bucket: String,
+    covers_bucket: String,
+    release_pages_bucket: String,
 }
 
 impl ObjectStorage {
-    pub fn new(client: Client, bucket: String) -> Self {
-        Self { client, bucket }
+    pub fn new(client: Client, covers_bucket: String, release_pages_bucket: String) -> Self {
+        Self {
+            client,
+            covers_bucket,
+            release_pages_bucket,
+        }
     }
 
-    pub async fn ensure_bucket(&self) {
+    pub async fn ensure_buckets(&self) {
+        for bucket in [&self.covers_bucket, &self.release_pages_bucket] {
+            self.ensure_bucket(bucket).await;
+        }
+    }
+
+    async fn ensure_bucket(&self, bucket: &str) {
         let exists = self
             .client
             .head_bucket()
-            .bucket(&self.bucket)
+            .bucket(bucket)
             .send()
             .await
             .is_ok();
@@ -85,7 +98,7 @@ impl ObjectStorage {
 
         self.client
             .create_bucket()
-            .bucket(&self.bucket)
+            .bucket(bucket)
             .send()
             .await
             .expect("bucket has not been ensured");

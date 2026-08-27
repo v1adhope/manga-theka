@@ -1,22 +1,15 @@
-use bytes::Bytes;
 use serde::{Deserialize, Serialize};
-use std::{str::FromStr, time::Duration};
+use std::str::FromStr;
 use time::OffsetDateTime;
 use url::Url;
 use uuid::Uuid;
 
 use crate::{
-    entity::{ContentRating, Creator, Entity, Label, Language, validate_name},
+    entity::{
+        ContentRating, Creator, Entity, Image, ImageExtension, Label, Language, validate_name,
+    },
     error::EntityError,
 };
-
-pub const COVER_MAX_BYTES: usize = 5 * 1024 * 1024;
-pub const COVER_PRESIGN_TTL: Duration = Duration::from_secs(300);
-
-const JPEG_SOI: [u8; 3] = [0xFF, 0xD8, 0xFF];
-const PNG_SIGNATURE: [u8; 8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-const RIFF_MAGIC: [u8; 4] = *b"RIFF";
-const WEBP_FORM_TYPE: [u8; 4] = *b"WEBP";
 
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
 pub enum BookStatus {
@@ -107,68 +100,6 @@ impl AsRef<str> for BookLinkKind {
             Self::WhereToRead => "WhereToRead",
             Self::WhereToBuy => "WhereToBuy",
             Self::Track => "Track",
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Deserialize, Serialize)]
-pub enum CoverExtension {
-    Jpg,
-    Png,
-    Webp,
-}
-
-impl CoverExtension {
-    pub fn content_type(&self) -> &str {
-        match self {
-            Self::Jpg => "image/jpeg",
-            Self::Png => "image/png",
-            Self::Webp => "image/webp",
-        }
-    }
-
-    pub fn content_disposition(&self, id: Uuid) -> String {
-        format!("inline; filename=\"{id}.{}\"", self.as_ref())
-    }
-}
-
-impl TryFrom<&[u8]> for CoverExtension {
-    type Error = EntityError;
-
-    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
-        if bytes.starts_with(&JPEG_SOI) {
-            return Ok(Self::Jpg);
-        }
-        if bytes.starts_with(&PNG_SIGNATURE) {
-            return Ok(Self::Png);
-        }
-        if bytes.len() >= 12 && bytes.starts_with(&RIFF_MAGIC) && bytes[8..12] == WEBP_FORM_TYPE {
-            return Ok(Self::Webp);
-        }
-
-        Err(EntityError::UnsupportedImageFormat)
-    }
-}
-
-impl FromStr for CoverExtension {
-    type Err = EntityError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "jpg" => Ok(Self::Jpg),
-            "png" => Ok(Self::Png),
-            "webp" => Ok(Self::Webp),
-            other => Err(EntityError::InvalidCoverExtension(other.to_owned())),
-        }
-    }
-}
-
-impl AsRef<str> for CoverExtension {
-    fn as_ref(&self) -> &str {
-        match self {
-            Self::Jpg => "jpg",
-            Self::Png => "png",
-            Self::Webp => "webp",
         }
     }
 }
@@ -286,21 +217,12 @@ pub struct AlternativeTitle {
 
 #[derive(Debug)]
 pub struct BookCover {
-    pub id: Uuid,
     pub book_id: Uuid,
-    pub extension: CoverExtension,
-    pub content: Bytes,
-    pub is_main: bool,
+    pub image: Image,
 }
 
 impl Entity for BookCover {
     const NAME: &'static str = "Book cover";
-}
-
-impl BookCover {
-    pub fn content_disposition(&self) -> String {
-        self.extension.content_disposition(self.id)
-    }
 }
 
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
@@ -323,7 +245,7 @@ impl AsRef<str> for CoverUrl {
 #[serde(rename_all = "camelCase")]
 pub struct BookCoverQuery {
     pub id: Uuid,
-    pub extension: CoverExtension,
+    pub extension: ImageExtension,
     pub is_main: bool,
     pub url: CoverUrl,
 }
@@ -332,24 +254,7 @@ pub struct BookCoverQuery {
 mod tests {
     use uuid::Uuid;
 
-    use crate::entity::{BookCover, BookName, CoverExtension, CoverUrl, Description, LinkUrl};
-    use bytes::Bytes;
-
-    #[test]
-    fn content_disposition_is_inline_with_the_extension_suffixed_filename() {
-        let cover = BookCover {
-            id: Uuid::from_u128(1),
-            book_id: Uuid::from_u128(2),
-            extension: CoverExtension::Webp,
-            content: Bytes::new(),
-            is_main: false,
-        };
-
-        assert_eq!(
-            cover.content_disposition(),
-            "inline; filename=\"00000000-0000-0000-0000-000000000001.webp\""
-        );
-    }
+    use crate::entity::{BookName, CoverUrl, Description, LinkUrl};
 
     #[test]
     fn cover_url_points_at_the_book_scoped_image_route() {
@@ -359,49 +264,6 @@ mod tests {
             url.as_ref(),
             "/books/00000000-0000-0000-0000-000000000001/covers/00000000-0000-0000-0000-000000000002/image"
         );
-    }
-
-    #[test]
-    fn jpeg_magic_bytes_are_sniffed() {
-        let res = CoverExtension::try_from([0xFF, 0xD8, 0xFF, 0xE0].as_slice());
-        assert_eq!(res.unwrap(), CoverExtension::Jpg);
-    }
-
-    #[test]
-    fn png_magic_bytes_are_sniffed() {
-        let res =
-            CoverExtension::try_from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A].as_slice());
-        assert_eq!(res.unwrap(), CoverExtension::Png);
-    }
-
-    #[test]
-    fn webp_magic_bytes_are_sniffed() {
-        let res = CoverExtension::try_from(b"RIFF\x34\x00\x00\x00WEBPVP8 ".as_slice());
-        assert_eq!(res.unwrap(), CoverExtension::Webp);
-    }
-
-    #[test]
-    fn riff_without_webp_is_rejected() {
-        let res = CoverExtension::try_from(b"RIFF\x34\x00\x00\x00WAVEfmt ".as_slice());
-        assert!(res.is_err());
-    }
-
-    #[test]
-    fn truncated_riff_header_is_rejected() {
-        let res = CoverExtension::try_from(b"RIFF\x34\x00\x00".as_slice());
-        assert!(res.is_err());
-    }
-
-    #[test]
-    fn empty_body_is_rejected() {
-        let res = CoverExtension::try_from([].as_slice());
-        assert!(res.is_err());
-    }
-
-    #[test]
-    fn gif_magic_bytes_are_rejected() {
-        let res = CoverExtension::try_from(b"GIF89a".as_slice());
-        assert!(res.is_err());
     }
 
     #[test]

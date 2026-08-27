@@ -4,11 +4,25 @@ use axum::{
 };
 use thiserror::Error;
 
-use crate::entity::{Book, Entity};
+use crate::{
+    entity::{Book, Chapter, ChapterRelease, Entity},
+    error::error_response,
+};
 
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum DatabaseError {
+    // Bespoke, single-purpose errors
+    #[error("Another cover was promoted concurrently")]
+    BookCoverMainConflict(#[source] sqlx::Error),
+
+    #[error("Chapter release language must differ from the book's publication language")]
+    ChapterReleaseLanguageIsPublicationLanguage,
+
+    #[error("Declared page order names a page outside the release")]
+    PageOrderIsForeign,
+
+    // Generic, reused across fields
     #[error("{field} is out of range")]
     OutOfRange {
         field: &'static str,
@@ -37,15 +51,17 @@ pub enum DatabaseError {
         source: sqlx::Error,
     },
 
+    #[error("{field} is in use")]
+    InUse {
+        field: &'static str,
+        #[source]
+        source: sqlx::Error,
+    },
+
     #[error("{entity} not found")]
     NotFound { entity: &'static str },
 
-    #[error("Creator is attached to one or more books")]
-    CreatorInUse(#[source] sqlx::Error),
-
-    #[error("Another cover was promoted concurrently")]
-    BookCoverMainConflict(#[source] sqlx::Error),
-
+    // Internal / catch-all
     #[error("Database invariant corrupted on field '{field}': {msg}")]
     InvariantCorrupted { field: &'static str, msg: String },
 
@@ -101,7 +117,10 @@ impl From<sqlx::Error> for DatabaseError {
                     };
                 }
                 Some("fk_book_creators_creators_creator_id") => {
-                    return Self::CreatorInUse(err);
+                    return Self::InUse {
+                        field: "Creator",
+                        source: err,
+                    };
                 }
                 Some("check_length_books_name") => {
                     return Self::OutOfRange {
@@ -241,6 +260,40 @@ impl From<sqlx::Error> for DatabaseError {
                         source: err,
                     };
                 }
+                Some("fk_chapter_releases_chapters_chapter_id") => {
+                    if db_err.message().starts_with("insert or update") {
+                        return Self::not_found::<Chapter>();
+                    }
+
+                    return Self::InUse {
+                        field: "Chapter with releases",
+                        source: err,
+                    };
+                }
+                Some("fk_chapter_pages_chapter_releases_release_id") => {
+                    return Self::not_found::<ChapterRelease>();
+                }
+                Some("fk_chapter_releases_languages_language_id") => {
+                    return Self::DoesNotExist {
+                        field: "Chapter release language",
+                        source: err,
+                    };
+                }
+                Some("check_chapter_releases_language_not_publication") => {
+                    return Self::ChapterReleaseLanguageIsPublicationLanguage;
+                }
+                Some("enum_chapter_pages_extension") => {
+                    return Self::DoesNotExist {
+                        field: "Chapter page extension",
+                        source: err,
+                    };
+                }
+                Some("check_range_chapter_pages_sort_order") => {
+                    return Self::OutOfRange {
+                        field: "Chapter page sort order",
+                        source: err,
+                    };
+                }
                 _ => {}
             }
         }
@@ -250,19 +303,19 @@ impl From<sqlx::Error> for DatabaseError {
 
 impl IntoResponse for DatabaseError {
     fn into_response(self) -> Response {
-        match self {
-            Self::Unknown(_) | Self::InvariantCorrupted { .. } => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Something went wrong".to_string(),
-            ),
-            Self::NotFound { .. } => (StatusCode::NOT_FOUND, self.to_string()),
-            Self::AlreadyExists { .. } | Self::CreatorInUse(_) | Self::BookCoverMainConflict(_) => {
-                (StatusCode::CONFLICT, self.to_string())
+        let status = match self {
+            Self::Unknown(_) | Self::InvariantCorrupted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::NotFound { .. } => StatusCode::NOT_FOUND,
+            Self::AlreadyExists { .. } | Self::InUse { .. } | Self::BookCoverMainConflict(_) => {
+                StatusCode::CONFLICT
             }
-            Self::OutOfRange { .. } | Self::DoesNotExist { .. } | Self::Duplication { .. } => {
-                (StatusCode::UNPROCESSABLE_ENTITY, self.to_string())
-            }
-        }
-        .into_response()
+            Self::OutOfRange { .. }
+            | Self::DoesNotExist { .. }
+            | Self::Duplication { .. }
+            | Self::ChapterReleaseLanguageIsPublicationLanguage
+            | Self::PageOrderIsForeign => StatusCode::UNPROCESSABLE_ENTITY,
+        };
+
+        error_response(status, self.to_string())
     }
 }

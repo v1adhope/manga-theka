@@ -8,8 +8,8 @@ use crate::{
     database::{Database, creator::CreatorRow, label::LabelRow},
     entity::{
         AlternativeTitle, Book, BookCover, BookCoverQuery, BookKind, BookLink, BookLinkKind,
-        BookName, BookStatus, ContentRating, CoverExtension, Creator, DEFAULT_LIMIT, Description,
-        Filter, Label, Language, Limit, LinkUrl,
+        BookName, BookStatus, ContentRating, Creator, DEFAULT_LIMIT, Description, Filter,
+        ImageExtension, Label, Language, Limit, LinkUrl,
     },
     error::DatabaseError,
 };
@@ -105,7 +105,7 @@ impl TryFrom<BookCoverRow> for BookCoverQuery {
 
     fn try_from(row: BookCoverRow) -> Result<Self, Self::Error> {
         let url = (row.book_id, row.id).into();
-        let extension: CoverExtension = row
+        let extension: ImageExtension = row
             .extension
             .parse()
             .map_err(|e| DatabaseError::invariant_corrupted("extension", e))?;
@@ -386,15 +386,11 @@ impl Database {
 
     #[instrument(name = "db.book.delete", skip_all, fields(book.id = %id))]
     pub async fn delete_book(&self, id: Uuid) -> Result<(), DatabaseError> {
-        self.delete_book_inner(id)
-            .await
-            .inspect_err(DatabaseError::log_internal)
-    }
-
-    async fn delete_book_inner(&self, id: Uuid) -> Result<(), DatabaseError> {
         let row = sqlx::query_file!("queries/delete_book.sql", id)
             .fetch_optional(&self.pool)
-            .await?;
+            .await
+            .map_err(DatabaseError::from)
+            .inspect_err(DatabaseError::log_internal)?;
 
         if row.is_none() {
             return Err(DatabaseError::not_found::<Book>());
@@ -580,13 +576,13 @@ impl Database {
         Ok(())
     }
 
-    #[instrument(name = "db.book_cover.store", skip_all, fields(book.id = %item.book_id, cover.id = %item.id))]
+    #[instrument(name = "db.book_cover.store", skip_all, fields(book.id = %item.book_id, cover.id = %item.image.id))]
     pub async fn store_book_cover(&self, item: &BookCover) -> Result<(), DatabaseError> {
         sqlx::query_file!(
             "queries/store_book_cover.sql",
-            item.id,
+            item.image.id,
             item.book_id,
-            item.extension.as_ref(),
+            item.image.extension.as_ref(),
         )
         .execute(&self.pool)
         .await

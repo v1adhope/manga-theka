@@ -253,6 +253,21 @@ impl Database {
         Ok((chapters, next_cursor))
     }
 
+    #[instrument(name = "db.chapter.exists", skip_all, fields(chapter.id = %id))]
+    pub async fn ensure_chapter_exists(&self, id: Uuid) -> Result<(), DatabaseError> {
+        let row = sqlx::query_file!("queries/chapter_exists.sql", id)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(DatabaseError::from)
+            .inspect_err(DatabaseError::log_internal)?;
+
+        if !row.exists {
+            return Err(DatabaseError::not_found::<Chapter>());
+        }
+
+        Ok(())
+    }
+
     #[instrument(name = "db.chapter.delete", skip_all, fields(chapter.id = %id))]
     pub async fn delete_chapter(&self, id: Uuid) -> Result<(), DatabaseError> {
         let row = sqlx::query_file!("queries/delete_chapter.sql", id)

@@ -22,13 +22,14 @@ name = "api"
 path = "tests/api/mod.rs"
 
 [dependencies]
-axum = "0.8"
+axum = { version = "0.8", features = ["multipart"] }
 tokio = { version = "1", features = [
   "rt-multi-thread",
   "macros",
   "net",
   "signal",
   "sync",
+  "time",
 ] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = [
@@ -66,8 +67,10 @@ aws-config = { version = "1", default-features = false, features = [
 ] }
 anyhow = "1"
 regex = "1"
+sanitize-filename = "0.6"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 fake = "5"
+axum-test = "21"

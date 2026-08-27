@@ -4,6 +4,7 @@ mod content_rating;
 mod creator;
 mod label;
 mod language;
+mod release;
 
 use crate::{database::Database, object_storage::ObjectStorage};
 
