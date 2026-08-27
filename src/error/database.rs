@@ -259,7 +259,7 @@ impl From<sqlx::Error> for DatabaseError {
                 }
                 Some("fk_chapter_releases_chapters_chapter_id") => {
                     return Self::InUse {
-                        field: "Chapter",
+                        field: "Chapter with releases",
                         source: err,
                     };
                 }
