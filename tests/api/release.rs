@@ -361,7 +361,7 @@ async fn commit_chapter_release_closes_the_gap_left_by_a_dropped_page() {
 }
 
 #[tokio::test]
-async fn commit_chapter_release_inserts_a_staged_page_at_the_declared_position() {
+async fn commit_chapter_release_inserts_a_staged_page_between_committed_ones() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
     let chapter_id = app.insert_random_chapter(book_id).await;
