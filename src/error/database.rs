@@ -5,13 +5,24 @@ use axum::{
 use thiserror::Error;
 
 use crate::{
-    entity::{Book, ChapterRelease, Entity},
+    entity::{Book, Chapter, ChapterRelease, Entity},
     error::error_response,
 };
 
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum DatabaseError {
+    // Bespoke, single-purpose errors
+    #[error("Another cover was promoted concurrently")]
+    BookCoverMainConflict(#[source] sqlx::Error),
+
+    #[error("Chapter release language must differ from the book's publication language")]
+    ChapterReleaseLanguageIsPublicationLanguage,
+
+    #[error("Declared page order names a page outside the release")]
+    PageOrderIsForeign,
+
+    // Generic, reused across fields
     #[error("{field} is out of range")]
     OutOfRange {
         field: &'static str,
@@ -50,15 +61,7 @@ pub enum DatabaseError {
     #[error("{entity} not found")]
     NotFound { entity: &'static str },
 
-    #[error("Another cover was promoted concurrently")]
-    BookCoverMainConflict(#[source] sqlx::Error),
-
-    #[error("Chapter release language must differ from the book's publication language")]
-    ChapterReleaseLanguageIsPublicationLanguage,
-
-    #[error("Declared page order names a page outside the release")]
-    PageOrderIsForeign,
-
+    // Internal / catch-all
     #[error("Database invariant corrupted on field '{field}': {msg}")]
     InvariantCorrupted { field: &'static str, msg: String },
 
@@ -258,6 +261,10 @@ impl From<sqlx::Error> for DatabaseError {
                     };
                 }
                 Some("fk_chapter_releases_chapters_chapter_id") => {
+                    if db_err.message().starts_with("insert or update") {
+                        return Self::not_found::<Chapter>();
+                    }
+
                     return Self::InUse {
                         field: "Chapter with releases",
                         source: err,
@@ -271,6 +278,9 @@ impl From<sqlx::Error> for DatabaseError {
                         field: "Chapter release language",
                         source: err,
                     };
+                }
+                Some("check_chapter_releases_language_not_publication") => {
+                    return Self::ChapterReleaseLanguageIsPublicationLanguage;
                 }
                 Some("enum_chapter_pages_extension") => {
                     return Self::DoesNotExist {

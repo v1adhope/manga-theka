@@ -4,7 +4,7 @@ use uuid::Uuid;
 use crate::{
     database::Database,
     entity::{
-        Chapter, ChapterPage, ChapterPageParams, ChapterPageQuery, ChapterPages, ChapterRelease,
+        ChapterPage, ChapterPageParams, ChapterPageQuery, ChapterPages, ChapterRelease,
         ChapterReleaseQuery, ImageExtension, Language, PageOrder, PageStatus,
     },
     error::DatabaseError,
@@ -100,28 +100,17 @@ impl Database {
         &self,
         item: &ChapterRelease,
     ) -> Result<(), DatabaseError> {
-        let row = sqlx::query_file!(
+        sqlx::query_file!(
             "queries/store_chapter_release.sql",
             item.id,
             item.chapter_id,
             item.language_id,
         )
-        .fetch_optional(&self.pool)
-        .await?;
+        .execute(&self.pool)
+        .await
+        .map_err(DatabaseError::from)?;
 
-        if row.is_some() {
-            return Ok(());
-        }
-
-        let probe = sqlx::query_file!("queries/chapter_exists.sql", item.chapter_id)
-            .fetch_one(&self.pool)
-            .await?;
-
-        if probe.exists {
-            return Err(DatabaseError::ChapterReleaseLanguageIsPublicationLanguage);
-        }
-
-        Err(DatabaseError::not_found::<Chapter>())
+        Ok(())
     }
 
     #[instrument(name = "db.chapter_release.get", skip_all, fields(release.id = %id))]
