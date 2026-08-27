@@ -790,7 +790,7 @@ pub fn multipart_body(parts: &[&[u8]]) -> MultipartForm {
 }
 
 impl TestApp {
-    pub async fn translation_language(&self, book_id: Uuid) -> Uuid {
+    pub async fn non_publication_language(&self, book_id: Uuid) -> Uuid {
         let publication = sqlx::query_scalar!(
             r#"
 select publication_language
@@ -830,7 +830,7 @@ values($1, $2, $3, 0);
     }
 
     pub async fn insert_random_release(&self, book_id: Uuid, chapter_id: Uuid) -> Uuid {
-        let language_id = self.translation_language(book_id).await;
+        let language_id = self.non_publication_language(book_id).await;
 
         self.insert_release(chapter_id, language_id).await
     }

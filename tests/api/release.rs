@@ -13,7 +13,7 @@ async fn store_chapter_release_mints_an_identifier() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
     let chapter_id = app.insert_random_chapter(book_id).await;
-    let language_id = app.translation_language(book_id).await;
+    let language_id = app.non_publication_language(book_id).await;
 
     let resp = app.post_release(chapter_id, language_id).await;
     let release_id = assert_stored(resp).await;
@@ -43,7 +43,7 @@ async fn store_chapter_release_in_the_publication_language_returns_422() {
 async fn store_chapter_release_for_unknown_chapter_returns_404() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
-    let language_id = app.translation_language(book_id).await;
+    let language_id = app.non_publication_language(book_id).await;
 
     let resp = app.post_release(Uuid::now_v7(), language_id).await;
     assert_error(resp, StatusCode::NOT_FOUND).await;
@@ -64,7 +64,7 @@ async fn store_chapter_release_allows_competing_releases_in_one_language() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
     let chapter_id = app.insert_random_chapter(book_id).await;
-    let language_id = app.translation_language(book_id).await;
+    let language_id = app.non_publication_language(book_id).await;
 
     let first = app.post_release(chapter_id, language_id).await;
     let first_id = assert_stored(first).await;
@@ -433,7 +433,7 @@ async fn get_chapter_releases_lists_committed_releases_with_language_and_page_co
     let book_id = app.insert_random_book().await;
     let chapter_id = app.insert_random_chapter(book_id).await;
     let release_id = app.insert_random_release(book_id, chapter_id).await;
-    let language_id = app.translation_language(book_id).await;
+    let language_id = app.non_publication_language(book_id).await;
 
     app.insert_page(release_id, Some(1), COVER_PNG).await;
     app.insert_page(release_id, Some(2), COVER_JPG).await;
