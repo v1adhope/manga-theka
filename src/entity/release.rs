@@ -88,6 +88,30 @@ impl PageOrder {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(try_from = "i32")]
+pub struct Version(i32);
+
+impl TryFrom<i32> for Version {
+    type Error = EntityError;
+
+    fn try_from(v: i32) -> Result<Self, Self::Error> {
+        const MIN: i32 = 1;
+
+        if v < MIN {
+            return Err(EntityError::VersionOutOfRange(v, MIN));
+        }
+
+        Ok(Self(v))
+    }
+}
+
+impl Version {
+    pub fn as_i32(self) -> i32 {
+        self.0
+    }
+}
+
 #[derive(Debug)]
 pub struct ChapterRelease {
     pub id: Uuid,
@@ -128,7 +152,7 @@ pub struct ChapterReleaseQuery {
     pub chapter_id: Uuid,
     pub language: Language,
     pub page_count: i64,
-    pub version: u16,
+    pub version: Version,
 }
 
 pub struct ChapterPage;
@@ -180,7 +204,7 @@ mod tests {
 
     use crate::entity::{
         ChapterRelease, MAX_COMMITTED_PAGES, MAX_PARTS_PER_REQUEST, MAX_RELEASE_ROWS, PageNumber,
-        PageOrder, PageUrl,
+        PageOrder, PageUrl, Version,
     };
 
     #[test]
@@ -209,6 +233,34 @@ mod tests {
         let number = PageNumber::try_from(1).unwrap();
 
         assert_eq!(serde_json::to_string(&number).unwrap(), "1");
+    }
+
+    #[test]
+    fn version_at_the_first_revision_is_valid() {
+        let version = Version::try_from(1).unwrap();
+
+        assert_eq!(version.as_i32(), 1);
+    }
+
+    #[test]
+    fn non_positive_version_is_rejected() {
+        for v in [0, -1] {
+            assert!(Version::try_from(v).is_err());
+        }
+    }
+
+    #[test]
+    fn deserialized_non_positive_version_is_rejected() {
+        for v in ["0", "-1"] {
+            assert!(serde_json::from_str::<Version>(v).is_err());
+        }
+    }
+
+    #[test]
+    fn version_serializes_as_a_bare_number() {
+        let version = Version::try_from(1).unwrap();
+
+        assert_eq!(serde_json::to_string(&version).unwrap(), "1");
     }
 
     #[test]

@@ -235,12 +235,12 @@ async fn recommitting_a_chapter_release_bumps_the_version() {
 
     let resp = app.post_commit(release_id, &staged).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
-    assert_eq!(app.fetch_release_version(release_id).await, 1);
+    assert_eq!(app.fetch_release_version(release_id).await, 2);
 
     let resp = app.post_commit(release_id, &staged[..1]).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    assert_eq!(app.fetch_release_version(release_id).await, 2);
+    assert_eq!(app.fetch_release_version(release_id).await, 3);
 }
 
 #[tokio::test]
@@ -261,7 +261,7 @@ async fn commit_chapter_release_naming_a_foreign_page_returns_422() {
     let resp = app.post_commit(release_id, &declared).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 
-    assert_eq!(app.fetch_release_version(release_id).await, 0);
+    assert_eq!(app.fetch_release_version(release_id).await, 1);
     assert!(
         app.object_exists(&app.release_pages_bucket, foreign[0])
             .await
@@ -450,7 +450,7 @@ async fn get_chapter_releases_lists_a_committed_release_with_all_its_fields() {
     assert!(!release.language.code.is_empty());
     assert!(!release.language.name.is_empty());
     assert_eq!(release.page_count, 2);
-    assert_eq!(release.version, 0);
+    assert_eq!(release.version.as_i32(), 1);
 }
 
 #[tokio::test]
@@ -644,7 +644,7 @@ async fn get_chapter_page_of_a_never_committed_release_resolves_for_preview() {
     let release_id = app.insert_random_release(book_id, chapter_id).await;
 
     let page_id = app.insert_page(release_id, Some(1), COVER_PNG).await;
-    assert_eq!(app.fetch_release_version(release_id).await, 0);
+    assert_eq!(app.fetch_release_version(release_id).await, 1);
 
     let resp = app.get_page(release_id, 1).await;
     assert_eq!(resp.status(), StatusCode::FOUND);

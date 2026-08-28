@@ -5,7 +5,7 @@ use crate::{
     database::Database,
     entity::{
         ChapterPage, ChapterPageParams, ChapterPageQuery, ChapterPages, ChapterRelease,
-        ChapterReleaseQuery, ImageExtension, Language, PageNumber, PageOrder, PageStatus,
+        ChapterReleaseQuery, ImageExtension, Language, PageNumber, PageOrder, PageStatus, Version,
     },
     error::DatabaseError,
 };
@@ -24,7 +24,7 @@ impl TryFrom<ChapterReleaseRow> for ChapterReleaseQuery {
     type Error = DatabaseError;
 
     fn try_from(row: ChapterReleaseRow) -> Result<Self, Self::Error> {
-        let version = u16::try_from(row.version)
+        let version = Version::try_from(row.version)
             .map_err(|e| DatabaseError::invariant_corrupted("version", e))?;
 
         Ok(ChapterReleaseQuery {

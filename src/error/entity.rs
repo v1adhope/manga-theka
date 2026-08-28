@@ -67,6 +67,9 @@ pub enum EntityError {
     #[error("Page number {0} must be {1} or greater")]
     PageNumberOutOfRange(i16, i16),
 
+    #[error("Version {0} must be {1} or greater")]
+    VersionOutOfRange(i32, i32),
+
     #[error("Page order can't be empty")]
     PageOrderIsEmpty,
 
