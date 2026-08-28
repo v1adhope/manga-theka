@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     database::Database,
-    entity::{Creator, CreatorRole, DEFAULT_LIMIT, Filter, Limit, Name},
+    entity::{Creator, DEFAULT_LIMIT, Filter, Limit, Name},
     error::DatabaseError,
 };
 
@@ -13,7 +13,6 @@ pub(super) struct CreatorRow {
     pub(super) id: Uuid,
     pub(super) first_name: String,
     pub(super) last_name: String,
-    pub(super) role: String,
     pub(super) created_at: time::OffsetDateTime,
 }
 
@@ -21,10 +20,6 @@ impl TryFrom<CreatorRow> for Creator {
     type Error = DatabaseError;
 
     fn try_from(row: CreatorRow) -> Result<Self, Self::Error> {
-        let role: CreatorRole = row
-            .role
-            .parse()
-            .map_err(|e| DatabaseError::invariant_corrupted("role", e))?;
         let first_name = Name::try_from(row.first_name)
             .map_err(|e| DatabaseError::invariant_corrupted("first_name", e))?;
         let last_name = Name::try_from(row.last_name)
@@ -34,7 +29,6 @@ impl TryFrom<CreatorRow> for Creator {
             id: row.id,
             first_name,
             last_name,
-            role,
             created_at: row.created_at,
         })
     }
@@ -48,7 +42,6 @@ impl Database {
             item.id,
             item.first_name.as_ref(),
             item.last_name.as_ref(),
-            item.role.as_ref() as _,
             item.created_at
         )
         .execute(&self.pool)
@@ -66,7 +59,6 @@ impl Database {
             item.id,
             item.first_name.as_ref(),
             item.last_name.as_ref(),
-            item.role.as_ref() as _,
         )
         .fetch_optional(&self.pool)
         .await
@@ -114,7 +106,7 @@ impl Database {
     ) -> Result<(Vec<Creator>, Option<Uuid>), DatabaseError> {
         let limit = filter.limit.map_or(DEFAULT_LIMIT, Limit::as_u32);
         let mut builder: QueryBuilder<Postgres> =
-            QueryBuilder::new("select id, first_name, last_name, role, created_at from creators");
+            QueryBuilder::new("select id, first_name, last_name, created_at from creators");
 
         if let Some(id) = filter.after {
             builder.push(" where id < ").push_bind(id);

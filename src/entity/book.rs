@@ -6,8 +6,8 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        Bounded, BoundedVec, ContentRating, Creator, Entity, Image, ImageExtension, Label,
-        Language, ResourceUrl, validate_name,
+        Bounded, BoundedVec, ContentRating, CreatorRole, Entity, Image, ImageExtension, Label,
+        Language, Name, ResourceUrl, validate_name,
     },
     error::EntityError,
 };
@@ -196,6 +196,7 @@ pub struct Book {
     pub label_ids: BookLabelIds,
     pub links: BookLinks,
     pub titles: BookTitles,
+    pub creators: BookCreatorRefs,
     pub updated_at: Option<OffsetDateTime>,
     pub created_at: OffsetDateTime,
 }
@@ -239,6 +240,24 @@ pub struct AlternativeTitle {
     pub name: BookName,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BookCreator {
+    pub id: Uuid,
+    pub first_name: Name,
+    pub last_name: Name,
+    pub roles: Vec<CreatorRole>,
+    #[serde(with = "time::serde::rfc3339")]
+    pub created_at: OffsetDateTime,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BookCreatorRef {
+    pub creator_id: Uuid,
+    pub role: CreatorRole,
+}
+
 pub struct BookLinksBound;
 
 impl Bounded for BookLinksBound {
@@ -274,7 +293,8 @@ impl Bounded for BookCreatorsBound {
     const NAME: &'static str = "book creators";
 }
 
-pub type BookCreators = BoundedVec<Creator, BookCreatorsBound>;
+pub type BookCreators = BoundedVec<BookCreator, BookCreatorsBound>;
+pub type BookCreatorRefs = BoundedVec<BookCreatorRef, BookCreatorsBound>;
 
 #[derive(Debug)]
 pub struct BookCover {
@@ -307,9 +327,9 @@ mod tests {
     use uuid::Uuid;
 
     use crate::entity::{
-        AlternativeTitle, BookCreators, BookLabelIds, BookLink, BookLinkKind, BookLinks, BookName,
-        BookTitles, Creator, CreatorRole, Description, LinkUrl, MAX_BOOK_CREATORS, MAX_BOOK_LABELS,
-        MAX_BOOK_LINKS, MAX_BOOK_TITLES, Name,
+        AlternativeTitle, BookCreator, BookCreators, BookLabelIds, BookLink, BookLinkKind,
+        BookLinks, BookName, BookTitles, CreatorRole, Description, LinkUrl, MAX_BOOK_CREATORS,
+        MAX_BOOK_LABELS, MAX_BOOK_LINKS, MAX_BOOK_TITLES, Name,
     };
 
     fn sample_link() -> BookLink {
@@ -326,12 +346,12 @@ mod tests {
         }
     }
 
-    fn sample_creator() -> Creator {
-        Creator {
+    fn sample_creator() -> BookCreator {
+        BookCreator {
             id: Uuid::now_v7(),
             first_name: Name::try_from("Jane".to_owned()).unwrap(),
             last_name: Name::try_from("Doe".to_owned()).unwrap(),
-            role: CreatorRole::Author,
+            roles: vec![CreatorRole::Author],
             created_at: OffsetDateTime::now_utc(),
         }
     }
@@ -380,14 +400,15 @@ mod tests {
 
     #[test]
     fn book_creators_at_the_ceiling_is_valid() {
-        let creators: Vec<Creator> = (0..MAX_BOOK_CREATORS).map(|_| sample_creator()).collect();
+        let creators: Vec<BookCreator> = (0..MAX_BOOK_CREATORS).map(|_| sample_creator()).collect();
 
         assert!(BookCreators::try_from(creators).is_ok());
     }
 
     #[test]
     fn book_creators_over_the_ceiling_is_rejected() {
-        let creators: Vec<Creator> = (0..=MAX_BOOK_CREATORS).map(|_| sample_creator()).collect();
+        let creators: Vec<BookCreator> =
+            (0..=MAX_BOOK_CREATORS).map(|_| sample_creator()).collect();
 
         assert!(BookCreators::try_from(creators).is_err());
     }

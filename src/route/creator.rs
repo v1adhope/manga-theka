@@ -9,7 +9,7 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
-    entity::{Creator, CreatorRole, Filter, Name},
+    entity::{Creator, Filter, Name},
     error::{AppError, EntityError},
     route::{PaginationQuery, StoreResp, json_data_response, json_response},
     service::Service,
@@ -20,7 +20,6 @@ use crate::{
 pub struct CreatorReq {
     pub first_name: String,
     pub last_name: String,
-    pub role: CreatorRole,
 }
 
 impl TryFrom<(CreatorReq, Uuid, OffsetDateTime)> for Creator {
@@ -36,7 +35,6 @@ impl TryFrom<(CreatorReq, Uuid, OffsetDateTime)> for Creator {
             id,
             first_name,
             last_name,
-            role: req.role,
             created_at,
         })
     }

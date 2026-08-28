@@ -13,7 +13,7 @@ use manga_theka::{
     config::{Config, Database},
     database,
     entity::{
-        AlternativeTitle, BookCoverQuery, BookLink, BookName, BookQuery, Chapter,
+        AlternativeTitle, BookCoverQuery, BookCreator, BookLink, BookName, BookQuery, Chapter,
         ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume, ContentRating, CoverUrl,
         Creator, Description, ImageExtension, Label, Language, LinkUrl, Name,
     },
@@ -115,6 +115,20 @@ pub fn title_keys(titles: &[AlternativeTitle]) -> Vec<(Uuid, &str)> {
     let mut keys: Vec<(Uuid, &str)> = titles
         .iter()
         .map(|t| (t.language_id, t.name.as_ref()))
+        .collect();
+    keys.sort();
+
+    keys
+}
+
+pub fn creator_keys(creators: &[BookCreator]) -> Vec<(Uuid, &str, &str, Vec<&str>)> {
+    let mut keys: Vec<(Uuid, &str, &str, Vec<&str>)> = creators
+        .iter()
+        .map(|c| {
+            let mut roles: Vec<&str> = c.roles.iter().map(AsRef::as_ref).collect();
+            roles.sort();
+            (c.id, c.first_name.as_ref(), c.last_name.as_ref(), roles)
+        })
         .collect();
     keys.sort();
 
@@ -309,6 +323,55 @@ from unnest($2::uuid[], $3::text[]) as title(language_id, name);
         .execute(&self.pool)
         .await
         .expect("failed to insert factory book titles");
+
+        let mut creator_ids: Vec<Uuid> = Vec::with_capacity(b.creators.len());
+        let mut creator_first_names: Vec<String> = Vec::with_capacity(b.creators.len());
+        let mut creator_last_names: Vec<String> = Vec::with_capacity(b.creators.len());
+        let mut creator_created_ats: Vec<time::OffsetDateTime> =
+            Vec::with_capacity(b.creators.len());
+        let mut credit_creator_ids: Vec<Uuid> = Vec::new();
+        let mut credit_roles: Vec<String> = Vec::new();
+        for c in b.creators.as_slice() {
+            creator_ids.push(c.id);
+            creator_first_names.push(c.first_name.as_ref().to_owned());
+            creator_last_names.push(c.last_name.as_ref().to_owned());
+            creator_created_ats.push(c.created_at);
+            for role in &c.roles {
+                credit_creator_ids.push(c.id);
+                credit_roles.push(role.as_ref().to_owned());
+            }
+        }
+
+        if !creator_ids.is_empty() {
+            sqlx::query!(
+                r#"
+insert into creators(id, first_name, last_name, created_at)
+select c.id, c.first_name, c.last_name, c.created_at
+from unnest($1::uuid[], $2::text[], $3::text[], $4::timestamptz[]) as c(id, first_name, last_name, created_at);
+            "#,
+                &creator_ids,
+                &creator_first_names,
+                &creator_last_names,
+                &creator_created_ats
+            )
+            .execute(&self.pool)
+            .await
+            .expect("failed to insert factory book creators");
+
+            sqlx::query!(
+                r#"
+insert into book_creators(book_id, creator_id, role)
+select $1, credit.creator_id, credit.role
+from unnest($2::uuid[], $3::text[]) as credit(creator_id, role);
+            "#,
+                b.id,
+                &credit_creator_ids,
+                &credit_roles
+            )
+            .execute(&self.pool)
+            .await
+            .expect("failed to insert factory book creator credits");
+        }
     }
 
     pub async fn fetch_book_sample(&self, id: Uuid) -> BookSample {
@@ -411,12 +474,14 @@ order by language_id, name;
         })
         .collect();
 
-        let creators: Vec<Creator> = sqlx::query!(
+        let creators: Vec<BookCreator> = sqlx::query!(
             r#"
-select c.id, c.first_name, c.last_name, c.role, c.created_at
-from creators c
-join book_creators bc on bc.creator_id = c.id
+select c.id, c.first_name, c.last_name,
+       array_agg(bc.role order by bc.role) as "roles!", c.created_at
+from book_creators bc
+join creators c on c.id = bc.creator_id
 where bc.book_id = $1
+group by c.id
 order by c.id;
         "#,
             id
@@ -425,11 +490,15 @@ order by c.id;
         .await
         .expect("failed to read book creators")
         .into_iter()
-        .map(|r| Creator {
+        .map(|r| BookCreator {
             id: r.id,
             first_name: Name::try_from(r.first_name).expect("stored first name must be valid"),
             last_name: Name::try_from(r.last_name).expect("stored last name must be valid"),
-            role: r.role.parse().expect("stored creator role must be valid"),
+            roles: r
+                .roles
+                .into_iter()
+                .map(|role| role.parse().expect("stored creator role must be valid"))
+                .collect(),
             created_at: r.created_at,
         })
         .collect();
@@ -664,13 +733,12 @@ select (select c.number from chapters c where c.id = $1) as "number?",
     pub async fn insert_creator(&self, c: &Creator) {
         sqlx::query!(
             r#"
-insert into creators(id, first_name, last_name, role, created_at)
-values($1, $2, $3, $4, $5);
+insert into creators(id, first_name, last_name, created_at)
+values($1, $2, $3, $4);
         "#,
             c.id,
             c.first_name.as_ref(),
             c.last_name.as_ref(),
-            c.role.as_ref() as _,
             c.created_at
         )
         .execute(&self.pool)

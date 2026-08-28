@@ -104,12 +104,6 @@ impl From<sqlx::Error> for DatabaseError {
                         source: err,
                     };
                 }
-                Some("enum_creators_role") => {
-                    return Self::DoesNotExist {
-                        field: "Creator role",
-                        source: err,
-                    };
-                }
                 Some("unique_creators_first_name_last_name") => {
                     return Self::AlreadyExists {
                         field: "Creator full name",
@@ -119,6 +113,18 @@ impl From<sqlx::Error> for DatabaseError {
                 Some("fk_book_creators_creators_creator_id") => {
                     return Self::InUse {
                         field: "Creator",
+                        source: err,
+                    };
+                }
+                Some("enum_book_creators_role") => {
+                    return Self::DoesNotExist {
+                        field: "Book creator role",
+                        source: err,
+                    };
+                }
+                Some("pk_book_creators_book_id_creator_id_role") => {
+                    return Self::Duplication {
+                        field: "Book creator role",
                         source: err,
                     };
                 }

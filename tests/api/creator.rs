@@ -17,7 +17,6 @@ async fn store_creator_with_valid_body_passes() {
     let body = serde_json::json!({
         "firstName": "John",
         "lastName": "Doe",
-        "role": "Artist",
     })
     .to_string();
     let req = Request::post("/creators")
@@ -28,7 +27,7 @@ async fn store_creator_with_valid_body_passes() {
     let resp = app.router.oneshot(req).await.unwrap();
     let id = assert_stored(resp).await;
 
-    let row = sqlx::query!("select id, first_name, last_name, role, created_at from creators",)
+    let row = sqlx::query!("select id, first_name, last_name, created_at from creators",)
         .fetch_one(&app.pool)
         .await
         .unwrap();
@@ -36,7 +35,6 @@ async fn store_creator_with_valid_body_passes() {
     assert_eq!(row.id, id);
     assert_eq!(row.first_name, "John");
     assert_eq!(row.last_name, "Doe");
-    assert_eq!(row.role, "Artist");
     assert_ne!(row.created_at, OffsetDateTime::UNIX_EPOCH)
 }
 
@@ -58,7 +56,6 @@ async fn store_creator_with_missing_first_name_returns_422() {
     let app = TestApp::new().await;
     let body = serde_json::json!({
         "lastName": "Doe",
-        "role": "Artist",
     })
     .to_string();
     let req = Request::post("/creators")
@@ -81,7 +78,6 @@ async fn update_creator_with_valid_body_passes() {
     let body = serde_json::json!({
         "firstName": "Updated",
         "lastName": "Name",
-        "role": "Author",
     })
     .to_string();
 
@@ -93,14 +89,13 @@ async fn update_creator_with_valid_body_passes() {
     let resp = app.router.oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let row = sqlx::query!("select first_name, last_name, role, created_at from creators")
+    let row = sqlx::query!("select first_name, last_name, created_at from creators")
         .fetch_one(&app.pool)
         .await
         .unwrap();
 
     assert_eq!(row.first_name, "Updated");
     assert_eq!(row.last_name, "Name");
-    assert_eq!(row.role, "Author");
     assert_eq!(
         row.created_at.unix_timestamp(),
         creator.created_at.unix_timestamp()
@@ -119,7 +114,6 @@ async fn update_creator_leaves_other_creators_untouched() {
     let body = serde_json::json!({
         "firstName": "Updated",
         "lastName": "Name",
-        "role": "Author",
     })
     .to_string();
     let req = Request::put(format!("/creators/{}", creator.id))
@@ -131,7 +125,7 @@ async fn update_creator_leaves_other_creators_untouched() {
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let row = sqlx::query!(
-        "select first_name, last_name, role, created_at from creators where id = $1",
+        "select first_name, last_name, created_at from creators where id = $1",
         other_creator.id,
     )
     .fetch_one(&app.pool)
@@ -140,7 +134,6 @@ async fn update_creator_leaves_other_creators_untouched() {
 
     assert_eq!(row.first_name, other_creator.first_name.as_ref());
     assert_eq!(row.last_name, other_creator.last_name.as_ref());
-    assert_eq!(row.role, other_creator.role.as_ref());
     assert_eq!(
         row.created_at.unix_timestamp(),
         other_creator.created_at.unix_timestamp()
@@ -154,7 +147,6 @@ async fn update_creator_with_unknown_id_returns_404() {
     let body = serde_json::json!({
         "firstName": "Updated",
         "lastName": "Name",
-        "role": "Author",
     })
     .to_string();
     let req = Request::put(format!("/creators/{}", uuid::Uuid::now_v7()))
@@ -178,7 +170,6 @@ async fn update_creator_fullname_duplication_returns_409() {
     let body = serde_json::json!({
         "firstName": creator.first_name.as_ref(),
         "lastName": creator.last_name.as_ref(),
-        "role": creator.role.as_ref(),
     })
     .to_string();
     let req = Request::put(format!("/creators/{}", another_creator.id))
@@ -200,7 +191,6 @@ async fn update_creator_name_validation_failure_returns_422() {
     let body = serde_json::json!({
         "firstName": "John123",
         "lastName": "Doe",
-        "role": "Artist",
     })
     .to_string();
 
@@ -230,7 +220,6 @@ async fn get_creator_with_valid_id_passes() {
     assert_eq!(got.id, creator.id);
     assert_eq!(got.first_name, creator.first_name);
     assert_eq!(got.last_name, creator.last_name);
-    assert_eq!(got.role, creator.role);
     assert_eq!(
         got.created_at.unix_timestamp(),
         creator.created_at.unix_timestamp()
@@ -410,7 +399,7 @@ async fn delete_creator_leaves_other_creators_untouched() {
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let row = sqlx::query!(
-        "select first_name, last_name, role, created_at from creators where id = $1",
+        "select first_name, last_name, created_at from creators where id = $1",
         other_creator.id,
     )
     .fetch_one(&app.pool)
@@ -419,7 +408,6 @@ async fn delete_creator_leaves_other_creators_untouched() {
 
     assert_eq!(row.first_name, other_creator.first_name.as_ref());
     assert_eq!(row.last_name, other_creator.last_name.as_ref());
-    assert_eq!(row.role, other_creator.role.as_ref());
     assert_eq!(
         row.created_at.unix_timestamp(),
         other_creator.created_at.unix_timestamp()

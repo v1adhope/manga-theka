@@ -41,7 +41,6 @@ pub struct Creator {
     pub id: Uuid,
     pub first_name: Name,
     pub last_name: Name,
-    pub role: CreatorRole,
     #[serde(with = "time::serde::rfc3339")]
     pub created_at: OffsetDateTime,
 }
