@@ -5,7 +5,7 @@ use crate::{
     database::Database,
     entity::{
         ChapterPage, ChapterPageParams, ChapterPageQuery, ChapterPages, ChapterRelease,
-        ChapterReleaseQuery, ImageExtension, Language, PageNumber, PageOrder, PageStatus, Version,
+        ChapterReleaseQuery, ImageExtension, Language, Ordinal, PageOrder, PageStatus,
     },
     error::DatabaseError,
 };
@@ -24,7 +24,7 @@ impl TryFrom<ChapterReleaseRow> for ChapterReleaseQuery {
     type Error = DatabaseError;
 
     fn try_from(row: ChapterReleaseRow) -> Result<Self, Self::Error> {
-        let version = Version::try_from(row.version)
+        let version = Ordinal::try_from(row.version)
             .map_err(|e| DatabaseError::invariant_corrupted("version", e))?;
 
         Ok(ChapterReleaseQuery {
@@ -44,7 +44,7 @@ impl TryFrom<ChapterReleaseRow> for ChapterReleaseQuery {
 struct ChapterPageRow {
     id: Uuid,
     release_id: Uuid,
-    sort_order: i16,
+    sort_order: i32,
     extension: String,
 }
 
@@ -52,7 +52,7 @@ impl TryFrom<ChapterPageRow> for ChapterPageQuery {
     type Error = DatabaseError;
 
     fn try_from(row: ChapterPageRow) -> Result<Self, Self::Error> {
-        let page_number = PageNumber::try_from(row.sort_order)
+        let page_number = Ordinal::try_from(row.sort_order)
             .map_err(|e| DatabaseError::invariant_corrupted("sort_order", e))?;
         let url = (row.release_id, page_number).into();
         let extension: ImageExtension = row
@@ -332,16 +332,16 @@ impl Database {
         }
     }
 
-    #[instrument(name = "db.chapter_page.id", skip_all, fields(release.id = %release_id, page.number = number.as_i16()))]
+    #[instrument(name = "db.chapter_page.id", skip_all, fields(release.id = %release_id, page.number = number.as_i32()))]
     pub async fn get_chapter_page_id(
         &self,
         release_id: Uuid,
-        number: PageNumber,
+        number: Ordinal,
     ) -> Result<Uuid, DatabaseError> {
         let id = sqlx::query_file_scalar!(
             "queries/get_chapter_page_id.sql",
             release_id,
-            number.as_i16()
+            number.as_i32()
         )
         .fetch_optional(&self.pool)
         .await

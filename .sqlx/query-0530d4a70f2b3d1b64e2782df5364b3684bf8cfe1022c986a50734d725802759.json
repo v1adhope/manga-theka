@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update chapter_pages p\nset sort_order = d.sort_order\nfrom unnest($2::uuid[]) with ordinality as d(id, sort_order)\nwhere p.release_id = $1 and p.id = d.id;\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0530d4a70f2b3d1b64e2782df5364b3684bf8cfe1022c986a50734d725802759"
+}

@@ -28,7 +28,7 @@
       {
         "ordinal": 2,
         "name": "sort_order!",
-        "type_info": "Int2",
+        "type_info": "Int4",
         "origin": {
           "Table": {
             "table": "chapter_pages",

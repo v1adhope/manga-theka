@@ -15,11 +15,11 @@ pub const MAX_RELEASE_ROWS: usize = 400;
 #[serde(transparent)]
 pub struct PageUrl(String);
 
-impl From<(Uuid, PageNumber)> for PageUrl {
-    fn from((release_id, page_number): (Uuid, PageNumber)) -> Self {
+impl From<(Uuid, Ordinal)> for PageUrl {
+    fn from((release_id, page_number): (Uuid, Ordinal)) -> Self {
         Self(format!(
             "/releases/{release_id}/pages/{}",
-            page_number.as_i16()
+            page_number.as_i32()
         ))
     }
 }
@@ -31,25 +31,25 @@ impl AsRef<str> for PageUrl {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(try_from = "i16")]
-pub struct PageNumber(i16);
+#[serde(try_from = "i32")]
+pub struct Ordinal(i32);
 
-impl TryFrom<i16> for PageNumber {
+impl TryFrom<i32> for Ordinal {
     type Error = EntityError;
 
-    fn try_from(n: i16) -> Result<Self, Self::Error> {
-        const MIN: i16 = 1;
+    fn try_from(n: i32) -> Result<Self, Self::Error> {
+        const MIN: i32 = 1;
 
         if n < MIN {
-            return Err(EntityError::PageNumberOutOfRange(n, MIN));
+            return Err(EntityError::OrdinalOutOfRange(n, MIN));
         }
 
         Ok(Self(n))
     }
 }
 
-impl PageNumber {
-    pub fn as_i16(self) -> i16 {
+impl Ordinal {
+    pub fn as_i32(self) -> i32 {
         self.0
     }
 }
@@ -85,30 +85,6 @@ impl TryFrom<Vec<Uuid>> for PageOrder {
 impl PageOrder {
     pub fn as_slice(&self) -> &[Uuid] {
         &self.0
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(try_from = "i32")]
-pub struct Version(i32);
-
-impl TryFrom<i32> for Version {
-    type Error = EntityError;
-
-    fn try_from(v: i32) -> Result<Self, Self::Error> {
-        const MIN: i32 = 1;
-
-        if v < MIN {
-            return Err(EntityError::VersionOutOfRange(v, MIN));
-        }
-
-        Ok(Self(v))
-    }
-}
-
-impl Version {
-    pub fn as_i32(self) -> i32 {
-        self.0
     }
 }
 
@@ -152,7 +128,7 @@ pub struct ChapterReleaseQuery {
     pub chapter_id: Uuid,
     pub language: Language,
     pub page_count: i64,
-    pub version: Version,
+    pub version: Ordinal,
 }
 
 pub struct ChapterPage;
@@ -176,7 +152,7 @@ pub struct ChapterPages {
 pub enum ChapterPageQuery {
     Committed {
         id: Uuid,
-        page_number: PageNumber,
+        page_number: Ordinal,
         extension: ImageExtension,
         url: PageUrl,
     },
@@ -203,64 +179,36 @@ mod tests {
     use uuid::Uuid;
 
     use crate::entity::{
-        ChapterRelease, MAX_COMMITTED_PAGES, MAX_PARTS_PER_REQUEST, MAX_RELEASE_ROWS, PageNumber,
-        PageOrder, PageUrl, Version,
+        ChapterRelease, MAX_COMMITTED_PAGES, MAX_PARTS_PER_REQUEST, MAX_RELEASE_ROWS, Ordinal,
+        PageOrder, PageUrl,
     };
 
     #[test]
-    fn page_number_at_the_first_position_is_valid() {
-        let number = PageNumber::try_from(1).unwrap();
+    fn ordinal_at_the_first_position_is_valid() {
+        let ordinal = Ordinal::try_from(1).unwrap();
 
-        assert_eq!(number.as_i16(), 1);
+        assert_eq!(ordinal.as_i32(), 1);
     }
 
     #[test]
-    fn non_positive_page_number_is_rejected() {
+    fn non_positive_ordinal_is_rejected() {
         for n in [0, -1] {
-            assert!(PageNumber::try_from(n).is_err());
+            assert!(Ordinal::try_from(n).is_err());
         }
     }
 
     #[test]
-    fn deserialized_non_positive_page_number_is_rejected() {
+    fn deserialized_non_positive_ordinal_is_rejected() {
         for n in ["0", "-1"] {
-            assert!(serde_json::from_str::<PageNumber>(n).is_err());
+            assert!(serde_json::from_str::<Ordinal>(n).is_err());
         }
     }
 
     #[test]
-    fn page_number_serializes_as_a_bare_number() {
-        let number = PageNumber::try_from(1).unwrap();
+    fn ordinal_serializes_as_a_bare_number() {
+        let ordinal = Ordinal::try_from(1).unwrap();
 
-        assert_eq!(serde_json::to_string(&number).unwrap(), "1");
-    }
-
-    #[test]
-    fn version_at_the_first_revision_is_valid() {
-        let version = Version::try_from(1).unwrap();
-
-        assert_eq!(version.as_i32(), 1);
-    }
-
-    #[test]
-    fn non_positive_version_is_rejected() {
-        for v in [0, -1] {
-            assert!(Version::try_from(v).is_err());
-        }
-    }
-
-    #[test]
-    fn deserialized_non_positive_version_is_rejected() {
-        for v in ["0", "-1"] {
-            assert!(serde_json::from_str::<Version>(v).is_err());
-        }
-    }
-
-    #[test]
-    fn version_serializes_as_a_bare_number() {
-        let version = Version::try_from(1).unwrap();
-
-        assert_eq!(serde_json::to_string(&version).unwrap(), "1");
+        assert_eq!(serde_json::to_string(&ordinal).unwrap(), "1");
     }
 
     #[test]
@@ -289,7 +237,7 @@ mod tests {
 
     #[test]
     fn page_url_points_at_the_position_addressed_reader_route() {
-        let url = PageUrl::from((Uuid::from_u128(1), PageNumber::try_from(4).unwrap()));
+        let url = PageUrl::from((Uuid::from_u128(1), Ordinal::try_from(4).unwrap()));
 
         assert_eq!(
             url.as_ref(),

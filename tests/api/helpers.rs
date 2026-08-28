@@ -810,7 +810,7 @@ values($1, $2, $3, 1);
     pub async fn insert_page(
         &self,
         release_id: Uuid,
-        sort_order: Option<i16>,
+        sort_order: Option<i32>,
         image: &[u8],
     ) -> Uuid {
         let id = Uuid::now_v7();
@@ -882,7 +882,7 @@ where id = $1;
         .expect("failed to read chapter release id")
     }
 
-    pub async fn fetch_page_order(&self, release_id: Uuid) -> Vec<(Uuid, Option<i16>)> {
+    pub async fn fetch_page_order(&self, release_id: Uuid) -> Vec<(Uuid, Option<i32>)> {
         sqlx::query!(
             r#"
 select id, sort_order
@@ -985,7 +985,7 @@ order by sort_order;
         self.router.clone().oneshot(req).await.unwrap()
     }
 
-    pub async fn get_page(&self, release_id: Uuid, page_number: i16) -> Response {
+    pub async fn get_page(&self, release_id: Uuid, page_number: i32) -> Response {
         let req = Request::get(format!("/releases/{release_id}/pages/{page_number}"))
             .body(Body::empty())
             .unwrap();

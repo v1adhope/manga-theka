@@ -1,7 +1,7 @@
 create table if not exists chapter_pages (
 	id uuid,
 	release_id uuid not null,
-	sort_order smallint,
+	sort_order integer,
 	extension text not null,
 
 	constraint pk_chapter_pages_id primary key(id),

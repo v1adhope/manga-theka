@@ -64,11 +64,8 @@ pub enum EntityError {
     #[error("Chapter volume {0} must be within [{1}, {2}]")]
     ChapterVolumeOutOfRange(i16, i16, i16),
 
-    #[error("Page number {0} must be {1} or greater")]
-    PageNumberOutOfRange(i16, i16),
-
-    #[error("Version {0} must be {1} or greater")]
-    VersionOutOfRange(i32, i32),
+    #[error("Ordinal {0} must be {1} or greater")]
+    OrdinalOutOfRange(i32, i32),
 
     #[error("Page order can't be empty")]
     PageOrderIsEmpty,
