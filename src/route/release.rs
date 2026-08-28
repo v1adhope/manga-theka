@@ -8,7 +8,10 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
-    entity::{ChapterPageParams, ChapterPages, ChapterRelease, MAX_PARTS_PER_REQUEST, PageOrder},
+    entity::{
+        ChapterPageParams, ChapterPages, ChapterRelease, MAX_PARTS_PER_REQUEST, PageNumber,
+        PageOrder,
+    },
     error::{AppError, RouteError},
     route::{StoreResp, collect_image_part, json_data_response},
     service::Service,
@@ -120,6 +123,17 @@ pub async fn get_chapter_page_image(
     Path((release_id, page_id)): Path<(Uuid, Uuid)>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let url = service.presign_chapter_page(release_id, page_id).await?;
+
+    Ok((StatusCode::FOUND, [(header::LOCATION, url)]))
+}
+
+pub async fn get_chapter_page(
+    State(service): State<Service>,
+    Path((release_id, page_number)): Path<(Uuid, i16)>,
+) -> Result<(StatusCode, impl IntoResponse), AppError> {
+    let number = PageNumber::try_from(page_number)?;
+
+    let url = service.presign_chapter_page_at(release_id, number).await?;
 
     Ok((StatusCode::FOUND, [(header::LOCATION, url)]))
 }

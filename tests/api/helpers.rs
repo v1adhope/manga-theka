@@ -83,6 +83,14 @@ pub async fn assert_stored(resp: Response) -> Uuid {
     Uuid::parse_str(id).expect("data.id must be a uuid")
 }
 
+pub fn redirect_target(resp: &Response) -> &str {
+    resp.headers()
+        .get(header::LOCATION)
+        .expect("a redirect must carry a location")
+        .to_str()
+        .expect("a location must be printable")
+}
+
 pub fn label_keys(labels: &[Label]) -> Vec<(Uuid, &str, &str)> {
     let mut keys: Vec<(Uuid, &str, &str)> = labels
         .iter()
@@ -971,6 +979,14 @@ order by sort_order;
 
     pub async fn get_page_image(&self, release_id: Uuid, page_id: Uuid) -> Response {
         let req = Request::get(format!("/releases/{release_id}/pages/{page_id}/image"))
+            .body(Body::empty())
+            .unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap()
+    }
+
+    pub async fn get_page(&self, release_id: Uuid, page_number: i16) -> Response {
+        let req = Request::get(format!("/releases/{release_id}/pages/{page_number}"))
             .body(Body::empty())
             .unwrap();
 

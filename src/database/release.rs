@@ -5,7 +5,7 @@ use crate::{
     database::Database,
     entity::{
         ChapterPage, ChapterPageParams, ChapterPageQuery, ChapterPages, ChapterRelease,
-        ChapterReleaseQuery, ImageExtension, Language, PageOrder, PageStatus,
+        ChapterReleaseQuery, ImageExtension, Language, PageNumber, PageOrder, PageStatus,
     },
     error::DatabaseError,
 };
@@ -328,6 +328,29 @@ impl Database {
                 rows.into_iter().map(TryInto::try_into).collect()
             }
         }
+    }
+
+    #[instrument(name = "db.chapter_page.id", skip_all, fields(release.id = %release_id, page.number = number.as_i16()))]
+    pub async fn get_chapter_page_id(
+        &self,
+        release_id: Uuid,
+        number: PageNumber,
+    ) -> Result<Uuid, DatabaseError> {
+        let id = sqlx::query_file_scalar!(
+            "queries/get_chapter_page_id.sql",
+            release_id,
+            number.as_i16()
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(DatabaseError::from)
+        .inspect_err(DatabaseError::log_internal)?;
+
+        let Some(id) = id else {
+            return Err(DatabaseError::not_found::<ChapterPage>());
+        };
+
+        Ok(id)
     }
 
     #[instrument(name = "db.chapter_page.exists", skip_all, fields(release.id = %release_id, page.id = %id))]

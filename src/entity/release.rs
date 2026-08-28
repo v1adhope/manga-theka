@@ -28,6 +28,29 @@ impl AsRef<str> for PageUrl {
 }
 
 #[derive(Debug)]
+pub struct PageNumber(i16);
+
+impl TryFrom<i16> for PageNumber {
+    type Error = EntityError;
+
+    fn try_from(n: i16) -> Result<Self, Self::Error> {
+        const MIN: i16 = 1;
+
+        if n < MIN {
+            return Err(EntityError::PageNumberOutOfRange(n, MIN));
+        }
+
+        Ok(Self(n))
+    }
+}
+
+impl PageNumber {
+    pub fn as_i16(&self) -> i16 {
+        self.0
+    }
+}
+
+#[derive(Debug)]
 pub struct PageOrder(Vec<Uuid>);
 
 impl TryFrom<Vec<Uuid>> for PageOrder {
@@ -152,9 +175,23 @@ mod tests {
     use uuid::Uuid;
 
     use crate::entity::{
-        ChapterRelease, MAX_COMMITTED_PAGES, MAX_PARTS_PER_REQUEST, MAX_RELEASE_ROWS, PageOrder,
-        PageUrl,
+        ChapterRelease, MAX_COMMITTED_PAGES, MAX_PARTS_PER_REQUEST, MAX_RELEASE_ROWS, PageNumber,
+        PageOrder, PageUrl,
     };
+
+    #[test]
+    fn page_number_at_the_first_position_is_valid() {
+        let number = PageNumber::try_from(1).unwrap();
+
+        assert_eq!(number.as_i16(), 1);
+    }
+
+    #[test]
+    fn non_positive_page_number_is_rejected() {
+        for n in [0, -1] {
+            assert!(PageNumber::try_from(n).is_err());
+        }
+    }
 
     #[test]
     fn row_capacity_at_the_ceiling_is_valid() {

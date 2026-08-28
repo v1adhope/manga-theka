@@ -1,11 +1,11 @@
-use axum::http::{StatusCode, header};
+use axum::http::StatusCode;
 use fake::Fake;
 use http_body_util::BodyExt;
 use manga_theka::entity::{Book, ChapterPageQuery, ChapterReleaseQuery, ImageExtension, PageUrl};
 use uuid::Uuid;
 
 use crate::fakers::{BookFaker, COVER_JPG, COVER_PNG, COVER_WEBP};
-use crate::helpers::{RespWrapper, TestApp, assert_error, assert_stored};
+use crate::helpers::{RespWrapper, TestApp, assert_error, assert_stored, redirect_target};
 
 #[tokio::test]
 async fn store_chapter_release_mints_an_identifier() {
@@ -554,14 +554,7 @@ async fn get_chapter_page_image_redirects_for_staged_and_committed_pages_alike()
         let resp = app.get_page_image(release_id, page_id).await;
         assert_eq!(resp.status(), StatusCode::FOUND);
 
-        let location = resp
-            .headers()
-            .get(header::LOCATION)
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .to_owned();
-        assert!(location.contains("X-Amz-Signature"));
+        assert!(redirect_target(&resp).contains("X-Amz-Signature"));
     }
 }
 
@@ -577,6 +570,138 @@ async fn get_chapter_page_image_of_another_release_returns_404() {
 
     let resp = app.get_page_image(other_release_id, page_id).await;
     assert_error(resp, StatusCode::NOT_FOUND).await;
+}
+
+#[tokio::test]
+async fn get_chapter_page_redirects_to_storage_rather_than_serving_the_bytes() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+    let chapter_id = app.insert_random_chapter(book_id).await;
+    let release_id = app.insert_random_release(book_id, chapter_id).await;
+
+    let page_id = app.insert_page(release_id, Some(1), COVER_PNG).await;
+
+    let resp = app.get_page(release_id, 1).await;
+    assert_eq!(resp.status(), StatusCode::FOUND);
+
+    let location = redirect_target(&resp);
+    assert!(location.contains("X-Amz-Signature"));
+    assert!(location.contains(&page_id.to_string()));
+}
+
+#[tokio::test]
+async fn get_chapter_page_at_an_untouched_position_survives_a_replacement_elsewhere() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+    let chapter_id = app.insert_random_chapter(book_id).await;
+    let release_id = app.insert_random_release(book_id, chapter_id).await;
+
+    let kept = app.insert_page(release_id, Some(1), COVER_PNG).await;
+    let superseded = app.insert_page(release_id, Some(2), COVER_JPG).await;
+    let replacement = app.insert_page(release_id, None, COVER_WEBP).await;
+
+    let resp = app.post_commit(release_id, &[kept, replacement]).await;
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    let resp = app.get_page(release_id, 1).await;
+    assert_eq!(resp.status(), StatusCode::FOUND);
+
+    let location = redirect_target(&resp);
+    assert!(location.contains(&kept.to_string()));
+    assert!(!location.contains(&superseded.to_string()));
+}
+
+#[tokio::test]
+async fn get_chapter_page_resolves_to_whatever_a_reorder_moved_onto_the_position() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+    let chapter_id = app.insert_random_chapter(book_id).await;
+    let release_id = app.insert_random_release(book_id, chapter_id).await;
+
+    let first = app.insert_page(release_id, Some(1), COVER_PNG).await;
+    let second = app.insert_page(release_id, Some(2), COVER_JPG).await;
+
+    let resp = app.get_page(release_id, 1).await;
+    assert!(redirect_target(&resp).contains(&first.to_string()));
+
+    let resp = app.post_commit(release_id, &[second, first]).await;
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    let resp = app.get_page(release_id, 1).await;
+    assert_eq!(resp.status(), StatusCode::FOUND);
+
+    assert!(redirect_target(&resp).contains(&second.to_string()));
+}
+
+#[tokio::test]
+async fn get_chapter_page_of_a_never_committed_release_resolves_for_preview() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+    let chapter_id = app.insert_random_chapter(book_id).await;
+    let release_id = app.insert_random_release(book_id, chapter_id).await;
+
+    let page_id = app.insert_page(release_id, Some(1), COVER_PNG).await;
+    assert_eq!(app.fetch_release_version(release_id).await, 0);
+
+    let resp = app.get_page(release_id, 1).await;
+    assert_eq!(resp.status(), StatusCode::FOUND);
+
+    assert!(redirect_target(&resp).contains(&page_id.to_string()));
+}
+
+#[tokio::test]
+async fn get_chapter_page_past_the_end_of_the_release_returns_404() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+    let chapter_id = app.insert_random_chapter(book_id).await;
+    let release_id = app.insert_random_release(book_id, chapter_id).await;
+
+    app.insert_page(release_id, Some(1), COVER_PNG).await;
+
+    let resp = app.get_page(release_id, 2).await;
+    assert_error(resp, StatusCode::NOT_FOUND).await;
+}
+
+#[tokio::test]
+async fn get_chapter_page_of_an_unknown_release_returns_404() {
+    let app = TestApp::new().await;
+
+    let resp = app.get_page(Uuid::now_v7(), 1).await;
+    assert_error(resp, StatusCode::NOT_FOUND).await;
+}
+
+#[tokio::test]
+async fn get_chapter_page_at_a_position_that_is_not_a_number_returns_400() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+    let chapter_id = app.insert_random_chapter(book_id).await;
+    let release_id = app.insert_random_release(book_id, chapter_id).await;
+
+    app.insert_page(release_id, Some(1), COVER_PNG).await;
+
+    let req = axum::http::Request::get(format!("/releases/{release_id}/pages/first"))
+        .body(axum::body::Body::empty())
+        .unwrap();
+    let resp = tower::ServiceExt::oneshot(app.router.clone(), req)
+        .await
+        .unwrap();
+
+    assert_error(resp, StatusCode::BAD_REQUEST).await;
+}
+
+#[tokio::test]
+async fn get_chapter_page_at_a_non_positive_position_returns_422() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+    let chapter_id = app.insert_random_chapter(book_id).await;
+    let release_id = app.insert_random_release(book_id, chapter_id).await;
+
+    app.insert_page(release_id, Some(1), COVER_PNG).await;
+
+    for page_number in [0, -1] {
+        let resp = app.get_page(release_id, page_number).await;
+        assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
+    }
 }
 
 #[tokio::test]
