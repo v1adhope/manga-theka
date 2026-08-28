@@ -223,9 +223,9 @@ pub async fn get_book_covers(
 
 pub async fn get_book_cover_image(
     State(service): State<Service>,
-    Path((book_id, cover_id)): Path<(Uuid, Uuid)>,
+    Path(cover_id): Path<Uuid>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    let url = service.presign_book_cover(book_id, cover_id).await?;
+    let url = service.presign_book_cover(cover_id).await?;
 
     Ok((StatusCode::FOUND, [(header::LOCATION, url)]))
 }
@@ -247,8 +247,8 @@ pub async fn update_book_main_cover(
 
 pub async fn delete_book_cover(
     State(service): State<Service>,
-    Path((book_id, cover_id)): Path<(Uuid, Uuid)>,
+    Path(cover_id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    service.delete_book_cover(book_id, cover_id).await?;
+    service.delete_book_cover(cover_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }

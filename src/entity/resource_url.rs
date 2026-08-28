@@ -8,10 +8,7 @@ pub struct ResourceUrl(String);
 
 impl From<CoverUrl> for ResourceUrl {
     fn from(url: CoverUrl) -> Self {
-        Self(format!(
-            "/books/{}/covers/{}/image",
-            url.book_id, url.cover_id
-        ))
+        Self(format!("/covers/{}/image", url.cover_id))
     }
 }
 
@@ -38,15 +35,14 @@ mod tests {
     use crate::entity::{CoverUrl, Ordinal, PageUrl, ResourceUrl};
 
     #[test]
-    fn cover_url_points_at_the_book_scoped_image_route() {
+    fn cover_url_points_at_the_cover_scoped_image_route() {
         let url = ResourceUrl::from(CoverUrl {
-            book_id: Uuid::from_u128(1),
-            cover_id: Uuid::from_u128(2),
+            cover_id: Uuid::from_u128(1),
         });
 
         assert_eq!(
             url.as_ref(),
-            "/books/00000000-0000-0000-0000-000000000001/covers/00000000-0000-0000-0000-000000000002/image"
+            "/covers/00000000-0000-0000-0000-000000000001/image"
         );
     }
 

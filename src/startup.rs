@@ -64,11 +64,8 @@ impl App {
                     post(store_book_cover).layer(DefaultBodyLimit::max(DEFAULT_IMAGE_MAX_BYTES)),
                 ),
             )
-            .route("/books/{id}/covers/{cover_id}", delete(delete_book_cover))
-            .route(
-                "/books/{id}/covers/{cover_id}/image",
-                get(get_book_cover_image),
-            )
+            .route("/covers/{id}", delete(delete_book_cover))
+            .route("/covers/{id}/image", get(get_book_cover_image))
             .route("/books/{id}/main-cover", put(update_book_main_cover))
             .route(
                 "/books/{id}/chapters",

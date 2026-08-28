@@ -65,12 +65,8 @@ impl Service {
             .map_err(Into::into)
     }
 
-    pub async fn presign_book_cover(
-        &self,
-        book_id: Uuid,
-        id: Uuid,
-    ) -> Result<String, ServiceError> {
-        self.database.ensure_book_cover_exists(book_id, id).await?;
+    pub async fn presign_book_cover(&self, id: Uuid) -> Result<String, ServiceError> {
+        self.database.ensure_book_cover_exists(id).await?;
 
         self.storage
             .presign_book_cover(id)
@@ -85,8 +81,8 @@ impl Service {
             .map_err(Into::into)
     }
 
-    pub async fn delete_book_cover(&self, book_id: Uuid, id: Uuid) -> Result<(), ServiceError> {
-        self.database.delete_book_cover(book_id, id).await?;
+    pub async fn delete_book_cover(&self, id: Uuid) -> Result<(), ServiceError> {
+        self.database.delete_book_cover(id).await?;
 
         let _ = self.storage.delete_book_covers(&[id]).await;
 

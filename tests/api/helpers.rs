@@ -489,11 +489,7 @@ order by id;
                 .parse()
                 .expect("stored cover extension must be valid"),
             is_main: r.is_main,
-            url: CoverUrl {
-                book_id,
-                cover_id: r.id,
-            }
-            .into(),
+            url: CoverUrl { cover_id: r.id }.into(),
         })
         .collect()
     }
@@ -695,8 +691,8 @@ values($1, $2, $3, $4, $5);
         self.router.clone().oneshot(req).await.unwrap()
     }
 
-    pub async fn get_cover_image(&self, book_id: Uuid, cover_id: Uuid) -> Response {
-        let req = Request::get(format!("/books/{book_id}/covers/{cover_id}/image"))
+    pub async fn get_cover_image(&self, cover_id: Uuid) -> Response {
+        let req = Request::get(format!("/covers/{cover_id}/image"))
             .body(Body::empty())
             .unwrap();
 
@@ -713,8 +709,8 @@ values($1, $2, $3, $4, $5);
         self.router.clone().oneshot(req).await.unwrap().status()
     }
 
-    pub async fn delete_cover(&self, book_id: Uuid, cover_id: Uuid) -> Response {
-        let req = Request::delete(format!("/books/{book_id}/covers/{cover_id}"))
+    pub async fn delete_cover(&self, cover_id: Uuid) -> Response {
+        let req = Request::delete(format!("/covers/{cover_id}"))
             .body(Body::empty())
             .unwrap();
 

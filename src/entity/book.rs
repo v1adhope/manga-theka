@@ -244,7 +244,6 @@ impl Entity for BookCover {
 
 #[derive(Debug)]
 pub struct CoverUrl {
-    pub book_id: Uuid,
     pub cover_id: Uuid,
 }
 

@@ -95,7 +95,6 @@ impl TryFrom<BookTitleRow> for AlternativeTitle {
 
 struct BookCoverRow {
     id: Uuid,
-    book_id: Uuid,
     extension: String,
     is_main: bool,
 }
@@ -104,11 +103,7 @@ impl TryFrom<BookCoverRow> for BookCoverQuery {
     type Error = DatabaseError;
 
     fn try_from(row: BookCoverRow) -> Result<Self, Self::Error> {
-        let url = CoverUrl {
-            book_id: row.book_id,
-            cover_id: row.id,
-        }
-        .into();
+        let url = CoverUrl { cover_id: row.id }.into();
         let extension: ImageExtension = row
             .extension
             .parse()
@@ -623,13 +618,9 @@ impl Database {
         Ok(covers)
     }
 
-    #[instrument(name = "db.book_cover.exists", skip_all, fields(book.id = %book_id, cover.id = %id))]
-    pub async fn ensure_book_cover_exists(
-        &self,
-        book_id: Uuid,
-        id: Uuid,
-    ) -> Result<(), DatabaseError> {
-        let row = sqlx::query_file!("queries/book_cover_exists.sql", id, book_id)
+    #[instrument(name = "db.book_cover.exists", skip_all, fields(cover.id = %id))]
+    pub async fn ensure_book_cover_exists(&self, id: Uuid) -> Result<(), DatabaseError> {
+        let row = sqlx::query_file!("queries/book_cover_exists.sql", id)
             .fetch_one(&self.pool)
             .await
             .map_err(DatabaseError::from)
@@ -651,9 +642,9 @@ impl Database {
             .inspect_err(DatabaseError::log_internal)
     }
 
-    #[instrument(name = "db.book_cover.delete", skip_all, fields(book.id = %book_id, cover.id = %id))]
-    pub async fn delete_book_cover(&self, book_id: Uuid, id: Uuid) -> Result<(), DatabaseError> {
-        let row = sqlx::query_file!("queries/delete_book_cover.sql", id, book_id)
+    #[instrument(name = "db.book_cover.delete", skip_all, fields(cover.id = %id))]
+    pub async fn delete_book_cover(&self, id: Uuid) -> Result<(), DatabaseError> {
+        let row = sqlx::query_file!("queries/delete_book_cover.sql", id)
             .fetch_optional(&self.pool)
             .await
             .map_err(DatabaseError::from)

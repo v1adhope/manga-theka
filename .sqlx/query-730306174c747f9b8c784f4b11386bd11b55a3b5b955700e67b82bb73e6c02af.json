@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select exists(\n    select 1\n    from book_covers\n    where id = $1 and book_id = $2\n) as \"exists!\";\n",
+  "query": "select exists(\n    select 1\n    from book_covers\n    where id = $1\n) as \"exists!\";\n",
   "describe": {
     "columns": [
       {
@@ -12,7 +12,6 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid",
         "Uuid"
       ]
     },
@@ -20,5 +19,5 @@
       null
     ]
   },
-  "hash": "61e7f396c94619140deae23ae1754d4c56da48b42cd1b479383eeab90c3ff2d3"
+  "hash": "730306174c747f9b8c784f4b11386bd11b55a3b5b955700e67b82bb73e6c02af"
 }
