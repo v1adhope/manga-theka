@@ -251,6 +251,7 @@ pub struct CoverUrl {
 #[serde(rename_all = "camelCase")]
 pub struct BookCoverQuery {
     pub id: Uuid,
+    pub book_id: Uuid,
     pub extension: ImageExtension,
     pub is_main: bool,
     pub url: ResourceUrl,

@@ -484,6 +484,7 @@ order by id;
         .into_iter()
         .map(|r| BookCoverQuery {
             id: r.id,
+            book_id,
             extension: r
                 .extension
                 .parse()

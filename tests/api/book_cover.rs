@@ -4,7 +4,7 @@ use axum::{
 };
 use axum_test::multipart::{MultipartForm, Part};
 use http_body_util::BodyExt;
-use manga_theka::entity::BookCoverQuery;
+use manga_theka::entity::{BookCoverQuery, ImageExtension};
 use tower::ServiceExt;
 use uuid::Uuid;
 
@@ -141,7 +141,7 @@ async fn get_book_covers_for_unknown_book_returns_404() {
 }
 
 #[tokio::test]
-async fn get_book_covers_lists_uploads_in_upload_order_with_relative_urls() {
+async fn get_book_covers_lists_uploads_in_upload_order() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
 
@@ -156,9 +156,29 @@ async fn get_book_covers_lists_uploads_in_upload_order_with_relative_urls() {
     let wrapper: RespWrapper<Vec<BookCoverQuery>> = serde_json::from_slice(&bytes).unwrap();
 
     let cover_ids: Vec<Uuid> = wrapper.data.iter().map(|c| c.id).collect();
-    let first_url = format!("/covers/{first_id}/image");
     assert_eq!(cover_ids, vec![first_id, second_id, third_id]);
-    assert_eq!(wrapper.data[0].url.as_ref(), first_url);
+}
+
+#[tokio::test]
+async fn get_book_covers_returns_all_fields() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+    let cover_id = app.insert_cover(book_id, COVER_PNG).await;
+
+    let resp = app.get_covers(book_id).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let wrapper: RespWrapper<Vec<BookCoverQuery>> = serde_json::from_slice(&bytes).unwrap();
+    let cover = &wrapper.data[0];
+    let expected_url = format!("/covers/{cover_id}/image");
+
+    assert_eq!(wrapper.data.len(), 1);
+    assert_eq!(cover.id, cover_id);
+    assert_eq!(cover.book_id, book_id);
+    assert_eq!(cover.extension, ImageExtension::Png);
+    assert!(!cover.is_main);
+    assert_eq!(cover.url.as_ref(), expected_url);
 }
 
 #[tokio::test]

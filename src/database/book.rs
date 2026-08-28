@@ -95,6 +95,7 @@ impl TryFrom<BookTitleRow> for AlternativeTitle {
 
 struct BookCoverRow {
     id: Uuid,
+    book_id: Uuid,
     extension: String,
     is_main: bool,
 }
@@ -112,6 +113,7 @@ impl TryFrom<BookCoverRow> for BookCoverQuery {
         Ok(BookCoverQuery {
             url,
             id: row.id,
+            book_id: row.book_id,
             extension,
             is_main: row.is_main,
         })
