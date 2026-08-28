@@ -8,7 +8,7 @@ use fake::faker::lorem::en::{Sentence, Word};
 use fake::faker::name::en::FirstName;
 use fake::rand::RngExt;
 use manga_theka::entity::{
-    AlternativeTitle, Book, BookKind, BookLink, BookLinkKind, BookName, BookStatus, Chapter,
+    AlternativeTitle, BookKind, BookLink, BookLinkKind, BookName, BookQuery, BookStatus, Chapter,
     ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume, ContentRating, Creator,
     CreatorRole, Description, Label, LabelKind, Language, LinkUrl, Name,
 };
@@ -278,7 +278,7 @@ impl Default for BookFaker {
     }
 }
 
-impl Dummy<BookFaker> for Book {
+impl Dummy<BookFaker> for BookQuery {
     fn dummy_with_rng<R: RngExt + ?Sized>(config: &BookFaker, rng: &mut R) -> Self {
         let mut labels: Vec<Label> = (0..rng.random_range(config.labels.clone()))
             .map(|_| LabelFaker.fake_with_rng(rng))
@@ -296,7 +296,7 @@ impl Dummy<BookFaker> for Book {
             .map(|_| CreatorFaker.fake_with_rng(rng))
             .collect();
 
-        Book {
+        BookQuery {
             id: Uuid::now_v7(),
             name: BookNameFaker.fake_with_rng(rng),
             description: DescriptionFaker.fake_with_rng(rng),

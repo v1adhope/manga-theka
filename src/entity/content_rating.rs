@@ -1,9 +1,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(
-    Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, sqlx::FromRow, Serialize, Deserialize,
-)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, sqlx::FromRow, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ContentRating {
     pub id: Uuid,

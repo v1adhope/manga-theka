@@ -10,12 +10,12 @@ use crate::helpers::{
     RespWrapper, TestApp, assert_error, assert_stored, label_keys, link_keys, title_keys,
 };
 use fake::Fake;
-use manga_theka::entity::{Book, Label};
+use manga_theka::entity::{BookQuery, Label};
 
 #[tokio::test]
 async fn store_book_with_valid_body_passes() {
     let app = TestApp::new().await;
-    let book: Book = BookFaker {
+    let book: BookQuery = BookFaker {
         labels: 1..=5,
         links: 1..=5,
         titles: 1..=5,
@@ -65,7 +65,7 @@ async fn store_book_with_valid_body_passes() {
 #[tokio::test]
 async fn store_book_without_relations_passes() {
     let app = TestApp::new().await;
-    let book: Book = BookFaker::default().fake();
+    let book: BookQuery = BookFaker::default().fake();
 
     let body = serde_json::json!({
         "name": book.name.as_ref(),
@@ -110,7 +110,7 @@ async fn store_book_with_broken_json_returns_400() {
 #[tokio::test]
 async fn store_book_with_missing_name_returns_422() {
     let app = TestApp::new().await;
-    let book: Book = BookFaker::default().fake();
+    let book: BookQuery = BookFaker::default().fake();
 
     let body = serde_json::json!({
         "description": book.description.as_ref(),
@@ -134,7 +134,7 @@ async fn store_book_with_missing_name_returns_422() {
 #[tokio::test]
 async fn store_book_with_unknown_status_returns_422() {
     let app = TestApp::new().await;
-    let book: Book = BookFaker::default().fake();
+    let book: BookQuery = BookFaker::default().fake();
 
     let body = serde_json::json!({
         "name": book.name.as_ref(),
@@ -159,7 +159,7 @@ async fn store_book_with_unknown_status_returns_422() {
 #[tokio::test]
 async fn store_book_with_unknown_label_id_returns_422() {
     let app = TestApp::new().await;
-    let book: Book = BookFaker::default().fake();
+    let book: BookQuery = BookFaker::default().fake();
 
     let body = serde_json::json!({
         "name": book.name.as_ref(),
@@ -192,7 +192,7 @@ async fn store_book_with_unknown_label_id_returns_422() {
 #[tokio::test]
 async fn get_book_with_valid_id_passes() {
     let app = TestApp::new().await;
-    let book: Book = BookFaker {
+    let book: BookQuery = BookFaker {
         labels: 1..=5,
         links: 1..=5,
         titles: 1..=5,
@@ -209,7 +209,7 @@ async fn get_book_with_valid_id_passes() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Book> = serde_json::from_slice(&bytes).unwrap();
+    let wrapper: RespWrapper<BookQuery> = serde_json::from_slice(&bytes).unwrap();
     let got = wrapper.data;
 
     assert_eq!(got.id, book.id);
@@ -267,7 +267,7 @@ async fn get_book_with_malformed_id_returns_400() {
 #[tokio::test]
 async fn get_books_embeds_each_books_own_arrays() {
     let app = TestApp::new().await;
-    let bare: Book = BookFaker {
+    let bare: BookQuery = BookFaker {
         labels: 0..=0,
         links: 0..=0,
         titles: 0..=0,
@@ -275,7 +275,7 @@ async fn get_books_embeds_each_books_own_arrays() {
     }
     .fake();
 
-    let full: Book = BookFaker {
+    let full: BookQuery = BookFaker {
         labels: 1..=5,
         links: 1..=5,
         titles: 1..=5,
@@ -291,7 +291,7 @@ async fn get_books_embeds_each_books_own_arrays() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let listed: RespWrapper<Vec<Book>> = serde_json::from_slice(&bytes).unwrap();
+    let listed: RespWrapper<Vec<BookQuery>> = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(listed.data.len(), 2);
 
     let got_full = listed.data.iter().find(|b| b.id == full.id).unwrap();
@@ -312,7 +312,7 @@ async fn get_books_returns_default_limit_and_next_cursor() {
     let app = TestApp::new().await;
 
     for _ in 0..25 {
-        let book: Book = BookFaker::default().fake();
+        let book: BookQuery = BookFaker::default().fake();
         app.insert_book(&book).await;
     }
 
@@ -321,7 +321,7 @@ async fn get_books_returns_default_limit_and_next_cursor() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let listed: RespWrapper<Vec<Book>> = serde_json::from_slice(&bytes).unwrap();
+    let listed: RespWrapper<Vec<BookQuery>> = serde_json::from_slice(&bytes).unwrap();
 
     assert_eq!(listed.data.len(), 20);
     assert!(listed.next_cursor.is_some());
@@ -332,7 +332,7 @@ async fn get_books_with_after_and_limit_3_returns_next_page() {
     let app = TestApp::new().await;
 
     for _ in 0..6 {
-        let book: Book = BookFaker::default().fake();
+        let book: BookQuery = BookFaker::default().fake();
         app.insert_book(&book).await;
     }
 
@@ -341,7 +341,7 @@ async fn get_books_with_after_and_limit_3_returns_next_page() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let first: RespWrapper<Vec<Book>> = serde_json::from_slice(&bytes).unwrap();
+    let first: RespWrapper<Vec<BookQuery>> = serde_json::from_slice(&bytes).unwrap();
 
     let ids: Vec<uuid::Uuid> = first.data.iter().map(|b| b.id).collect();
     let cursor = first.next_cursor.unwrap();
@@ -353,7 +353,7 @@ async fn get_books_with_after_and_limit_3_returns_next_page() {
     assert_eq!(second_resp.status(), StatusCode::OK);
 
     let second_bytes = second_resp.into_body().collect().await.unwrap().to_bytes();
-    let second: RespWrapper<Vec<Book>> = serde_json::from_slice(&second_bytes).unwrap();
+    let second: RespWrapper<Vec<BookQuery>> = serde_json::from_slice(&second_bytes).unwrap();
     let second_ids: Vec<uuid::Uuid> = second.data.iter().map(|b| b.id).collect();
 
     assert_eq!(second_ids.len(), 3);
@@ -367,7 +367,7 @@ async fn get_books_desc_order_confirmed() {
 
     let mut ids = Vec::with_capacity(3);
     for _ in 0..3 {
-        let book: Book = BookFaker::default().fake();
+        let book: BookQuery = BookFaker::default().fake();
         app.insert_book(&book).await;
         ids.push(book.id);
     }
@@ -378,7 +378,7 @@ async fn get_books_desc_order_confirmed() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let listed: RespWrapper<Vec<Book>> = serde_json::from_slice(&bytes).unwrap();
+    let listed: RespWrapper<Vec<BookQuery>> = serde_json::from_slice(&bytes).unwrap();
     let returned_ids: Vec<uuid::Uuid> = listed.data.iter().map(|b| b.id).collect();
 
     assert_eq!(returned_ids, ids);
@@ -409,7 +409,7 @@ async fn get_books_invalid_after_returns_400() {
 #[tokio::test]
 async fn update_book_with_valid_body_passes() {
     let app = TestApp::new().await;
-    let book: Book = BookFaker {
+    let book: BookQuery = BookFaker {
         labels: 1..=5,
         links: 1..=5,
         titles: 1..=5,
@@ -419,7 +419,7 @@ async fn update_book_with_valid_body_passes() {
 
     app.insert_book(&book).await;
 
-    let updated: Book = BookFaker {
+    let updated: BookQuery = BookFaker {
         labels: 1..=5,
         links: 1..=5,
         titles: 1..=5,
@@ -484,7 +484,7 @@ async fn update_book_with_valid_body_passes() {
 #[tokio::test]
 async fn update_book_swaps_the_content_rating() {
     let app = TestApp::new().await;
-    let mut book: Book = BookFaker::default().fake();
+    let mut book: BookQuery = BookFaker::default().fake();
     book.content_rating = CONTENT_RATINGS
         .first()
         .expect("content rating to swap from must exist")
@@ -523,7 +523,7 @@ async fn update_book_swaps_the_content_rating() {
 #[tokio::test]
 async fn update_book_with_empty_arrays_detaches_everything() {
     let app = TestApp::new().await;
-    let book: Book = BookFaker {
+    let book: BookQuery = BookFaker {
         labels: 1..=5,
         links: 1..=5,
         titles: 1..=5,
@@ -564,13 +564,13 @@ async fn update_book_with_empty_arrays_detaches_everything() {
 #[tokio::test]
 async fn update_book_leaves_other_books_untouched() {
     let app = TestApp::new().await;
-    let book: Book = BookFaker::default().fake();
-    let other: Book = BookFaker::default().fake();
+    let book: BookQuery = BookFaker::default().fake();
+    let other: BookQuery = BookFaker::default().fake();
 
     app.insert_book(&book).await;
     app.insert_book(&other).await;
 
-    let renamed: Book = BookFaker::default().fake();
+    let renamed: BookQuery = BookFaker::default().fake();
     let updated_body = serde_json::json!({
         "name": renamed.name.as_ref(),
         "description": book.description.as_ref(),
@@ -601,7 +601,7 @@ async fn update_book_leaves_other_books_untouched() {
 #[tokio::test]
 async fn update_book_with_unknown_id_returns_404() {
     let app = TestApp::new().await;
-    let book: Book = BookFaker::default().fake();
+    let book: BookQuery = BookFaker::default().fake();
 
     let body = serde_json::json!({
         "name": book.name.as_ref(),
@@ -626,7 +626,7 @@ async fn update_book_with_unknown_id_returns_404() {
 #[tokio::test]
 async fn delete_book_with_valid_id_passes() {
     let app = TestApp::new().await;
-    let book: Book = BookFaker {
+    let book: BookQuery = BookFaker {
         labels: 1..=5,
         links: 1..=5,
         titles: 1..=5,
@@ -656,14 +656,14 @@ async fn delete_book_leaves_other_books_untouched() {
     let app = TestApp::new().await;
     let labels: Label = LabelFaker.fake();
 
-    let mut book: Book = BookFaker {
+    let mut book: BookQuery = BookFaker {
         labels: 0..=0,
         ..Default::default()
     }
     .fake();
     book.labels.push(labels.clone());
 
-    let mut other: Book = BookFaker {
+    let mut other: BookQuery = BookFaker {
         labels: 0..=0,
         ..Default::default()
     }

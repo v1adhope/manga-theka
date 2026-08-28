@@ -177,9 +177,29 @@ impl AsRef<str> for LinkUrl {
     }
 }
 
+#[derive(Debug)]
+pub struct Book {
+    pub id: Uuid,
+    pub name: BookName,
+    pub description: Description,
+    pub publication_year: i16,
+    pub content_rating_id: Uuid,
+    pub status: BookStatus,
+    pub kind: BookKind,
+    pub publication_language_id: Uuid,
+    pub links: Vec<BookLink>,
+    pub titles: Vec<AlternativeTitle>,
+    pub updated_at: Option<OffsetDateTime>,
+    pub created_at: OffsetDateTime,
+}
+
+impl Entity for Book {
+    const NAME: &'static str = "Book";
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Book {
+pub struct BookQuery {
     pub id: Uuid,
     pub name: BookName,
     pub description: Description,
@@ -196,10 +216,6 @@ pub struct Book {
     pub updated_at: Option<OffsetDateTime>,
     #[serde(with = "time::serde::rfc3339")]
     pub created_at: OffsetDateTime,
-}
-
-impl Entity for Book {
-    const NAME: &'static str = "Book";
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -13,9 +13,9 @@ use manga_theka::{
     config::{Config, Database},
     database,
     entity::{
-        AlternativeTitle, Book, BookCoverQuery, BookLink, BookName, Chapter, ChapterLocalization,
-        ChapterName, ChapterNumber, ChapterVolume, ContentRating, CoverUrl, Creator, Description,
-        ImageExtension, Label, Language, LinkUrl, Name,
+        AlternativeTitle, BookCoverQuery, BookLink, BookName, BookQuery, Chapter,
+        ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume, ContentRating, CoverUrl,
+        Creator, Description, ImageExtension, Label, Language, LinkUrl, Name,
     },
     object_storage,
     startup::App,
@@ -231,7 +231,7 @@ impl TestApp {
             .len()
     }
 
-    pub async fn insert_book(&self, b: &Book) {
+    pub async fn insert_book(&self, b: &BookQuery) {
         sqlx::query!(
             r#"
 insert into books(id, name, description, publication_year, content_rating, status, kind,
@@ -335,7 +335,7 @@ select (select b.name from books b where b.id = $1) as "name?",
         }
     }
 
-    pub async fn fetch_book(&self, id: Uuid) -> Book {
+    pub async fn fetch_book(&self, id: Uuid) -> BookQuery {
         let row = sqlx::query!(
             r#"
 select b.name, b.description, b.publication_year, b.status, b.kind, b.updated_at, b.created_at,
@@ -434,7 +434,7 @@ order by c.id;
         })
         .collect();
 
-        Book {
+        BookQuery {
             id,
             name: BookName::try_from(row.name).expect("stored name must be valid"),
             description: Description::try_from(row.description)
@@ -462,7 +462,7 @@ order by c.id;
     }
 
     pub async fn insert_random_book(&self) -> Uuid {
-        let book: Book = BookFaker::default().fake();
+        let book: BookQuery = BookFaker::default().fake();
         self.insert_book(&book).await;
 
         book.id

@@ -10,8 +10,8 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        AlternativeTitle, Book, BookCover, BookKind, BookLink, BookLinkKind, BookName, BookStatus,
-        ContentRating, Description, Filter, Language, LinkUrl,
+        AlternativeTitle, Book, BookCover, BookKind, BookLink, BookLinkKind, BookName, BookQuery,
+        BookStatus, Description, Filter, LinkUrl,
     },
     error::{AppError, EntityError, RouteError},
     route::{PaginationQuery, StoreResp, collect_image_part, json_data_response, json_response},
@@ -102,20 +102,12 @@ impl TryFrom<BookWithRelations> for (Book, Vec<Uuid>) {
             name: BookName::try_from(name)?,
             description: Description::try_from(description)?,
             publication_year,
-            content_rating: ContentRating {
-                id: content_rating_id,
-                ..Default::default()
-            },
+            content_rating_id,
             status,
             kind,
-            publication_language: Language {
-                id: publication_language_id,
-                ..Default::default()
-            },
-            labels: Vec::new(),
+            publication_language_id,
             links,
             titles,
-            creators: Vec::new(),
             updated_at,
             created_at,
         };
@@ -165,7 +157,7 @@ pub async fn update_book(
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetBooksResp {
-    pub data: Vec<Book>,
+    pub data: Vec<BookQuery>,
     pub next_cursor: Option<Uuid>,
 }
 

@@ -8,8 +8,8 @@ use crate::{
     database::{Database, creator::CreatorRow, label::LabelRow},
     entity::{
         AlternativeTitle, Book, BookCover, BookCoverQuery, BookKind, BookLink, BookLinkKind,
-        BookName, BookStatus, ContentRating, CoverUrl, Creator, DEFAULT_LIMIT, Description, Filter,
-        ImageExtension, Label, Language, Limit, LinkUrl,
+        BookName, BookQuery, BookStatus, ContentRating, CoverUrl, Creator, DEFAULT_LIMIT,
+        Description, Filter, ImageExtension, Label, Language, Limit, LinkUrl,
     },
     error::DatabaseError,
 };
@@ -155,7 +155,7 @@ struct BookWithRelations {
     creators: Vec<Creator>,
 }
 
-impl TryFrom<BookWithRelations> for Book {
+impl TryFrom<BookWithRelations> for BookQuery {
     type Error = DatabaseError;
 
     fn try_from(item: BookWithRelations) -> Result<Self, Self::Error> {
@@ -180,7 +180,7 @@ impl TryFrom<BookWithRelations> for Book {
             .parse()
             .map_err(|e| DatabaseError::invariant_corrupted("kind", e))?;
 
-        Ok(Book {
+        Ok(BookQuery {
             id: row.id,
             name,
             description,
@@ -224,10 +224,10 @@ impl Database {
             item.name.as_ref(),
             item.description.as_ref(),
             item.publication_year,
-            item.content_rating.id,
+            item.content_rating_id,
             item.status.as_ref(),
             item.kind.as_ref(),
-            item.publication_language.id,
+            item.publication_language_id,
             item.updated_at,
             item.created_at,
         )
@@ -260,10 +260,10 @@ impl Database {
             item.name.as_ref(),
             item.description.as_ref(),
             item.publication_year,
-            item.content_rating.id,
+            item.content_rating_id,
             item.status.as_ref(),
             item.kind.as_ref(),
-            item.publication_language.id,
+            item.publication_language_id,
             item.updated_at,
         )
         .fetch_optional(&mut *tx)
@@ -281,13 +281,13 @@ impl Database {
     }
 
     #[instrument(name = "db.book.get", skip_all, fields(book.id = %id))]
-    pub async fn get_book(&self, id: Uuid) -> Result<Book, DatabaseError> {
+    pub async fn get_book(&self, id: Uuid) -> Result<BookQuery, DatabaseError> {
         self.get_book_inner(id)
             .await
             .inspect_err(DatabaseError::log_internal)
     }
 
-    async fn get_book_inner(&self, id: Uuid) -> Result<Book, DatabaseError> {
+    async fn get_book_inner(&self, id: Uuid) -> Result<BookQuery, DatabaseError> {
         let row = sqlx::query_file_as!(BookRow, "queries/get_book.sql", id)
             .fetch_optional(&self.pool)
             .await?;
@@ -320,7 +320,7 @@ impl Database {
     pub async fn get_books(
         &self,
         filter: &Filter,
-    ) -> Result<(Vec<Book>, Option<Uuid>), DatabaseError> {
+    ) -> Result<(Vec<BookQuery>, Option<Uuid>), DatabaseError> {
         self.get_books_inner(filter)
             .await
             .inspect_err(DatabaseError::log_internal)
@@ -329,7 +329,7 @@ impl Database {
     async fn get_books_inner(
         &self,
         filter: &Filter,
-    ) -> Result<(Vec<Book>, Option<Uuid>), DatabaseError> {
+    ) -> Result<(Vec<BookQuery>, Option<Uuid>), DatabaseError> {
         let limit = filter.limit.map_or(DEFAULT_LIMIT, Limit::as_u32);
         let mut builder: QueryBuilder<Postgres> = QueryBuilder::new(
             r"select b.id, b.name, b.description, b.publication_year,
@@ -371,10 +371,10 @@ impl Database {
         let mut titles = self.get_books_titles(&ids).await?;
         let mut creators = self.get_books_creators(&ids).await?;
 
-        let mut books: Vec<Book> = Vec::with_capacity(rows.len());
+        let mut books: Vec<BookQuery> = Vec::with_capacity(rows.len());
         for row in rows {
             let id = row.id;
-            let book: Book = BookWithRelations {
+            let book: BookQuery = BookWithRelations {
                 row,
                 labels: labels.remove(&id).unwrap_or_default(),
                 links: links.remove(&id).unwrap_or_default(),
