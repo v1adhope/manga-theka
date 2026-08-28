@@ -1,7 +1,9 @@
 use axum::http::StatusCode;
 use fake::Fake;
 use http_body_util::BodyExt;
-use manga_theka::entity::{Book, ChapterPageQuery, ChapterReleaseQuery, ImageExtension, PageUrl};
+use manga_theka::entity::{
+    Book, ChapterPageQuery, ChapterReleaseQuery, ImageExtension, PageNumber, PageUrl,
+};
 use uuid::Uuid;
 
 use crate::fakers::{BookFaker, COVER_JPG, COVER_PNG, COVER_WEBP};
@@ -494,9 +496,10 @@ async fn get_chapter_pages_lists_a_committed_page_with_all_its_fields() {
         panic!("the committed listing must carry the Committed variant");
     };
     assert_eq!(id, committed_id);
-    assert_eq!(page_number, 1);
+    let first_page = PageNumber::try_from(1).unwrap();
+    assert_eq!(page_number, first_page);
     assert_eq!(extension, ImageExtension::Png);
-    assert_eq!(url, PageUrl::from((release_id, 1)));
+    assert_eq!(url, PageUrl::from((release_id, first_page)));
 }
 
 #[tokio::test]

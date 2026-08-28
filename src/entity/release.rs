@@ -15,9 +15,12 @@ pub const MAX_RELEASE_ROWS: usize = 400;
 #[serde(transparent)]
 pub struct PageUrl(String);
 
-impl From<(Uuid, i16)> for PageUrl {
-    fn from((release_id, page_number): (Uuid, i16)) -> Self {
-        Self(format!("/releases/{release_id}/pages/{page_number}"))
+impl From<(Uuid, PageNumber)> for PageUrl {
+    fn from((release_id, page_number): (Uuid, PageNumber)) -> Self {
+        Self(format!(
+            "/releases/{release_id}/pages/{}",
+            page_number.as_i16()
+        ))
     }
 }
 
@@ -27,7 +30,8 @@ impl AsRef<str> for PageUrl {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "i16")]
 pub struct PageNumber(i16);
 
 impl TryFrom<i16> for PageNumber {
@@ -45,7 +49,7 @@ impl TryFrom<i16> for PageNumber {
 }
 
 impl PageNumber {
-    pub fn as_i16(&self) -> i16 {
+    pub fn as_i16(self) -> i16 {
         self.0
     }
 }
@@ -148,7 +152,7 @@ pub struct ChapterPages {
 pub enum ChapterPageQuery {
     Committed {
         id: Uuid,
-        page_number: i16,
+        page_number: PageNumber,
         extension: ImageExtension,
         url: PageUrl,
     },
@@ -194,6 +198,20 @@ mod tests {
     }
 
     #[test]
+    fn deserialized_non_positive_page_number_is_rejected() {
+        for n in ["0", "-1"] {
+            assert!(serde_json::from_str::<PageNumber>(n).is_err());
+        }
+    }
+
+    #[test]
+    fn page_number_serializes_as_a_bare_number() {
+        let number = PageNumber::try_from(1).unwrap();
+
+        assert_eq!(serde_json::to_string(&number).unwrap(), "1");
+    }
+
+    #[test]
     fn row_capacity_at_the_ceiling_is_valid() {
         let res = ChapterRelease::ensure_row_capacity(MAX_RELEASE_ROWS - 1, 1);
         assert!(res.is_ok());
@@ -219,7 +237,7 @@ mod tests {
 
     #[test]
     fn page_url_points_at_the_position_addressed_reader_route() {
-        let url = PageUrl::from((Uuid::from_u128(1), 4));
+        let url = PageUrl::from((Uuid::from_u128(1), PageNumber::try_from(4).unwrap()));
 
         assert_eq!(
             url.as_ref(),

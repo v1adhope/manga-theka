@@ -52,7 +52,9 @@ impl TryFrom<ChapterPageRow> for ChapterPageQuery {
     type Error = DatabaseError;
 
     fn try_from(row: ChapterPageRow) -> Result<Self, Self::Error> {
-        let url = (row.release_id, row.sort_order).into();
+        let page_number = PageNumber::try_from(row.sort_order)
+            .map_err(|e| DatabaseError::invariant_corrupted("sort_order", e))?;
+        let url = (row.release_id, page_number).into();
         let extension: ImageExtension = row
             .extension
             .parse()
@@ -60,7 +62,7 @@ impl TryFrom<ChapterPageRow> for ChapterPageQuery {
 
         Ok(ChapterPageQuery::Committed {
             id: row.id,
-            page_number: row.sort_order,
+            page_number,
             extension,
             url,
         })
