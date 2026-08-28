@@ -133,7 +133,9 @@ pub async fn get_chapter_page(
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let number = PageNumber::try_from(page_number)?;
 
-    let url = service.presign_chapter_page_at(release_id, number).await?;
+    let url = service
+        .presign_chapter_page_by_number(release_id, number)
+        .await?;
 
     Ok((StatusCode::FOUND, [(header::LOCATION, url)]))
 }

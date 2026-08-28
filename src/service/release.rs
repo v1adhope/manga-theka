@@ -119,7 +119,7 @@ impl Service {
             .map_err(Into::into)
     }
 
-    pub async fn presign_chapter_page_at(
+    pub async fn presign_chapter_page_by_number(
         &self,
         release_id: Uuid,
         number: PageNumber,
