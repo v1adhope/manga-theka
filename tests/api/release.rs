@@ -484,8 +484,13 @@ async fn get_chapter_pages_lists_a_committed_page_with_all_its_fields() {
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
     let wrapper: RespWrapper<Vec<ChapterPageQuery>> = serde_json::from_slice(&bytes).unwrap();
-
     assert_eq!(wrapper.data.len(), 1);
+
+    let first_page = Ordinal::try_from(1).unwrap();
+    let expected_url = ResourceUrl::from(PageUrl {
+        release_id,
+        page_number: first_page,
+    });
     let ChapterPageQuery::Committed {
         id,
         page_number,
@@ -495,17 +500,11 @@ async fn get_chapter_pages_lists_a_committed_page_with_all_its_fields() {
     else {
         panic!("the committed listing must carry the Committed variant");
     };
+
     assert_eq!(id, committed_id);
-    let first_page = Ordinal::try_from(1).unwrap();
     assert_eq!(page_number, first_page);
     assert_eq!(extension, ImageExtension::Png);
-    assert_eq!(
-        url,
-        ResourceUrl::from(PageUrl {
-            release_id,
-            page_number: first_page
-        })
-    );
+    assert_eq!(url, expected_url);
 }
 
 #[tokio::test]
