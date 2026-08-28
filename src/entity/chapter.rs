@@ -6,9 +6,12 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
-    entity::{Entity, validate_name},
+    entity::{Bounded, BoundedVec, Entity, validate_name},
     error::EntityError,
 };
+
+// Matches the total number of rows seeded in the `languages` table.
+pub const MAX_CHAPTER_LOCALIZATIONS: usize = 5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "f32")]
@@ -89,7 +92,7 @@ pub struct Chapter {
     pub number: ChapterNumber,
     pub name: Option<ChapterName>,
     pub volume: Option<ChapterVolume>,
-    pub localizations: Vec<ChapterLocalization>,
+    pub localizations: ChapterLocalizations,
     #[serde(with = "time::serde::rfc3339::option")]
     pub updated_at: Option<OffsetDateTime>,
     #[serde(with = "time::serde::rfc3339")]
@@ -107,9 +110,48 @@ pub struct ChapterLocalization {
     pub name: ChapterName,
 }
 
+pub struct ChapterLocalizationsBound;
+
+impl Bounded for ChapterLocalizationsBound {
+    const MAX: usize = MAX_CHAPTER_LOCALIZATIONS;
+    const NAME: &'static str = "chapter localizations";
+}
+
+pub type ChapterLocalizations = BoundedVec<ChapterLocalization, ChapterLocalizationsBound>;
+
 #[cfg(test)]
 mod tests {
-    use crate::entity::{ChapterName, ChapterNumber, ChapterVolume};
+    use uuid::Uuid;
+
+    use crate::entity::{
+        ChapterLocalization, ChapterLocalizations, ChapterName, ChapterNumber, ChapterVolume,
+        MAX_CHAPTER_LOCALIZATIONS,
+    };
+
+    fn sample_localization() -> ChapterLocalization {
+        ChapterLocalization {
+            language_id: Uuid::now_v7(),
+            name: ChapterName::try_from("Chapter 1".to_owned()).unwrap(),
+        }
+    }
+
+    #[test]
+    fn chapter_localizations_at_the_ceiling_is_valid() {
+        let localizations: Vec<ChapterLocalization> = (0..MAX_CHAPTER_LOCALIZATIONS)
+            .map(|_| sample_localization())
+            .collect();
+
+        assert!(ChapterLocalizations::try_from(localizations).is_ok());
+    }
+
+    #[test]
+    fn chapter_localizations_over_the_ceiling_is_rejected() {
+        let localizations: Vec<ChapterLocalization> = (0..=MAX_CHAPTER_LOCALIZATIONS)
+            .map(|_| sample_localization())
+            .collect();
+
+        assert!(ChapterLocalizations::try_from(localizations).is_err());
+    }
 
     #[test]
     fn chapter_number_zero_is_valid() {

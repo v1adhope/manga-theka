@@ -53,7 +53,7 @@ impl Service {
 
     pub async fn store_chapter_pages(&self, item: ChapterPages) -> Result<(), ServiceError> {
         let existing = self.database.count_chapter_pages(item.release_id).await? as usize;
-        ChapterRelease::ensure_row_capacity(existing, item.images.as_slice().len())?;
+        ChapterRelease::ensure_row_capacity(existing, item.images.len())?;
 
         for chunk in item.images.as_slice().chunks(UPLOAD_CHUNK_SIZE) {
             let mut uploads = JoinSet::new();

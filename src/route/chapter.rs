@@ -10,7 +10,8 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        Chapter, ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume, Filter, SortOrder,
+        Chapter, ChapterLocalization, ChapterLocalizations, ChapterName, ChapterNumber,
+        ChapterVolume, Filter, SortOrder,
     },
     error::{AppError, EntityError},
     route::{StoreResp, json_data_response, json_response},
@@ -75,7 +76,7 @@ impl TryFrom<ChapterWithRelations> for Chapter {
             number: ChapterNumber::try_from(number)?,
             name: name.map(ChapterName::try_from).transpose()?,
             volume: volume.map(ChapterVolume::try_from).transpose()?,
-            localizations,
+            localizations: ChapterLocalizations::try_from(localizations)?,
             updated_at,
             created_at,
         })

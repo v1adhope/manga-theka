@@ -2,7 +2,7 @@ use axum::http::StatusCode;
 use fake::Fake;
 use http_body_util::BodyExt;
 use manga_theka::entity::{
-    Book, ChapterPageQuery, ChapterReleaseQuery, ImageExtension, Ordinal, PageUrl, ResourceUrl,
+    BookQuery, ChapterPageQuery, ChapterReleaseQuery, ImageExtension, Ordinal, PageUrl, ResourceUrl,
 };
 use uuid::Uuid;
 
@@ -26,7 +26,7 @@ async fn store_chapter_release_mints_an_identifier() {
 #[tokio::test]
 async fn store_chapter_release_in_the_publication_language_returns_422() {
     let app = TestApp::new().await;
-    let book: Book = BookFaker::default().fake();
+    let book: BookQuery = BookFaker::default().fake();
     app.insert_book(&book).await;
     let chapter_id = app.insert_random_chapter(book.id).await;
 

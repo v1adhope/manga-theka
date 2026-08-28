@@ -10,8 +10,8 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        AlternativeTitle, Book, BookCover, BookKind, BookLink, BookLinkKind, BookName, BookStatus,
-        ContentRating, Description, Filter, Language, LinkUrl,
+        AlternativeTitle, Book, BookCover, BookKind, BookLabelIds, BookLink, BookLinkKind,
+        BookLinks, BookName, BookQuery, BookStatus, BookTitles, Description, Filter, LinkUrl,
     },
     error::{AppError, EntityError, RouteError},
     route::{PaginationQuery, StoreResp, collect_image_part, json_data_response, json_response},
@@ -57,7 +57,7 @@ struct BookWithRelations {
     created_at: OffsetDateTime,
 }
 
-impl TryFrom<BookWithRelations> for (Book, Vec<Uuid>) {
+impl TryFrom<BookWithRelations> for Book {
     type Error = EntityError;
 
     fn try_from(item: BookWithRelations) -> Result<Self, Self::Error> {
@@ -97,30 +97,21 @@ impl TryFrom<BookWithRelations> for (Book, Vec<Uuid>) {
             });
         }
 
-        let book = Book {
+        Ok(Book {
             id,
             name: BookName::try_from(name)?,
             description: Description::try_from(description)?,
             publication_year,
-            content_rating: ContentRating {
-                id: content_rating_id,
-                ..Default::default()
-            },
+            content_rating_id,
             status,
             kind,
-            publication_language: Language {
-                id: publication_language_id,
-                ..Default::default()
-            },
-            labels: Vec::new(),
-            links,
-            titles,
-            creators: Vec::new(),
+            publication_language_id,
+            label_ids: BookLabelIds::try_from(label_ids)?,
+            links: BookLinks::try_from(links)?,
+            titles: BookTitles::try_from(titles)?,
             updated_at,
             created_at,
-        };
-
-        Ok((book, label_ids))
+        })
     }
 }
 
@@ -130,7 +121,7 @@ pub async fn store_book(
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let id = Uuid::now_v7();
     let created_at = OffsetDateTime::now_utc();
-    let (book, label_ids): (Book, Vec<Uuid>) = BookWithRelations {
+    let book: Book = BookWithRelations {
         req,
         id,
         updated_at: None,
@@ -138,7 +129,7 @@ pub async fn store_book(
     }
     .try_into()?;
 
-    service.store_book(book, label_ids).await?;
+    service.store_book(book).await?;
 
     Ok(json_data_response(StatusCode::CREATED, StoreResp { id }))
 }
@@ -149,7 +140,7 @@ pub async fn update_book(
     Json(req): Json<BookReq>,
 ) -> Result<StatusCode, AppError> {
     let updated_at = OffsetDateTime::now_utc();
-    let (book, label_ids): (Book, Vec<Uuid>) = BookWithRelations {
+    let book: Book = BookWithRelations {
         req,
         id,
         updated_at: Some(updated_at),
@@ -157,7 +148,7 @@ pub async fn update_book(
     }
     .try_into()?;
 
-    service.update_book(book, label_ids).await?;
+    service.update_book(book).await?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -165,7 +156,7 @@ pub async fn update_book(
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetBooksResp {
-    pub data: Vec<Book>,
+    pub data: Vec<BookQuery>,
     pub next_cursor: Option<Uuid>,
 }
 
@@ -231,9 +222,9 @@ pub async fn get_book_covers(
 
 pub async fn get_book_cover_image(
     State(service): State<Service>,
-    Path((book_id, cover_id)): Path<(Uuid, Uuid)>,
+    Path(cover_id): Path<Uuid>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    let url = service.presign_book_cover(book_id, cover_id).await?;
+    let url = service.presign_book_cover(cover_id).await?;
 
     Ok((StatusCode::FOUND, [(header::LOCATION, url)]))
 }
@@ -255,8 +246,8 @@ pub async fn update_book_main_cover(
 
 pub async fn delete_book_cover(
     State(service): State<Service>,
-    Path((book_id, cover_id)): Path<(Uuid, Uuid)>,
+    Path(cover_id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    service.delete_book_cover(book_id, cover_id).await?;
+    service.delete_book_cover(cover_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }

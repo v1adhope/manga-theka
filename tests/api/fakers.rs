@@ -8,7 +8,7 @@ use fake::faker::lorem::en::{Sentence, Word};
 use fake::faker::name::en::FirstName;
 use fake::rand::RngExt;
 use manga_theka::entity::{
-    AlternativeTitle, Book, BookKind, BookLink, BookLinkKind, BookName, BookStatus, Chapter,
+    AlternativeTitle, BookKind, BookLink, BookLinkKind, BookName, BookQuery, BookStatus, Chapter,
     ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume, ContentRating, Creator,
     CreatorRole, Description, Label, LabelKind, Language, LinkUrl, Name,
 };
@@ -278,7 +278,7 @@ impl Default for BookFaker {
     }
 }
 
-impl Dummy<BookFaker> for Book {
+impl Dummy<BookFaker> for BookQuery {
     fn dummy_with_rng<R: RngExt + ?Sized>(config: &BookFaker, rng: &mut R) -> Self {
         let mut labels: Vec<Label> = (0..rng.random_range(config.labels.clone()))
             .map(|_| LabelFaker.fake_with_rng(rng))
@@ -296,7 +296,7 @@ impl Dummy<BookFaker> for Book {
             .map(|_| CreatorFaker.fake_with_rng(rng))
             .collect();
 
-        Book {
+        BookQuery {
             id: Uuid::now_v7(),
             name: BookNameFaker.fake_with_rng(rng),
             description: DescriptionFaker.fake_with_rng(rng),
@@ -305,10 +305,10 @@ impl Dummy<BookFaker> for Book {
             status: BookStatusFaker.fake_with_rng(rng),
             kind: BookKindFaker.fake_with_rng(rng),
             publication_language: LanguageFaker.fake_with_rng(rng),
-            labels,
-            links,
-            titles,
-            creators,
+            labels: labels.try_into().expect("too many labels in faker"),
+            links: links.try_into().expect("too many links in faker"),
+            titles: titles.try_into().expect("too many titles in faker"),
+            creators: creators.try_into().expect("too many creators in faker"),
             updated_at: None,
             created_at: OffsetDateTime::UNIX_EPOCH,
         }
@@ -375,7 +375,9 @@ impl Dummy<ChapterFaker> for Chapter {
             number: ChapterNumberFaker.fake_with_rng(rng),
             name: Some(ChapterNameFaker.fake_with_rng(rng)),
             volume: Some(ChapterVolume::try_from(rng.random_range(0..=200)).unwrap()),
-            localizations,
+            localizations: localizations
+                .try_into()
+                .expect("too many localizations in faker"),
             updated_at: None,
             created_at: OffsetDateTime::UNIX_EPOCH,
         }

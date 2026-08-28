@@ -5,7 +5,8 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        Entity, ImageExtension, Images, Language, MAX_PARTS_PER_REQUEST, Ordinal, ResourceUrl,
+        Bounded, BoundedVec, Entity, ImageExtension, Images, Language, MAX_PARTS_PER_REQUEST,
+        Ordinal, ResourceUrl,
     },
     error::EntityError,
 };
@@ -19,8 +20,15 @@ pub struct PageUrl {
     pub page_number: Ordinal,
 }
 
+pub struct PageOrderBound;
+
+impl Bounded for PageOrderBound {
+    const MAX: usize = MAX_COMMITTED_PAGES;
+    const NAME: &'static str = "page order";
+}
+
 #[derive(Debug)]
-pub struct PageOrder(Vec<Uuid>);
+pub struct PageOrder(BoundedVec<Uuid, PageOrderBound>);
 
 impl TryFrom<Vec<Uuid>> for PageOrder {
     type Error = EntityError;
@@ -29,15 +37,11 @@ impl TryFrom<Vec<Uuid>> for PageOrder {
         if ids.is_empty() {
             return Err(EntityError::PageOrderIsEmpty);
         }
-        if ids.len() > MAX_COMMITTED_PAGES {
-            return Err(EntityError::PageOrderExceedsLimit(
-                ids.len(),
-                MAX_COMMITTED_PAGES,
-            ));
-        }
+
+        let ids = BoundedVec::try_from(ids)?;
 
         let mut seen = HashSet::with_capacity(ids.len());
-        for id in &ids {
+        for id in ids.as_slice() {
             if !seen.insert(id) {
                 return Err(EntityError::PageOrderHasDuplicates(*id));
             }
@@ -49,7 +53,15 @@ impl TryFrom<Vec<Uuid>> for PageOrder {
 
 impl PageOrder {
     pub fn as_slice(&self) -> &[Uuid] {
-        &self.0
+        self.0.as_slice()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 }
 

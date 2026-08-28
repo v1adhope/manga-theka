@@ -7,8 +7,8 @@ use uuid::Uuid;
 use crate::{
     database::Database,
     entity::{
-        Chapter, ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume, DEFAULT_LIMIT,
-        Filter, Limit, SortOrder,
+        Chapter, ChapterLocalization, ChapterLocalizations, ChapterName, ChapterNumber,
+        ChapterVolume, DEFAULT_LIMIT, Filter, Limit, SortOrder,
     },
     error::DatabaseError,
 };
@@ -68,6 +68,9 @@ impl TryFrom<ChapterWithRelations> for Chapter {
             .map(ChapterVolume::try_from)
             .transpose()
             .map_err(|e| DatabaseError::invariant_corrupted("volume", e))?;
+
+        let localizations = ChapterLocalizations::try_from(localizations)
+            .map_err(|e| DatabaseError::invariant_corrupted("localizations", e))?;
 
         Ok(Chapter {
             id: row.id,
@@ -320,7 +323,7 @@ impl Database {
 
         let mut language_ids: Vec<Uuid> = Vec::with_capacity(item.localizations.len());
         let mut names: Vec<String> = Vec::with_capacity(item.localizations.len());
-        for localization in &item.localizations {
+        for localization in item.localizations.as_slice() {
             language_ids.push(localization.language_id);
             names.push(localization.name.as_ref().to_owned());
         }

@@ -1,35 +1,29 @@
 use uuid::Uuid;
 
 use crate::{
-    entity::{Book, BookCover, BookCoverQuery, Filter},
+    entity::{Book, BookCover, BookCoverQuery, BookQuery, Filter},
     error::ServiceError,
     service::Service,
 };
 
 impl Service {
-    pub async fn store_book(&self, item: Book, label_ids: Vec<Uuid>) -> Result<(), ServiceError> {
-        self.database
-            .store_book(&item, &label_ids)
-            .await
-            .map_err(Into::into)
+    pub async fn store_book(&self, item: Book) -> Result<(), ServiceError> {
+        self.database.store_book(&item).await.map_err(Into::into)
     }
 
-    pub async fn get_book(&self, id: Uuid) -> Result<Book, ServiceError> {
+    pub async fn get_book(&self, id: Uuid) -> Result<BookQuery, ServiceError> {
         self.database.get_book(id).await.map_err(Into::into)
     }
 
     pub async fn get_books(
         &self,
         filter: Filter,
-    ) -> Result<(Vec<Book>, Option<Uuid>), ServiceError> {
+    ) -> Result<(Vec<BookQuery>, Option<Uuid>), ServiceError> {
         self.database.get_books(&filter).await.map_err(Into::into)
     }
 
-    pub async fn update_book(&self, item: Book, label_ids: Vec<Uuid>) -> Result<(), ServiceError> {
-        self.database
-            .update_book(&item, &label_ids)
-            .await
-            .map_err(Into::into)
+    pub async fn update_book(&self, item: Book) -> Result<(), ServiceError> {
+        self.database.update_book(&item).await.map_err(Into::into)
     }
 
     pub async fn delete_book(&self, id: Uuid) -> Result<(), ServiceError> {
@@ -65,12 +59,8 @@ impl Service {
             .map_err(Into::into)
     }
 
-    pub async fn presign_book_cover(
-        &self,
-        book_id: Uuid,
-        id: Uuid,
-    ) -> Result<String, ServiceError> {
-        self.database.ensure_book_cover_exists(book_id, id).await?;
+    pub async fn presign_book_cover(&self, id: Uuid) -> Result<String, ServiceError> {
+        self.database.ensure_book_cover_exists(id).await?;
 
         self.storage
             .presign_book_cover(id)
@@ -85,8 +75,8 @@ impl Service {
             .map_err(Into::into)
     }
 
-    pub async fn delete_book_cover(&self, book_id: Uuid, id: Uuid) -> Result<(), ServiceError> {
-        self.database.delete_book_cover(book_id, id).await?;
+    pub async fn delete_book_cover(&self, id: Uuid) -> Result<(), ServiceError> {
+        self.database.delete_book_cover(id).await?;
 
         let _ = self.storage.delete_book_covers(&[id]).await;
 

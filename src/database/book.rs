@@ -7,9 +7,10 @@ use uuid::Uuid;
 use crate::{
     database::{Database, creator::CreatorRow, label::LabelRow},
     entity::{
-        AlternativeTitle, Book, BookCover, BookCoverQuery, BookKind, BookLink, BookLinkKind,
-        BookName, BookStatus, ContentRating, CoverUrl, Creator, DEFAULT_LIMIT, Description, Filter,
-        ImageExtension, Label, Language, Limit, LinkUrl,
+        AlternativeTitle, Book, BookCover, BookCoverQuery, BookCreators, BookKind, BookLabels,
+        BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus, BookTitles,
+        ContentRating, CoverUrl, Creator, DEFAULT_LIMIT, Description, Filter, ImageExtension,
+        Label, Language, Limit, LinkUrl,
     },
     error::DatabaseError,
 };
@@ -104,11 +105,7 @@ impl TryFrom<BookCoverRow> for BookCoverQuery {
     type Error = DatabaseError;
 
     fn try_from(row: BookCoverRow) -> Result<Self, Self::Error> {
-        let url = CoverUrl {
-            book_id: row.book_id,
-            cover_id: row.id,
-        }
-        .into();
+        let url = CoverUrl { cover_id: row.id }.into();
         let extension: ImageExtension = row
             .extension
             .parse()
@@ -117,6 +114,7 @@ impl TryFrom<BookCoverRow> for BookCoverQuery {
         Ok(BookCoverQuery {
             url,
             id: row.id,
+            book_id: row.book_id,
             extension,
             is_main: row.is_main,
         })
@@ -155,7 +153,7 @@ struct BookWithRelations {
     creators: Vec<Creator>,
 }
 
-impl TryFrom<BookWithRelations> for Book {
+impl TryFrom<BookWithRelations> for BookQuery {
     type Error = DatabaseError;
 
     fn try_from(item: BookWithRelations) -> Result<Self, Self::Error> {
@@ -179,8 +177,16 @@ impl TryFrom<BookWithRelations> for Book {
             .kind
             .parse()
             .map_err(|e| DatabaseError::invariant_corrupted("kind", e))?;
+        let labels = BookLabels::try_from(labels)
+            .map_err(|e| DatabaseError::invariant_corrupted("labels", e))?;
+        let links = BookLinks::try_from(links)
+            .map_err(|e| DatabaseError::invariant_corrupted("links", e))?;
+        let titles = BookTitles::try_from(titles)
+            .map_err(|e| DatabaseError::invariant_corrupted("titles", e))?;
+        let creators = BookCreators::try_from(creators)
+            .map_err(|e| DatabaseError::invariant_corrupted("creators", e))?;
 
-        Ok(Book {
+        Ok(BookQuery {
             id: row.id,
             name,
             description,
@@ -209,13 +215,13 @@ impl TryFrom<BookWithRelations> for Book {
 
 impl Database {
     #[instrument(name = "db.book.store", skip_all, fields(book.id = %item.id))]
-    pub async fn store_book(&self, item: &Book, label_ids: &[Uuid]) -> Result<(), DatabaseError> {
-        self.store_book_inner(item, label_ids)
+    pub async fn store_book(&self, item: &Book) -> Result<(), DatabaseError> {
+        self.store_book_inner(item)
             .await
             .inspect_err(DatabaseError::log_internal)
     }
 
-    async fn store_book_inner(&self, item: &Book, label_ids: &[Uuid]) -> Result<(), DatabaseError> {
+    async fn store_book_inner(&self, item: &Book) -> Result<(), DatabaseError> {
         let mut tx = self.pool.begin().await?;
 
         sqlx::query_file!(
@@ -224,34 +230,30 @@ impl Database {
             item.name.as_ref(),
             item.description.as_ref(),
             item.publication_year,
-            item.content_rating.id,
+            item.content_rating_id,
             item.status.as_ref(),
             item.kind.as_ref(),
-            item.publication_language.id,
+            item.publication_language_id,
             item.updated_at,
             item.created_at,
         )
         .execute(&mut *tx)
         .await?;
 
-        Self::store_book_relations(&mut tx, item, label_ids).await?;
+        Self::store_book_relations(&mut tx, item).await?;
 
         tx.commit().await?;
         Ok(())
     }
 
     #[instrument(name = "db.book.update", skip_all, fields(book.id = %item.id))]
-    pub async fn update_book(&self, item: &Book, label_ids: &[Uuid]) -> Result<(), DatabaseError> {
-        self.update_book_inner(item, label_ids)
+    pub async fn update_book(&self, item: &Book) -> Result<(), DatabaseError> {
+        self.update_book_inner(item)
             .await
             .inspect_err(DatabaseError::log_internal)
     }
 
-    async fn update_book_inner(
-        &self,
-        item: &Book,
-        label_ids: &[Uuid],
-    ) -> Result<(), DatabaseError> {
+    async fn update_book_inner(&self, item: &Book) -> Result<(), DatabaseError> {
         let mut tx = self.pool.begin().await?;
 
         let row = sqlx::query_file!(
@@ -260,10 +262,10 @@ impl Database {
             item.name.as_ref(),
             item.description.as_ref(),
             item.publication_year,
-            item.content_rating.id,
+            item.content_rating_id,
             item.status.as_ref(),
             item.kind.as_ref(),
-            item.publication_language.id,
+            item.publication_language_id,
             item.updated_at,
         )
         .fetch_optional(&mut *tx)
@@ -274,20 +276,20 @@ impl Database {
         }
 
         Self::delete_book_relations(&mut tx, item.id).await?;
-        Self::store_book_relations(&mut tx, item, label_ids).await?;
+        Self::store_book_relations(&mut tx, item).await?;
 
         tx.commit().await?;
         Ok(())
     }
 
     #[instrument(name = "db.book.get", skip_all, fields(book.id = %id))]
-    pub async fn get_book(&self, id: Uuid) -> Result<Book, DatabaseError> {
+    pub async fn get_book(&self, id: Uuid) -> Result<BookQuery, DatabaseError> {
         self.get_book_inner(id)
             .await
             .inspect_err(DatabaseError::log_internal)
     }
 
-    async fn get_book_inner(&self, id: Uuid) -> Result<Book, DatabaseError> {
+    async fn get_book_inner(&self, id: Uuid) -> Result<BookQuery, DatabaseError> {
         let row = sqlx::query_file_as!(BookRow, "queries/get_book.sql", id)
             .fetch_optional(&self.pool)
             .await?;
@@ -320,7 +322,7 @@ impl Database {
     pub async fn get_books(
         &self,
         filter: &Filter,
-    ) -> Result<(Vec<Book>, Option<Uuid>), DatabaseError> {
+    ) -> Result<(Vec<BookQuery>, Option<Uuid>), DatabaseError> {
         self.get_books_inner(filter)
             .await
             .inspect_err(DatabaseError::log_internal)
@@ -329,7 +331,7 @@ impl Database {
     async fn get_books_inner(
         &self,
         filter: &Filter,
-    ) -> Result<(Vec<Book>, Option<Uuid>), DatabaseError> {
+    ) -> Result<(Vec<BookQuery>, Option<Uuid>), DatabaseError> {
         let limit = filter.limit.map_or(DEFAULT_LIMIT, Limit::as_u32);
         let mut builder: QueryBuilder<Postgres> = QueryBuilder::new(
             r"select b.id, b.name, b.description, b.publication_year,
@@ -371,10 +373,10 @@ impl Database {
         let mut titles = self.get_books_titles(&ids).await?;
         let mut creators = self.get_books_creators(&ids).await?;
 
-        let mut books: Vec<Book> = Vec::with_capacity(rows.len());
+        let mut books: Vec<BookQuery> = Vec::with_capacity(rows.len());
         for row in rows {
             let id = row.id;
-            let book: Book = BookWithRelations {
+            let book: BookQuery = BookWithRelations {
                 row,
                 labels: labels.remove(&id).unwrap_or_default(),
                 links: links.remove(&id).unwrap_or_default(),
@@ -498,27 +500,26 @@ impl Database {
     async fn store_book_relations(
         conn: &mut PgConnection,
         item: &Book,
-        label_ids: &[Uuid],
     ) -> Result<(), DatabaseError> {
-        Self::store_book_labels(&mut *conn, item.id, label_ids).await?;
+        Self::store_book_labels(&mut *conn, item).await?;
         Self::store_book_links(&mut *conn, item).await?;
         Self::store_book_titles(&mut *conn, item).await?;
 
         Ok(())
     }
 
-    async fn store_book_labels(
-        conn: &mut PgConnection,
-        book_id: Uuid,
-        label_ids: &[Uuid],
-    ) -> Result<(), DatabaseError> {
-        if label_ids.is_empty() {
+    async fn store_book_labels(conn: &mut PgConnection, item: &Book) -> Result<(), DatabaseError> {
+        if item.label_ids.is_empty() {
             return Ok(());
         }
 
-        sqlx::query_file!("queries/store_book_labels.sql", book_id, label_ids)
-            .execute(conn)
-            .await?;
+        sqlx::query_file!(
+            "queries/store_book_labels.sql",
+            item.id,
+            item.label_ids.as_slice()
+        )
+        .execute(conn)
+        .await?;
 
         Ok(())
     }
@@ -530,7 +531,7 @@ impl Database {
 
         let mut kinds: Vec<String> = Vec::with_capacity(item.links.len());
         let mut urls: Vec<String> = Vec::with_capacity(item.links.len());
-        for link in &item.links {
+        for link in item.links.as_slice() {
             kinds.push(link.kind.as_ref().to_owned());
             urls.push(link.url.as_ref().to_owned());
         }
@@ -549,7 +550,7 @@ impl Database {
 
         let mut language_ids: Vec<Uuid> = Vec::with_capacity(item.titles.len());
         let mut names: Vec<String> = Vec::with_capacity(item.titles.len());
-        for title in &item.titles {
+        for title in item.titles.as_slice() {
             language_ids.push(title.language_id);
             names.push(title.name.as_ref().to_owned());
         }
@@ -623,13 +624,9 @@ impl Database {
         Ok(covers)
     }
 
-    #[instrument(name = "db.book_cover.exists", skip_all, fields(book.id = %book_id, cover.id = %id))]
-    pub async fn ensure_book_cover_exists(
-        &self,
-        book_id: Uuid,
-        id: Uuid,
-    ) -> Result<(), DatabaseError> {
-        let row = sqlx::query_file!("queries/book_cover_exists.sql", id, book_id)
+    #[instrument(name = "db.book_cover.exists", skip_all, fields(cover.id = %id))]
+    pub async fn ensure_book_cover_exists(&self, id: Uuid) -> Result<(), DatabaseError> {
+        let row = sqlx::query_file!("queries/book_cover_exists.sql", id)
             .fetch_one(&self.pool)
             .await
             .map_err(DatabaseError::from)
@@ -651,9 +648,9 @@ impl Database {
             .inspect_err(DatabaseError::log_internal)
     }
 
-    #[instrument(name = "db.book_cover.delete", skip_all, fields(book.id = %book_id, cover.id = %id))]
-    pub async fn delete_book_cover(&self, book_id: Uuid, id: Uuid) -> Result<(), DatabaseError> {
-        let row = sqlx::query_file!("queries/delete_book_cover.sql", id, book_id)
+    #[instrument(name = "db.book_cover.delete", skip_all, fields(cover.id = %id))]
+    pub async fn delete_book_cover(&self, id: Uuid) -> Result<(), DatabaseError> {
+        let row = sqlx::query_file!("queries/delete_book_cover.sql", id)
             .fetch_optional(&self.pool)
             .await
             .map_err(DatabaseError::from)

@@ -13,9 +13,9 @@ use manga_theka::{
     config::{Config, Database},
     database,
     entity::{
-        AlternativeTitle, Book, BookCoverQuery, BookLink, BookName, Chapter, ChapterLocalization,
-        ChapterName, ChapterNumber, ChapterVolume, ContentRating, CoverUrl, Creator, Description,
-        ImageExtension, Label, Language, LinkUrl, Name,
+        AlternativeTitle, BookCoverQuery, BookLink, BookName, BookQuery, Chapter,
+        ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume, ContentRating, CoverUrl,
+        Creator, Description, ImageExtension, Label, Language, LinkUrl, Name,
     },
     object_storage,
     startup::App,
@@ -231,7 +231,7 @@ impl TestApp {
             .len()
     }
 
-    pub async fn insert_book(&self, b: &Book) {
+    pub async fn insert_book(&self, b: &BookQuery) {
         sqlx::query!(
             r#"
 insert into books(id, name, description, publication_year, content_rating, status, kind,
@@ -254,7 +254,7 @@ values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
         .expect("failed to insert factory book");
 
         let mut label_ids: Vec<Uuid> = Vec::with_capacity(b.labels.len());
-        for l in &b.labels {
+        for l in b.labels.as_slice() {
             label_ids.push(l.id);
         }
         sqlx::query!(
@@ -272,7 +272,7 @@ from unnest($2::uuid[]) as label_id;
 
         let mut link_kinds: Vec<String> = Vec::with_capacity(b.links.len());
         let mut link_urls: Vec<String> = Vec::with_capacity(b.links.len());
-        for l in &b.links {
+        for l in b.links.as_slice() {
             link_kinds.push(l.kind.as_ref().to_owned());
             link_urls.push(l.url.as_ref().to_owned());
         }
@@ -292,7 +292,7 @@ from unnest($2::text[], $3::text[]) as link(kind, url);
 
         let mut title_language_ids: Vec<Uuid> = Vec::with_capacity(b.titles.len());
         let mut title_names: Vec<String> = Vec::with_capacity(b.titles.len());
-        for t in &b.titles {
+        for t in b.titles.as_slice() {
             title_language_ids.push(t.language_id);
             title_names.push(t.name.as_ref().to_owned());
         }
@@ -335,7 +335,7 @@ select (select b.name from books b where b.id = $1) as "name?",
         }
     }
 
-    pub async fn fetch_book(&self, id: Uuid) -> Book {
+    pub async fn fetch_book(&self, id: Uuid) -> BookQuery {
         let row = sqlx::query!(
             r#"
 select b.name, b.description, b.publication_year, b.status, b.kind, b.updated_at, b.created_at,
@@ -352,7 +352,7 @@ where b.id = $1;
         .await
         .expect("failed to read book");
 
-        let labels = sqlx::query!(
+        let labels: Vec<Label> = sqlx::query!(
             r#"
 select l.id, l.name, l.kind
 from labels l
@@ -373,7 +373,7 @@ order by l.name;
         })
         .collect();
 
-        let links = sqlx::query!(
+        let links: Vec<BookLink> = sqlx::query!(
             r#"
 select kind, url
 from book_links
@@ -392,7 +392,7 @@ order by kind, url;
         })
         .collect();
 
-        let titles = sqlx::query!(
+        let titles: Vec<AlternativeTitle> = sqlx::query!(
             r#"
 select language_id, name
 from book_titles
@@ -411,7 +411,7 @@ order by language_id, name;
         })
         .collect();
 
-        let creators = sqlx::query!(
+        let creators: Vec<Creator> = sqlx::query!(
             r#"
 select c.id, c.first_name, c.last_name, c.role, c.created_at
 from creators c
@@ -434,7 +434,7 @@ order by c.id;
         })
         .collect();
 
-        Book {
+        BookQuery {
             id,
             name: BookName::try_from(row.name).expect("stored name must be valid"),
             description: Description::try_from(row.description)
@@ -452,17 +452,19 @@ order by c.id;
                 code: row.language_code,
                 name: row.language_name,
             },
-            labels,
-            links,
-            titles,
-            creators,
+            labels: labels.try_into().expect("too many labels in test fixture"),
+            links: links.try_into().expect("too many links in test fixture"),
+            titles: titles.try_into().expect("too many titles in test fixture"),
+            creators: creators
+                .try_into()
+                .expect("too many creators in test fixture"),
             updated_at: row.updated_at,
             created_at: row.created_at,
         }
     }
 
     pub async fn insert_random_book(&self) -> Uuid {
-        let book: Book = BookFaker::default().fake();
+        let book: BookQuery = BookFaker::default().fake();
         self.insert_book(&book).await;
 
         book.id
@@ -484,16 +486,13 @@ order by id;
         .into_iter()
         .map(|r| BookCoverQuery {
             id: r.id,
+            book_id,
             extension: r
                 .extension
                 .parse()
                 .expect("stored cover extension must be valid"),
             is_main: r.is_main,
-            url: CoverUrl {
-                book_id,
-                cover_id: r.id,
-            }
-            .into(),
+            url: CoverUrl { cover_id: r.id }.into(),
         })
         .collect()
     }
@@ -550,7 +549,7 @@ values($1, $2, $3, $4, $5, $6, $7);
 
         let mut language_ids: Vec<Uuid> = Vec::with_capacity(c.localizations.len());
         let mut names: Vec<String> = Vec::with_capacity(c.localizations.len());
-        for l in &c.localizations {
+        for l in c.localizations.as_slice() {
             language_ids.push(l.language_id);
             names.push(l.name.as_ref().to_owned());
         }
@@ -603,7 +602,7 @@ where id = $1;
         .await
         .expect("failed to read chapter");
 
-        let localizations = sqlx::query!(
+        let localizations: Vec<ChapterLocalization> = sqlx::query!(
             r#"
 select language_id, name
 from chapter_localizations
@@ -632,7 +631,9 @@ order by language_id;
             volume: row
                 .volume
                 .map(|v| ChapterVolume::try_from(v).expect("stored volume must be valid")),
-            localizations,
+            localizations: localizations
+                .try_into()
+                .expect("too many localizations in test fixture"),
             updated_at: row.updated_at,
             created_at: row.created_at,
         }
@@ -695,8 +696,8 @@ values($1, $2, $3, $4, $5);
         self.router.clone().oneshot(req).await.unwrap()
     }
 
-    pub async fn get_cover_image(&self, book_id: Uuid, cover_id: Uuid) -> Response {
-        let req = Request::get(format!("/books/{book_id}/covers/{cover_id}/image"))
+    pub async fn get_cover_image(&self, cover_id: Uuid) -> Response {
+        let req = Request::get(format!("/covers/{cover_id}/image"))
             .body(Body::empty())
             .unwrap();
 
@@ -713,8 +714,8 @@ values($1, $2, $3, $4, $5);
         self.router.clone().oneshot(req).await.unwrap().status()
     }
 
-    pub async fn delete_cover(&self, book_id: Uuid, cover_id: Uuid) -> Response {
-        let req = Request::delete(format!("/books/{book_id}/covers/{cover_id}"))
+    pub async fn delete_cover(&self, cover_id: Uuid) -> Response {
+        let req = Request::delete(format!("/covers/{cover_id}"))
             .body(Body::empty())
             .unwrap();
 
