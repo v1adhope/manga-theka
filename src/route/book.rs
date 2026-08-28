@@ -57,7 +57,7 @@ struct BookWithRelations {
     created_at: OffsetDateTime,
 }
 
-impl TryFrom<BookWithRelations> for (Book, BookLabelIds) {
+impl TryFrom<BookWithRelations> for Book {
     type Error = EntityError;
 
     fn try_from(item: BookWithRelations) -> Result<Self, Self::Error> {
@@ -97,7 +97,7 @@ impl TryFrom<BookWithRelations> for (Book, BookLabelIds) {
             });
         }
 
-        let book = Book {
+        Ok(Book {
             id,
             name: BookName::try_from(name)?,
             description: Description::try_from(description)?,
@@ -106,13 +106,12 @@ impl TryFrom<BookWithRelations> for (Book, BookLabelIds) {
             status,
             kind,
             publication_language_id,
+            label_ids: BookLabelIds::try_from(label_ids)?,
             links: BookLinks::try_from(links)?,
             titles: BookTitles::try_from(titles)?,
             updated_at,
             created_at,
-        };
-
-        Ok((book, BookLabelIds::try_from(label_ids)?))
+        })
     }
 }
 
@@ -122,7 +121,7 @@ pub async fn store_book(
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let id = Uuid::now_v7();
     let created_at = OffsetDateTime::now_utc();
-    let (book, label_ids): (Book, BookLabelIds) = BookWithRelations {
+    let book: Book = BookWithRelations {
         req,
         id,
         updated_at: None,
@@ -130,7 +129,7 @@ pub async fn store_book(
     }
     .try_into()?;
 
-    service.store_book(book, label_ids).await?;
+    service.store_book(book).await?;
 
     Ok(json_data_response(StatusCode::CREATED, StoreResp { id }))
 }
@@ -141,7 +140,7 @@ pub async fn update_book(
     Json(req): Json<BookReq>,
 ) -> Result<StatusCode, AppError> {
     let updated_at = OffsetDateTime::now_utc();
-    let (book, label_ids): (Book, BookLabelIds) = BookWithRelations {
+    let book: Book = BookWithRelations {
         req,
         id,
         updated_at: Some(updated_at),
@@ -149,7 +148,7 @@ pub async fn update_book(
     }
     .try_into()?;
 
-    service.update_book(book, label_ids).await?;
+    service.update_book(book).await?;
 
     Ok(StatusCode::NO_CONTENT)
 }

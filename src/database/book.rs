@@ -7,8 +7,8 @@ use uuid::Uuid;
 use crate::{
     database::{Database, creator::CreatorRow, label::LabelRow},
     entity::{
-        AlternativeTitle, Book, BookCover, BookCoverQuery, BookCreators, BookKind, BookLabelIds,
-        BookLabels, BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus, BookTitles,
+        AlternativeTitle, Book, BookCover, BookCoverQuery, BookCreators, BookKind, BookLabels,
+        BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus, BookTitles,
         ContentRating, CoverUrl, Creator, DEFAULT_LIMIT, Description, Filter, ImageExtension,
         Label, Language, Limit, LinkUrl,
     },
@@ -215,21 +215,13 @@ impl TryFrom<BookWithRelations> for BookQuery {
 
 impl Database {
     #[instrument(name = "db.book.store", skip_all, fields(book.id = %item.id))]
-    pub async fn store_book(
-        &self,
-        item: &Book,
-        label_ids: &BookLabelIds,
-    ) -> Result<(), DatabaseError> {
-        self.store_book_inner(item, label_ids)
+    pub async fn store_book(&self, item: &Book) -> Result<(), DatabaseError> {
+        self.store_book_inner(item)
             .await
             .inspect_err(DatabaseError::log_internal)
     }
 
-    async fn store_book_inner(
-        &self,
-        item: &Book,
-        label_ids: &BookLabelIds,
-    ) -> Result<(), DatabaseError> {
+    async fn store_book_inner(&self, item: &Book) -> Result<(), DatabaseError> {
         let mut tx = self.pool.begin().await?;
 
         sqlx::query_file!(
@@ -248,28 +240,20 @@ impl Database {
         .execute(&mut *tx)
         .await?;
 
-        Self::store_book_relations(&mut tx, item, label_ids).await?;
+        Self::store_book_relations(&mut tx, item).await?;
 
         tx.commit().await?;
         Ok(())
     }
 
     #[instrument(name = "db.book.update", skip_all, fields(book.id = %item.id))]
-    pub async fn update_book(
-        &self,
-        item: &Book,
-        label_ids: &BookLabelIds,
-    ) -> Result<(), DatabaseError> {
-        self.update_book_inner(item, label_ids)
+    pub async fn update_book(&self, item: &Book) -> Result<(), DatabaseError> {
+        self.update_book_inner(item)
             .await
             .inspect_err(DatabaseError::log_internal)
     }
 
-    async fn update_book_inner(
-        &self,
-        item: &Book,
-        label_ids: &BookLabelIds,
-    ) -> Result<(), DatabaseError> {
+    async fn update_book_inner(&self, item: &Book) -> Result<(), DatabaseError> {
         let mut tx = self.pool.begin().await?;
 
         let row = sqlx::query_file!(
@@ -292,7 +276,7 @@ impl Database {
         }
 
         Self::delete_book_relations(&mut tx, item.id).await?;
-        Self::store_book_relations(&mut tx, item, label_ids).await?;
+        Self::store_book_relations(&mut tx, item).await?;
 
         tx.commit().await?;
         Ok(())
@@ -516,28 +500,23 @@ impl Database {
     async fn store_book_relations(
         conn: &mut PgConnection,
         item: &Book,
-        label_ids: &BookLabelIds,
     ) -> Result<(), DatabaseError> {
-        Self::store_book_labels(&mut *conn, item.id, label_ids).await?;
+        Self::store_book_labels(&mut *conn, item).await?;
         Self::store_book_links(&mut *conn, item).await?;
         Self::store_book_titles(&mut *conn, item).await?;
 
         Ok(())
     }
 
-    async fn store_book_labels(
-        conn: &mut PgConnection,
-        book_id: Uuid,
-        label_ids: &BookLabelIds,
-    ) -> Result<(), DatabaseError> {
-        if label_ids.is_empty() {
+    async fn store_book_labels(conn: &mut PgConnection, item: &Book) -> Result<(), DatabaseError> {
+        if item.label_ids.is_empty() {
             return Ok(());
         }
 
         sqlx::query_file!(
             "queries/store_book_labels.sql",
-            book_id,
-            label_ids.as_slice()
+            item.id,
+            item.label_ids.as_slice()
         )
         .execute(conn)
         .await?;

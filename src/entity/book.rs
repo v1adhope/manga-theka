@@ -193,6 +193,7 @@ pub struct Book {
     pub status: BookStatus,
     pub kind: BookKind,
     pub publication_language_id: Uuid,
+    pub label_ids: BookLabelIds,
     pub links: BookLinks,
     pub titles: BookTitles,
     pub updated_at: Option<OffsetDateTime>,
