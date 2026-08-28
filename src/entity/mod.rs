@@ -9,6 +9,7 @@ mod image;
 mod label;
 mod language;
 mod release;
+mod resource_url;
 
 pub use book::*;
 pub use chapter::*;
@@ -19,6 +20,7 @@ pub use image::*;
 pub use label::*;
 pub use language::*;
 pub use release::*;
+pub use resource_url::*;
 
 pub trait Entity {
     const NAME: &'static str;

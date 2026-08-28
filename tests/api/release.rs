@@ -2,7 +2,7 @@ use axum::http::StatusCode;
 use fake::Fake;
 use http_body_util::BodyExt;
 use manga_theka::entity::{
-    Book, ChapterPageQuery, ChapterReleaseQuery, ImageExtension, Ordinal, PageUrl,
+    Book, ChapterPageQuery, ChapterReleaseQuery, ImageExtension, Ordinal, PageUrl, ResourceUrl,
 };
 use uuid::Uuid;
 
@@ -499,7 +499,13 @@ async fn get_chapter_pages_lists_a_committed_page_with_all_its_fields() {
     let first_page = Ordinal::try_from(1).unwrap();
     assert_eq!(page_number, first_page);
     assert_eq!(extension, ImageExtension::Png);
-    assert_eq!(url, PageUrl::from((release_id, first_page)));
+    assert_eq!(
+        url,
+        ResourceUrl::from(PageUrl {
+            release_id,
+            page_number: first_page
+        })
+    );
 }
 
 #[tokio::test]

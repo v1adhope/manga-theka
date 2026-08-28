@@ -5,7 +5,7 @@ use crate::{
     database::Database,
     entity::{
         ChapterPage, ChapterPageParams, ChapterPageQuery, ChapterPages, ChapterRelease,
-        ChapterReleaseQuery, ImageExtension, Language, Ordinal, PageOrder, PageStatus,
+        ChapterReleaseQuery, ImageExtension, Language, Ordinal, PageOrder, PageStatus, PageUrl,
     },
     error::DatabaseError,
 };
@@ -54,7 +54,11 @@ impl TryFrom<ChapterPageRow> for ChapterPageQuery {
     fn try_from(row: ChapterPageRow) -> Result<Self, Self::Error> {
         let page_number = Ordinal::try_from(row.sort_order)
             .map_err(|e| DatabaseError::invariant_corrupted("sort_order", e))?;
-        let url = (row.release_id, page_number).into();
+        let url = PageUrl {
+            release_id: row.release_id,
+            page_number,
+        }
+        .into();
         let extension: ImageExtension = row
             .extension
             .parse()

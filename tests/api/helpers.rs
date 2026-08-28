@@ -489,7 +489,11 @@ order by id;
                 .parse()
                 .expect("stored cover extension must be valid"),
             is_main: r.is_main,
-            url: CoverUrl::from((book_id, r.id)),
+            url: CoverUrl {
+                book_id,
+                cover_id: r.id,
+            }
+            .into(),
         })
         .collect()
     }
