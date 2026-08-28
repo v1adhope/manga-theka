@@ -6,7 +6,8 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        ContentRating, Creator, Entity, Image, ImageExtension, Label, Language, validate_name,
+        ContentRating, Creator, Entity, Image, ImageExtension, Label, Language, ResourceUrl,
+        validate_name,
     },
     error::EntityError,
 };
@@ -225,20 +226,10 @@ impl Entity for BookCover {
     const NAME: &'static str = "Book cover";
 }
 
-#[derive(Debug, PartialEq, Deserialize, Serialize)]
-#[serde(transparent)]
-pub struct CoverUrl(String);
-
-impl From<(Uuid, Uuid)> for CoverUrl {
-    fn from((book_id, id): (Uuid, Uuid)) -> Self {
-        Self(format!("/books/{book_id}/covers/{id}/image"))
-    }
-}
-
-impl AsRef<str> for CoverUrl {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
+#[derive(Debug)]
+pub struct CoverUrl {
+    pub book_id: Uuid,
+    pub cover_id: Uuid,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -247,24 +238,12 @@ pub struct BookCoverQuery {
     pub id: Uuid,
     pub extension: ImageExtension,
     pub is_main: bool,
-    pub url: CoverUrl,
+    pub url: ResourceUrl,
 }
 
 #[cfg(test)]
 mod tests {
-    use uuid::Uuid;
-
-    use crate::entity::{BookName, CoverUrl, Description, LinkUrl};
-
-    #[test]
-    fn cover_url_points_at_the_book_scoped_image_route() {
-        let url = CoverUrl::from((Uuid::from_u128(1), Uuid::from_u128(2)));
-
-        assert_eq!(
-            url.as_ref(),
-            "/books/00000000-0000-0000-0000-000000000001/covers/00000000-0000-0000-0000-000000000002/image"
-        );
-    }
+    use crate::entity::{BookName, Description, LinkUrl};
 
     #[test]
     fn book_name_255_chars_is_valid() {

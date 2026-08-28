@@ -4,27 +4,19 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    entity::{Entity, ImageExtension, Images, Language, MAX_PARTS_PER_REQUEST},
+    entity::{
+        Entity, ImageExtension, Images, Language, MAX_PARTS_PER_REQUEST, Ordinal, ResourceUrl,
+    },
     error::EntityError,
 };
 
 pub const MAX_COMMITTED_PAGES: usize = 200;
 pub const MAX_RELEASE_ROWS: usize = 400;
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct PageUrl(String);
-
-impl From<(Uuid, i16)> for PageUrl {
-    fn from((release_id, page_number): (Uuid, i16)) -> Self {
-        Self(format!("/releases/{release_id}/pages/{page_number}"))
-    }
-}
-
-impl AsRef<str> for PageUrl {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
+#[derive(Debug)]
+pub struct PageUrl {
+    pub release_id: Uuid,
+    pub page_number: Ordinal,
 }
 
 #[derive(Debug)]
@@ -101,7 +93,7 @@ pub struct ChapterReleaseQuery {
     pub chapter_id: Uuid,
     pub language: Language,
     pub page_count: i64,
-    pub version: u16,
+    pub version: Ordinal,
 }
 
 pub struct ChapterPage;
@@ -125,9 +117,9 @@ pub struct ChapterPages {
 pub enum ChapterPageQuery {
     Committed {
         id: Uuid,
-        page_number: i16,
+        page_number: Ordinal,
         extension: ImageExtension,
-        url: PageUrl,
+        url: ResourceUrl,
     },
     Staged {
         id: Uuid,
@@ -153,7 +145,6 @@ mod tests {
 
     use crate::entity::{
         ChapterRelease, MAX_COMMITTED_PAGES, MAX_PARTS_PER_REQUEST, MAX_RELEASE_ROWS, PageOrder,
-        PageUrl,
     };
 
     #[test]
@@ -178,16 +169,6 @@ mod tests {
     fn part_capacity_over_the_ceiling_is_rejected() {
         let res = ChapterRelease::ensure_part_capacity(MAX_PARTS_PER_REQUEST + 1);
         assert!(res.is_err());
-    }
-
-    #[test]
-    fn page_url_points_at_the_position_addressed_reader_route() {
-        let url = PageUrl::from((Uuid::from_u128(1), 4));
-
-        assert_eq!(
-            url.as_ref(),
-            "/releases/00000000-0000-0000-0000-000000000001/pages/4"
-        );
     }
 
     #[test]

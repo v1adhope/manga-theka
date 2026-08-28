@@ -83,6 +83,14 @@ pub async fn assert_stored(resp: Response) -> Uuid {
     Uuid::parse_str(id).expect("data.id must be a uuid")
 }
 
+pub fn redirect_target(resp: &Response) -> &str {
+    resp.headers()
+        .get(header::LOCATION)
+        .expect("a redirect must carry a location")
+        .to_str()
+        .expect("a location must be printable")
+}
+
 pub fn label_keys(labels: &[Label]) -> Vec<(Uuid, &str, &str)> {
     let mut keys: Vec<(Uuid, &str, &str)> = labels
         .iter()
@@ -481,7 +489,11 @@ order by id;
                 .parse()
                 .expect("stored cover extension must be valid"),
             is_main: r.is_main,
-            url: CoverUrl::from((book_id, r.id)),
+            url: CoverUrl {
+                book_id,
+                cover_id: r.id,
+            }
+            .into(),
         })
         .collect()
     }
@@ -780,7 +792,7 @@ where id = $1;
         sqlx::query!(
             r#"
 insert into chapter_releases(id, chapter_id, language_id, version)
-values($1, $2, $3, 0);
+values($1, $2, $3, 1);
         "#,
             id,
             chapter_id,
@@ -802,7 +814,7 @@ values($1, $2, $3, 0);
     pub async fn insert_page(
         &self,
         release_id: Uuid,
-        sort_order: Option<i16>,
+        sort_order: Option<i32>,
         image: &[u8],
     ) -> Uuid {
         let id = Uuid::now_v7();
@@ -874,7 +886,7 @@ where id = $1;
         .expect("failed to read chapter release id")
     }
 
-    pub async fn fetch_page_order(&self, release_id: Uuid) -> Vec<(Uuid, Option<i16>)> {
+    pub async fn fetch_page_order(&self, release_id: Uuid) -> Vec<(Uuid, Option<i32>)> {
         sqlx::query!(
             r#"
 select id, sort_order
@@ -971,6 +983,14 @@ order by sort_order;
 
     pub async fn get_page_image(&self, release_id: Uuid, page_id: Uuid) -> Response {
         let req = Request::get(format!("/releases/{release_id}/pages/{page_id}/image"))
+            .body(Body::empty())
+            .unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap()
+    }
+
+    pub async fn get_page(&self, release_id: Uuid, page_number: i32) -> Response {
+        let req = Request::get(format!("/releases/{release_id}/pages/{page_number}"))
             .body(Body::empty())
             .unwrap();
 

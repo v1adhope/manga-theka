@@ -5,7 +5,7 @@ use crate::{
     database::Database,
     entity::{
         ChapterPage, ChapterPageParams, ChapterPageQuery, ChapterPages, ChapterRelease,
-        ChapterReleaseQuery, ImageExtension, Language, PageOrder, PageStatus,
+        ChapterReleaseQuery, ImageExtension, Language, Ordinal, PageOrder, PageStatus, PageUrl,
     },
     error::DatabaseError,
 };
@@ -24,7 +24,7 @@ impl TryFrom<ChapterReleaseRow> for ChapterReleaseQuery {
     type Error = DatabaseError;
 
     fn try_from(row: ChapterReleaseRow) -> Result<Self, Self::Error> {
-        let version = u16::try_from(row.version)
+        let version = Ordinal::try_from(row.version)
             .map_err(|e| DatabaseError::invariant_corrupted("version", e))?;
 
         Ok(ChapterReleaseQuery {
@@ -44,7 +44,7 @@ impl TryFrom<ChapterReleaseRow> for ChapterReleaseQuery {
 struct ChapterPageRow {
     id: Uuid,
     release_id: Uuid,
-    sort_order: i16,
+    sort_order: i32,
     extension: String,
 }
 
@@ -52,7 +52,13 @@ impl TryFrom<ChapterPageRow> for ChapterPageQuery {
     type Error = DatabaseError;
 
     fn try_from(row: ChapterPageRow) -> Result<Self, Self::Error> {
-        let url = (row.release_id, row.sort_order).into();
+        let page_number = Ordinal::try_from(row.sort_order)
+            .map_err(|e| DatabaseError::invariant_corrupted("sort_order", e))?;
+        let url = PageUrl {
+            release_id: row.release_id,
+            page_number,
+        }
+        .into();
         let extension: ImageExtension = row
             .extension
             .parse()
@@ -60,7 +66,7 @@ impl TryFrom<ChapterPageRow> for ChapterPageQuery {
 
         Ok(ChapterPageQuery::Committed {
             id: row.id,
-            page_number: row.sort_order,
+            page_number,
             extension,
             url,
         })
@@ -328,6 +334,29 @@ impl Database {
                 rows.into_iter().map(TryInto::try_into).collect()
             }
         }
+    }
+
+    #[instrument(name = "db.chapter_page.id", skip_all, fields(release.id = %release_id, page.number = number.as_i32()))]
+    pub async fn get_chapter_page_id(
+        &self,
+        release_id: Uuid,
+        number: Ordinal,
+    ) -> Result<Uuid, DatabaseError> {
+        let id = sqlx::query_file_scalar!(
+            "queries/get_chapter_page_id.sql",
+            release_id,
+            number.as_i32()
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(DatabaseError::from)
+        .inspect_err(DatabaseError::log_internal)?;
+
+        let Some(id) = id else {
+            return Err(DatabaseError::not_found::<ChapterPage>());
+        };
+
+        Ok(id)
     }
 
     #[instrument(name = "db.chapter_page.exists", skip_all, fields(release.id = %release_id, page.id = %id))]

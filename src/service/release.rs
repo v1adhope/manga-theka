@@ -4,7 +4,7 @@ use uuid::Uuid;
 use crate::{
     entity::{
         ChapterPageParams, ChapterPageQuery, ChapterPages, ChapterRelease, ChapterReleaseQuery,
-        PageOrder, UPLOAD_CHUNK_SIZE,
+        Ordinal, PageOrder, UPLOAD_CHUNK_SIZE,
     },
     error::{ObjectStorageError, ServiceError},
     service::Service,
@@ -111,6 +111,22 @@ impl Service {
     ) -> Result<String, ServiceError> {
         self.database
             .ensure_chapter_page_exists(release_id, id)
+            .await?;
+
+        self.storage
+            .presign_chapter_page(id)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn presign_chapter_page_by_number(
+        &self,
+        release_id: Uuid,
+        number: Ordinal,
+    ) -> Result<String, ServiceError> {
+        let id = self
+            .database
+            .get_chapter_page_id(release_id, number)
             .await?;
 
         self.storage

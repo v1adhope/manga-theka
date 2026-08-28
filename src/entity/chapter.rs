@@ -11,7 +11,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(transparent)]
+#[serde(try_from = "f32")]
 pub struct ChapterNumber(f32);
 
 impl TryFrom<f32> for ChapterNumber {
@@ -39,7 +39,7 @@ impl ChapterNumber {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(transparent)]
+#[serde(try_from = "i16")]
 pub struct ChapterVolume(i16);
 
 impl TryFrom<i16> for ChapterVolume {
@@ -172,6 +172,19 @@ mod tests {
     }
 
     #[test]
+    fn deserialized_chapter_number_above_limit_is_rejected() {
+        let res = serde_json::from_str::<ChapterNumber>("100000.0");
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn chapter_number_serializes_as_a_bare_number() {
+        let number = ChapterNumber::try_from(12.5).unwrap();
+
+        assert_eq!(serde_json::to_string(&number).unwrap(), "12.5");
+    }
+
+    #[test]
     fn chapter_name_255_chars_is_valid() {
         let res = ChapterName::try_from("ё".repeat(255));
         assert!(res.is_ok());
@@ -211,5 +224,19 @@ mod tests {
     fn volume_above_limit_is_rejected() {
         let res = ChapterVolume::try_from(1_001);
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn deserialized_volume_out_of_range_is_rejected() {
+        for v in ["-1", "1001"] {
+            assert!(serde_json::from_str::<ChapterVolume>(v).is_err());
+        }
+    }
+
+    #[test]
+    fn volume_serializes_as_a_bare_number() {
+        let volume = ChapterVolume::try_from(3).unwrap();
+
+        assert_eq!(serde_json::to_string(&volume).unwrap(), "3");
     }
 }

@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select id\nfrom chapter_pages\nwhere release_id = $1 and sort_order = $2;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "chapter_pages",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "666162e3aa37e22ac88ece8740bb55d8f6a2f8b42cb93f47ab3579b623954bda"
+}
