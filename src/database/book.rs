@@ -7,9 +7,10 @@ use uuid::Uuid;
 use crate::{
     database::{Database, creator::CreatorRow, label::LabelRow},
     entity::{
-        AlternativeTitle, Book, BookCover, BookCoverQuery, BookKind, BookLink, BookLinkKind,
-        BookName, BookQuery, BookStatus, ContentRating, CoverUrl, Creator, DEFAULT_LIMIT,
-        Description, Filter, ImageExtension, Label, Language, Limit, LinkUrl,
+        AlternativeTitle, Book, BookCover, BookCoverQuery, BookCreators, BookKind, BookLabelIds,
+        BookLabels, BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus, BookTitles,
+        ContentRating, CoverUrl, Creator, DEFAULT_LIMIT, Description, Filter, ImageExtension,
+        Label, Language, Limit, LinkUrl,
     },
     error::DatabaseError,
 };
@@ -176,6 +177,14 @@ impl TryFrom<BookWithRelations> for BookQuery {
             .kind
             .parse()
             .map_err(|e| DatabaseError::invariant_corrupted("kind", e))?;
+        let labels = BookLabels::try_from(labels)
+            .map_err(|e| DatabaseError::invariant_corrupted("labels", e))?;
+        let links = BookLinks::try_from(links)
+            .map_err(|e| DatabaseError::invariant_corrupted("links", e))?;
+        let titles = BookTitles::try_from(titles)
+            .map_err(|e| DatabaseError::invariant_corrupted("titles", e))?;
+        let creators = BookCreators::try_from(creators)
+            .map_err(|e| DatabaseError::invariant_corrupted("creators", e))?;
 
         Ok(BookQuery {
             id: row.id,
@@ -206,13 +215,21 @@ impl TryFrom<BookWithRelations> for BookQuery {
 
 impl Database {
     #[instrument(name = "db.book.store", skip_all, fields(book.id = %item.id))]
-    pub async fn store_book(&self, item: &Book, label_ids: &[Uuid]) -> Result<(), DatabaseError> {
+    pub async fn store_book(
+        &self,
+        item: &Book,
+        label_ids: &BookLabelIds,
+    ) -> Result<(), DatabaseError> {
         self.store_book_inner(item, label_ids)
             .await
             .inspect_err(DatabaseError::log_internal)
     }
 
-    async fn store_book_inner(&self, item: &Book, label_ids: &[Uuid]) -> Result<(), DatabaseError> {
+    async fn store_book_inner(
+        &self,
+        item: &Book,
+        label_ids: &BookLabelIds,
+    ) -> Result<(), DatabaseError> {
         let mut tx = self.pool.begin().await?;
 
         sqlx::query_file!(
@@ -238,7 +255,11 @@ impl Database {
     }
 
     #[instrument(name = "db.book.update", skip_all, fields(book.id = %item.id))]
-    pub async fn update_book(&self, item: &Book, label_ids: &[Uuid]) -> Result<(), DatabaseError> {
+    pub async fn update_book(
+        &self,
+        item: &Book,
+        label_ids: &BookLabelIds,
+    ) -> Result<(), DatabaseError> {
         self.update_book_inner(item, label_ids)
             .await
             .inspect_err(DatabaseError::log_internal)
@@ -247,7 +268,7 @@ impl Database {
     async fn update_book_inner(
         &self,
         item: &Book,
-        label_ids: &[Uuid],
+        label_ids: &BookLabelIds,
     ) -> Result<(), DatabaseError> {
         let mut tx = self.pool.begin().await?;
 
@@ -495,7 +516,7 @@ impl Database {
     async fn store_book_relations(
         conn: &mut PgConnection,
         item: &Book,
-        label_ids: &[Uuid],
+        label_ids: &BookLabelIds,
     ) -> Result<(), DatabaseError> {
         Self::store_book_labels(&mut *conn, item.id, label_ids).await?;
         Self::store_book_links(&mut *conn, item).await?;
@@ -507,15 +528,19 @@ impl Database {
     async fn store_book_labels(
         conn: &mut PgConnection,
         book_id: Uuid,
-        label_ids: &[Uuid],
+        label_ids: &BookLabelIds,
     ) -> Result<(), DatabaseError> {
         if label_ids.is_empty() {
             return Ok(());
         }
 
-        sqlx::query_file!("queries/store_book_labels.sql", book_id, label_ids)
-            .execute(conn)
-            .await?;
+        sqlx::query_file!(
+            "queries/store_book_labels.sql",
+            book_id,
+            label_ids.as_slice()
+        )
+        .execute(conn)
+        .await?;
 
         Ok(())
     }
@@ -527,7 +552,7 @@ impl Database {
 
         let mut kinds: Vec<String> = Vec::with_capacity(item.links.len());
         let mut urls: Vec<String> = Vec::with_capacity(item.links.len());
-        for link in &item.links {
+        for link in item.links.as_slice() {
             kinds.push(link.kind.as_ref().to_owned());
             urls.push(link.url.as_ref().to_owned());
         }
@@ -546,7 +571,7 @@ impl Database {
 
         let mut language_ids: Vec<Uuid> = Vec::with_capacity(item.titles.len());
         let mut names: Vec<String> = Vec::with_capacity(item.titles.len());
-        for title in &item.titles {
+        for title in item.titles.as_slice() {
             language_ids.push(title.language_id);
             names.push(title.name.as_ref().to_owned());
         }

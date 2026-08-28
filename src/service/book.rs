@@ -1,13 +1,17 @@
 use uuid::Uuid;
 
 use crate::{
-    entity::{Book, BookCover, BookCoverQuery, BookQuery, Filter},
+    entity::{Book, BookCover, BookCoverQuery, BookLabelIds, BookQuery, Filter},
     error::ServiceError,
     service::Service,
 };
 
 impl Service {
-    pub async fn store_book(&self, item: Book, label_ids: Vec<Uuid>) -> Result<(), ServiceError> {
+    pub async fn store_book(
+        &self,
+        item: Book,
+        label_ids: BookLabelIds,
+    ) -> Result<(), ServiceError> {
         self.database
             .store_book(&item, &label_ids)
             .await
@@ -25,7 +29,11 @@ impl Service {
         self.database.get_books(&filter).await.map_err(Into::into)
     }
 
-    pub async fn update_book(&self, item: Book, label_ids: Vec<Uuid>) -> Result<(), ServiceError> {
+    pub async fn update_book(
+        &self,
+        item: Book,
+        label_ids: BookLabelIds,
+    ) -> Result<(), ServiceError> {
         self.database
             .update_book(&item, &label_ids)
             .await

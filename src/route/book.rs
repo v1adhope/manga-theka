@@ -10,8 +10,8 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        AlternativeTitle, Book, BookCover, BookKind, BookLink, BookLinkKind, BookName, BookQuery,
-        BookStatus, Description, Filter, LinkUrl,
+        AlternativeTitle, Book, BookCover, BookKind, BookLabelIds, BookLink, BookLinkKind,
+        BookLinks, BookName, BookQuery, BookStatus, BookTitles, Description, Filter, LinkUrl,
     },
     error::{AppError, EntityError, RouteError},
     route::{PaginationQuery, StoreResp, collect_image_part, json_data_response, json_response},
@@ -57,7 +57,7 @@ struct BookWithRelations {
     created_at: OffsetDateTime,
 }
 
-impl TryFrom<BookWithRelations> for (Book, Vec<Uuid>) {
+impl TryFrom<BookWithRelations> for (Book, BookLabelIds) {
     type Error = EntityError;
 
     fn try_from(item: BookWithRelations) -> Result<Self, Self::Error> {
@@ -106,13 +106,13 @@ impl TryFrom<BookWithRelations> for (Book, Vec<Uuid>) {
             status,
             kind,
             publication_language_id,
-            links,
-            titles,
+            links: BookLinks::try_from(links)?,
+            titles: BookTitles::try_from(titles)?,
             updated_at,
             created_at,
         };
 
-        Ok((book, label_ids))
+        Ok((book, BookLabelIds::try_from(label_ids)?))
     }
 }
 
@@ -122,7 +122,7 @@ pub async fn store_book(
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let id = Uuid::now_v7();
     let created_at = OffsetDateTime::now_utc();
-    let (book, label_ids): (Book, Vec<Uuid>) = BookWithRelations {
+    let (book, label_ids): (Book, BookLabelIds) = BookWithRelations {
         req,
         id,
         updated_at: None,
@@ -141,7 +141,7 @@ pub async fn update_book(
     Json(req): Json<BookReq>,
 ) -> Result<StatusCode, AppError> {
     let updated_at = OffsetDateTime::now_utc();
-    let (book, label_ids): (Book, Vec<Uuid>) = BookWithRelations {
+    let (book, label_ids): (Book, BookLabelIds) = BookWithRelations {
         req,
         id,
         updated_at: Some(updated_at),

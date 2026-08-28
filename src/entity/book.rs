@@ -6,11 +6,17 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        ContentRating, Creator, Entity, Image, ImageExtension, Label, Language, ResourceUrl,
-        validate_name,
+        Bounded, BoundedVec, ContentRating, Creator, Entity, Image, ImageExtension, Label,
+        Language, ResourceUrl, validate_name,
     },
     error::EntityError,
 };
+
+pub const MAX_BOOK_LINKS: usize = 12;
+pub const MAX_BOOK_TITLES: usize = 12;
+// Matches the total number of rows seeded in the `labels` table.
+pub const MAX_BOOK_LABELS: usize = 31;
+pub const MAX_BOOK_CREATORS: usize = 20;
 
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
 pub enum BookStatus {
@@ -187,8 +193,8 @@ pub struct Book {
     pub status: BookStatus,
     pub kind: BookKind,
     pub publication_language_id: Uuid,
-    pub links: Vec<BookLink>,
-    pub titles: Vec<AlternativeTitle>,
+    pub links: BookLinks,
+    pub titles: BookTitles,
     pub updated_at: Option<OffsetDateTime>,
     pub created_at: OffsetDateTime,
 }
@@ -208,10 +214,10 @@ pub struct BookQuery {
     pub status: BookStatus,
     pub kind: BookKind,
     pub publication_language: Language,
-    pub labels: Vec<Label>,
-    pub links: Vec<BookLink>,
-    pub titles: Vec<AlternativeTitle>,
-    pub creators: Vec<Creator>,
+    pub labels: BookLabels,
+    pub links: BookLinks,
+    pub titles: BookTitles,
+    pub creators: BookCreators,
     #[serde(with = "time::serde::rfc3339::option")]
     pub updated_at: Option<OffsetDateTime>,
     #[serde(with = "time::serde::rfc3339")]
@@ -231,6 +237,43 @@ pub struct AlternativeTitle {
     pub language_id: Uuid,
     pub name: BookName,
 }
+
+pub struct BookLinksBound;
+
+impl Bounded for BookLinksBound {
+    const MAX: usize = MAX_BOOK_LINKS;
+    const NAME: &'static str = "book links";
+}
+
+pub type BookLinks = BoundedVec<BookLink, BookLinksBound>;
+
+pub struct BookTitlesBound;
+
+impl Bounded for BookTitlesBound {
+    const MAX: usize = MAX_BOOK_TITLES;
+    const NAME: &'static str = "alternative titles";
+}
+
+pub type BookTitles = BoundedVec<AlternativeTitle, BookTitlesBound>;
+
+pub struct BookLabelsBound;
+
+impl Bounded for BookLabelsBound {
+    const MAX: usize = MAX_BOOK_LABELS;
+    const NAME: &'static str = "book labels";
+}
+
+pub type BookLabels = BoundedVec<Label, BookLabelsBound>;
+pub type BookLabelIds = BoundedVec<Uuid, BookLabelsBound>;
+
+pub struct BookCreatorsBound;
+
+impl Bounded for BookCreatorsBound {
+    const MAX: usize = MAX_BOOK_CREATORS;
+    const NAME: &'static str = "book creators";
+}
+
+pub type BookCreators = BoundedVec<Creator, BookCreatorsBound>;
 
 #[derive(Debug)]
 pub struct BookCover {
@@ -259,7 +302,94 @@ pub struct BookCoverQuery {
 
 #[cfg(test)]
 mod tests {
-    use crate::entity::{BookName, Description, LinkUrl};
+    use time::OffsetDateTime;
+    use uuid::Uuid;
+
+    use crate::entity::{
+        AlternativeTitle, BookCreators, BookLabelIds, BookLink, BookLinkKind, BookLinks, BookName,
+        BookTitles, Creator, CreatorRole, Description, LinkUrl, MAX_BOOK_CREATORS, MAX_BOOK_LABELS,
+        MAX_BOOK_LINKS, MAX_BOOK_TITLES, Name,
+    };
+
+    fn sample_link() -> BookLink {
+        BookLink {
+            kind: BookLinkKind::WhereToRead,
+            url: LinkUrl::try_from("https://example.com/read".to_owned()).unwrap(),
+        }
+    }
+
+    fn sample_title() -> AlternativeTitle {
+        AlternativeTitle {
+            language_id: Uuid::now_v7(),
+            name: BookName::try_from("Alt title".to_owned()).unwrap(),
+        }
+    }
+
+    fn sample_creator() -> Creator {
+        Creator {
+            id: Uuid::now_v7(),
+            first_name: Name::try_from("Jane".to_owned()).unwrap(),
+            last_name: Name::try_from("Doe".to_owned()).unwrap(),
+            role: CreatorRole::Author,
+            created_at: OffsetDateTime::now_utc(),
+        }
+    }
+
+    #[test]
+    fn book_links_at_the_ceiling_is_valid() {
+        let links: Vec<BookLink> = (0..MAX_BOOK_LINKS).map(|_| sample_link()).collect();
+
+        assert!(BookLinks::try_from(links).is_ok());
+    }
+
+    #[test]
+    fn book_links_over_the_ceiling_is_rejected() {
+        let links: Vec<BookLink> = (0..=MAX_BOOK_LINKS).map(|_| sample_link()).collect();
+
+        assert!(BookLinks::try_from(links).is_err());
+    }
+
+    #[test]
+    fn book_titles_at_the_ceiling_is_valid() {
+        let titles: Vec<AlternativeTitle> = (0..MAX_BOOK_TITLES).map(|_| sample_title()).collect();
+
+        assert!(BookTitles::try_from(titles).is_ok());
+    }
+
+    #[test]
+    fn book_titles_over_the_ceiling_is_rejected() {
+        let titles: Vec<AlternativeTitle> = (0..=MAX_BOOK_TITLES).map(|_| sample_title()).collect();
+
+        assert!(BookTitles::try_from(titles).is_err());
+    }
+
+    #[test]
+    fn book_label_ids_at_the_ceiling_is_valid() {
+        let ids: Vec<Uuid> = (0..MAX_BOOK_LABELS).map(|_| Uuid::now_v7()).collect();
+
+        assert!(BookLabelIds::try_from(ids).is_ok());
+    }
+
+    #[test]
+    fn book_label_ids_over_the_ceiling_is_rejected() {
+        let ids: Vec<Uuid> = (0..=MAX_BOOK_LABELS).map(|_| Uuid::now_v7()).collect();
+
+        assert!(BookLabelIds::try_from(ids).is_err());
+    }
+
+    #[test]
+    fn book_creators_at_the_ceiling_is_valid() {
+        let creators: Vec<Creator> = (0..MAX_BOOK_CREATORS).map(|_| sample_creator()).collect();
+
+        assert!(BookCreators::try_from(creators).is_ok());
+    }
+
+    #[test]
+    fn book_creators_over_the_ceiling_is_rejected() {
+        let creators: Vec<Creator> = (0..=MAX_BOOK_CREATORS).map(|_| sample_creator()).collect();
+
+        assert!(BookCreators::try_from(creators).is_err());
+    }
 
     #[test]
     fn book_name_255_chars_is_valid() {

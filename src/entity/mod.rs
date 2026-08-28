@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::EntityError;
 
 mod book;
+mod bounded_vec;
 mod chapter;
 mod content_rating;
 mod creator;
@@ -14,6 +15,7 @@ mod release;
 mod resource_url;
 
 pub use book::*;
+pub use bounded_vec::*;
 pub use chapter::*;
 pub use content_rating::*;
 pub use creator::*;

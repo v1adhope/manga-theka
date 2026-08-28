@@ -43,8 +43,8 @@ async fn store_chapter_with_valid_body_passes() {
     assert_eq!(got.name, chapter.name);
     assert_eq!(got.volume, chapter.volume);
     assert_eq!(
-        localization_keys(&got.localizations),
-        localization_keys(&chapter.localizations)
+        localization_keys(got.localizations.as_slice()),
+        localization_keys(chapter.localizations.as_slice())
     );
     assert!(got.updated_at.is_none());
     assert_ne!(got.created_at, time::OffsetDateTime::UNIX_EPOCH);
@@ -206,8 +206,8 @@ async fn get_chapter_with_valid_id_embeds_its_localizations() {
     assert_eq!(got.name, chapter.name);
     assert_eq!(got.volume, chapter.volume);
     assert_eq!(
-        localization_keys(&got.localizations),
-        localization_keys(&chapter.localizations)
+        localization_keys(got.localizations.as_slice()),
+        localization_keys(chapter.localizations.as_slice())
     );
     assert_eq!(got.updated_at, chapter.updated_at);
 }
@@ -401,8 +401,8 @@ async fn get_chapters_embeds_each_chapters_own_localizations() {
 
     let got_full = listed.data.iter().find(|c| c.id == full.id).unwrap();
     assert_eq!(
-        localization_keys(&got_full.localizations),
-        localization_keys(&full.localizations)
+        localization_keys(got_full.localizations.as_slice()),
+        localization_keys(full.localizations.as_slice())
     );
 }
 
@@ -496,8 +496,8 @@ async fn update_chapter_with_valid_body_passes() {
     assert_eq!(got.name, updated.name);
     assert_eq!(got.volume, updated.volume);
     assert_eq!(
-        localization_keys(&got.localizations),
-        localization_keys(&updated.localizations),
+        localization_keys(got.localizations.as_slice()),
+        localization_keys(updated.localizations.as_slice()),
         "localizations must be replaced wholesale"
     );
     assert!(got.updated_at.is_some());

@@ -305,10 +305,10 @@ impl Dummy<BookFaker> for BookQuery {
             status: BookStatusFaker.fake_with_rng(rng),
             kind: BookKindFaker.fake_with_rng(rng),
             publication_language: LanguageFaker.fake_with_rng(rng),
-            labels,
-            links,
-            titles,
-            creators,
+            labels: labels.try_into().expect("too many labels in faker"),
+            links: links.try_into().expect("too many links in faker"),
+            titles: titles.try_into().expect("too many titles in faker"),
+            creators: creators.try_into().expect("too many creators in faker"),
             updated_at: None,
             created_at: OffsetDateTime::UNIX_EPOCH,
         }
@@ -375,7 +375,9 @@ impl Dummy<ChapterFaker> for Chapter {
             number: ChapterNumberFaker.fake_with_rng(rng),
             name: Some(ChapterNameFaker.fake_with_rng(rng)),
             volume: Some(ChapterVolume::try_from(rng.random_range(0..=200)).unwrap()),
-            localizations,
+            localizations: localizations
+                .try_into()
+                .expect("too many localizations in faker"),
             updated_at: None,
             created_at: OffsetDateTime::UNIX_EPOCH,
         }

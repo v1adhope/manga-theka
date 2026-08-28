@@ -31,7 +31,7 @@ async fn store_book_with_valid_body_passes() {
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
-        "labelIds": book.labels.iter().map(|l| l.id).collect::<Vec<_>>(),
+        "labelIds": book.labels.as_slice().iter().map(|l| l.id).collect::<Vec<_>>(),
         "links": &book.links,
         "titles": &book.titles,
     })
@@ -54,9 +54,18 @@ async fn store_book_with_valid_body_passes() {
     assert_eq!(got.status, book.status);
     assert_eq!(got.kind, book.kind);
     assert_eq!(got.publication_language.id, book.publication_language.id);
-    assert_eq!(label_keys(&got.labels), label_keys(&book.labels));
-    assert_eq!(link_keys(&got.links), link_keys(&book.links));
-    assert_eq!(title_keys(&got.titles), title_keys(&book.titles));
+    assert_eq!(
+        label_keys(got.labels.as_slice()),
+        label_keys(book.labels.as_slice())
+    );
+    assert_eq!(
+        link_keys(got.links.as_slice()),
+        link_keys(book.links.as_slice())
+    );
+    assert_eq!(
+        title_keys(got.titles.as_slice()),
+        title_keys(book.titles.as_slice())
+    );
     assert!(got.creators.is_empty());
     assert!(got.updated_at.is_none());
     assert_ne!(got.created_at, time::OffsetDateTime::UNIX_EPOCH);
@@ -228,9 +237,18 @@ async fn get_book_with_valid_id_passes() {
         got.publication_language.name,
         book.publication_language.name
     );
-    assert_eq!(label_keys(&got.labels), label_keys(&book.labels));
-    assert_eq!(link_keys(&got.links), link_keys(&book.links));
-    assert_eq!(title_keys(&got.titles), title_keys(&book.titles));
+    assert_eq!(
+        label_keys(got.labels.as_slice()),
+        label_keys(book.labels.as_slice())
+    );
+    assert_eq!(
+        link_keys(got.links.as_slice()),
+        link_keys(book.links.as_slice())
+    );
+    assert_eq!(
+        title_keys(got.titles.as_slice()),
+        title_keys(book.titles.as_slice())
+    );
     assert!(got.creators.is_empty());
     assert_eq!(got.updated_at, book.updated_at);
     assert_eq!(
@@ -295,9 +313,18 @@ async fn get_books_embeds_each_books_own_arrays() {
     assert_eq!(listed.data.len(), 2);
 
     let got_full = listed.data.iter().find(|b| b.id == full.id).unwrap();
-    assert_eq!(label_keys(&got_full.labels), label_keys(&full.labels));
-    assert_eq!(link_keys(&got_full.links), link_keys(&full.links));
-    assert_eq!(title_keys(&got_full.titles), title_keys(&full.titles));
+    assert_eq!(
+        label_keys(got_full.labels.as_slice()),
+        label_keys(full.labels.as_slice())
+    );
+    assert_eq!(
+        link_keys(got_full.links.as_slice()),
+        link_keys(full.links.as_slice())
+    );
+    assert_eq!(
+        title_keys(got_full.titles.as_slice()),
+        title_keys(full.titles.as_slice())
+    );
 
     let got_bare = listed.data.iter().find(|b| b.id == bare.id).unwrap();
     assert_eq!(got_bare.content_rating, bare.content_rating);
@@ -435,7 +462,7 @@ async fn update_book_with_valid_body_passes() {
         "status": updated.status.as_ref(),
         "kind": updated.kind.as_ref(),
         "publicationLanguageId": updated.publication_language.id,
-        "labelIds": updated.labels.iter().map(|l| l.id).collect::<Vec<_>>(),
+        "labelIds": updated.labels.as_slice().iter().map(|l| l.id).collect::<Vec<_>>(),
         "links": &updated.links,
         "titles": &updated.titles,
     })
@@ -459,18 +486,18 @@ async fn update_book_with_valid_body_passes() {
     assert_eq!(got.publication_language.id, updated.publication_language.id);
 
     assert_eq!(
-        label_keys(&got.labels),
-        label_keys(&updated.labels),
+        label_keys(got.labels.as_slice()),
+        label_keys(updated.labels.as_slice()),
         "arrays must be replaced wholesale"
     );
     assert_eq!(
-        link_keys(&got.links),
-        link_keys(&updated.links),
+        link_keys(got.links.as_slice()),
+        link_keys(updated.links.as_slice()),
         "arrays must be replaced wholesale"
     );
     assert_eq!(
-        title_keys(&got.titles),
-        title_keys(&updated.titles),
+        title_keys(got.titles.as_slice()),
+        title_keys(updated.titles.as_slice()),
         "arrays must be replaced wholesale"
     );
     assert!(got.updated_at.is_some());
@@ -661,14 +688,14 @@ async fn delete_book_leaves_other_books_untouched() {
         ..Default::default()
     }
     .fake();
-    book.labels.push(labels.clone());
+    book.labels = vec![labels.clone()].try_into().unwrap();
 
     let mut other: BookQuery = BookFaker {
         labels: 0..=0,
         ..Default::default()
     }
     .fake();
-    other.labels.push(labels);
+    other.labels = vec![labels].try_into().unwrap();
 
     app.insert_book(&book).await;
     app.insert_book(&other).await;

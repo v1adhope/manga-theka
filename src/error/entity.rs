@@ -70,9 +70,6 @@ pub enum EntityError {
     #[error("Page order can't be empty")]
     PageOrderIsEmpty,
 
-    #[error("Page order of {0} pages exceeds the {1}-page limit")]
-    PageOrderExceedsLimit(usize, usize),
-
     #[error("Page '{0}' is declared more than once")]
     PageOrderHasDuplicates(Uuid),
 
@@ -84,6 +81,9 @@ pub enum EntityError {
 
     #[error("Release already holds {0} of {1} allowed pages")]
     ReleaseRowsExceedLimit(usize, usize),
+
+    #[error("{0}: {1} items exceed the {2}-item limit")]
+    CollectionExceedsLimit(&'static str, usize, usize),
 
     #[error("Image exceeds the {0}-byte limit")]
     ImageExceedsByteLimit(usize),

@@ -189,7 +189,7 @@ impl Database {
         Ok(())
     }
 
-    #[instrument(name = "db.chapter_release.commit", skip_all, fields(release.id = %id, pages = order.as_slice().len()))]
+    #[instrument(name = "db.chapter_release.commit", skip_all, fields(release.id = %id, pages = order.len()))]
     pub async fn commit_chapter_release(
         &self,
         id: Uuid,
@@ -219,7 +219,7 @@ impl Database {
             .execute(&mut *tx)
             .await?;
 
-        if ordered.rows_affected() as usize != order.as_slice().len() {
+        if ordered.rows_affected() as usize != order.len() {
             return Err(DatabaseError::PageOrderIsForeign);
         }
 
@@ -260,7 +260,7 @@ impl Database {
         Ok(())
     }
 
-    #[instrument(name = "db.chapter_page.store_many", skip_all, fields(release.id = %item.release_id, pages = item.images.as_slice().len()))]
+    #[instrument(name = "db.chapter_page.store_many", skip_all, fields(release.id = %item.release_id, pages = item.images.len()))]
     pub async fn store_chapter_pages(&self, item: &ChapterPages) -> Result<(), DatabaseError> {
         let images = item.images.as_slice();
         let mut ids = Vec::with_capacity(images.len());
