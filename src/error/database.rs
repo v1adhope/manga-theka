@@ -307,6 +307,36 @@ impl From<sqlx::Error> for DatabaseError {
                         source: err,
                     };
                 }
+                Some("enum_feedback_kind") => {
+                    return Self::DoesNotExist {
+                        field: "Feedback kind",
+                        source: err,
+                    };
+                }
+                Some("enum_feedback_status") => {
+                    return Self::DoesNotExist {
+                        field: "Feedback status",
+                        source: err,
+                    };
+                }
+                Some("check_length_feedback_email") => {
+                    return Self::OutOfRange {
+                        field: "Feedback email",
+                        source: err,
+                    };
+                }
+                Some("check_length_feedback_note") => {
+                    return Self::OutOfRange {
+                        field: "Feedback note",
+                        source: err,
+                    };
+                }
+                Some("fk_feedback_books_book_id") => {
+                    return Self::DoesNotExist {
+                        field: "Feedback book",
+                        source: err,
+                    };
+                }
                 _ => {}
             }
         }

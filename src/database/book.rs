@@ -9,8 +9,8 @@ use crate::{
     entity::{
         AlternativeTitle, Book, BookCover, BookCoverQuery, BookCreatorsQuery, BookKind, BookLabels,
         BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus, BookTitles,
-        ContentRating, CoverUrl, CreatorQuery, DEFAULT_LIMIT, Description, Filter, ImageExtension,
-        Label, Language, Limit, LinkUrl,
+        ContentRating, CoverUrl, CreatorQuery, DEFAULT_LIMIT, Filter, ImageExtension, Label,
+        Language, Limit, LinkUrl, Text,
     },
     error::DatabaseError,
 };
@@ -169,7 +169,7 @@ impl TryFrom<BookWithRelations> for BookQuery {
 
         let name = BookName::try_from(row.name)
             .map_err(|e| DatabaseError::invariant_corrupted("name", e))?;
-        let description = Description::try_from(row.description)
+        let description = Text::try_from(row.description)
             .map_err(|e| DatabaseError::invariant_corrupted("description", e))?;
         let status: BookStatus = row
             .status

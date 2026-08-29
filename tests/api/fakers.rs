@@ -3,14 +3,15 @@ use std::sync::LazyLock;
 
 use fake::Dummy;
 use fake::Fake;
-use fake::faker::internet::en::DomainSuffix;
+use fake::faker::internet::en::{DomainSuffix, SafeEmail};
 use fake::faker::lorem::en::{Sentence, Word};
 use fake::faker::name::en::FirstName;
 use fake::rand::RngExt;
 use manga_theka::entity::{
     AlternativeTitle, BookKind, BookLink, BookLinkKind, BookName, BookQuery, BookStatus, Chapter,
     ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume, ContentRating, Creator,
-    CreatorQuery, CreatorRole, Description, Label, LabelKind, Language, LinkUrl, Name,
+    CreatorQuery, CreatorRole, Email, Feedback, FeedbackKind, FeedbackStatus, Label, LabelKind,
+    Language, LinkUrl, Name, Text,
 };
 use time::OffsetDateTime;
 use uuid::{Uuid, uuid};
@@ -200,12 +201,60 @@ impl Dummy<BookNameFaker> for BookName {
     }
 }
 
-pub struct DescriptionFaker;
+pub struct TextFaker;
 
-impl Dummy<DescriptionFaker> for Description {
-    fn dummy_with_rng<R: RngExt + ?Sized>(_config: &DescriptionFaker, rng: &mut R) -> Self {
+impl Dummy<TextFaker> for Text {
+    fn dummy_with_rng<R: RngExt + ?Sized>(_config: &TextFaker, rng: &mut R) -> Self {
         let description = Sentence(5..12).fake_with_rng::<String, R>(rng);
-        Description::try_from(description).unwrap()
+        Text::try_from(description).unwrap()
+    }
+}
+
+pub struct EmailFaker;
+
+impl Dummy<EmailFaker> for Email {
+    fn dummy_with_rng<R: RngExt + ?Sized>(_config: &EmailFaker, rng: &mut R) -> Self {
+        let address = SafeEmail().fake_with_rng::<String, R>(rng);
+        Email::try_from(address).unwrap()
+    }
+}
+
+pub struct FeedbackFaker {
+    pub kind: FeedbackKind,
+    pub status: FeedbackStatus,
+    pub book_id: Option<Uuid>,
+}
+
+impl Default for FeedbackFaker {
+    fn default() -> Self {
+        FeedbackFaker {
+            kind: FeedbackKind::General,
+            status: FeedbackStatus::Open,
+            book_id: None,
+        }
+    }
+}
+
+impl Dummy<FeedbackFaker> for Feedback {
+    fn dummy_with_rng<R: RngExt + ?Sized>(config: &FeedbackFaker, rng: &mut R) -> Self {
+        Feedback {
+            id: Uuid::now_v7(),
+            kind: match config.kind {
+                FeedbackKind::Report => FeedbackKind::Report,
+                FeedbackKind::Correction => FeedbackKind::Correction,
+                FeedbackKind::General => FeedbackKind::General,
+            },
+            status: match config.status {
+                FeedbackStatus::Open => FeedbackStatus::Open,
+                FeedbackStatus::Resolved => FeedbackStatus::Resolved,
+                FeedbackStatus::Dismissed => FeedbackStatus::Dismissed,
+            },
+            email: EmailFaker.fake_with_rng(rng),
+            note: TextFaker.fake_with_rng(rng),
+            book_id: config.book_id,
+            updated_at: None,
+            created_at: OffsetDateTime::UNIX_EPOCH,
+        }
     }
 }
 
@@ -321,7 +370,7 @@ impl Dummy<BookFaker> for BookQuery {
         BookQuery {
             id: Uuid::now_v7(),
             name: BookNameFaker.fake_with_rng(rng),
-            description: DescriptionFaker.fake_with_rng(rng),
+            description: TextFaker.fake_with_rng(rng),
             publication_year: rng.random_range(1950..=2026),
             content_rating: ContentRatingFaker.fake_with_rng(rng),
             status: BookStatusFaker.fake_with_rng(rng),

@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::{
     entity::{
         Bounded, BoundedVec, ContentRating, CreatorQuery, CreatorRole, Entity, Image,
-        ImageExtension, Label, Language, ResourceUrl, validate_name,
+        ImageExtension, Label, Language, ResourceUrl, Text, validate_name,
     },
     error::EntityError,
 };
@@ -131,30 +131,6 @@ impl AsRef<str> for BookName {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct Description(String);
-
-impl TryFrom<String> for Description {
-    type Error = EntityError;
-
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        if s.trim().is_empty() {
-            return Err(EntityError::DescriptionIsEmptyOrWhitespace);
-        }
-        if s.chars().count() > 2000 {
-            return Err(EntityError::DescriptionExceedsCharLimit);
-        }
-        Ok(Self(s))
-    }
-}
-
-impl AsRef<str> for Description {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[serde(transparent)]
 pub struct LinkUrl(Url);
 
 impl TryFrom<String> for LinkUrl {
@@ -187,7 +163,7 @@ impl AsRef<str> for LinkUrl {
 pub struct Book {
     pub id: Uuid,
     pub name: BookName,
-    pub description: Description,
+    pub description: Text,
     pub publication_year: i16,
     pub content_rating_id: Uuid,
     pub status: BookStatus,
@@ -210,7 +186,7 @@ impl Entity for Book {
 pub struct BookQuery {
     pub id: Uuid,
     pub name: BookName,
-    pub description: Description,
+    pub description: Text,
     pub publication_year: i16,
     pub content_rating: ContentRating,
     pub status: BookStatus,
@@ -317,7 +293,7 @@ mod tests {
 
     use crate::entity::{
         AlternativeTitle, BookCreatorsQuery, BookLabelIds, BookLink, BookLinkKind, BookLinks,
-        BookName, BookTitles, CreatorQuery, CreatorRole, Description, LinkUrl, MAX_BOOK_CREATORS,
+        BookName, BookTitles, CreatorQuery, CreatorRole, LinkUrl, MAX_BOOK_CREATORS,
         MAX_BOOK_LABELS, MAX_BOOK_LINKS, MAX_BOOK_TITLES, Name,
     };
 
@@ -437,30 +413,6 @@ mod tests {
     fn book_name_with_digits_and_punctuation_is_valid() {
         let res = BookName::try_from("Re:Zero - Chapter 12.5!".to_owned());
         assert!(res.is_ok());
-    }
-
-    #[test]
-    fn description_2000_chars_is_valid() {
-        let res = Description::try_from("ё".repeat(2000));
-        assert!(res.is_ok());
-    }
-
-    #[test]
-    fn description_longer_2001_chars_is_rejected() {
-        let res = Description::try_from("ё".repeat(2001));
-        assert!(res.is_err());
-    }
-
-    #[test]
-    fn whitespace_only_description_is_rejected() {
-        let res = Description::try_from(" ".to_owned());
-        assert!(res.is_err());
-    }
-
-    #[test]
-    fn empty_description_is_rejected() {
-        let res = Description::try_from(String::new());
-        assert!(res.is_err());
     }
 
     #[test]

@@ -12,7 +12,7 @@ use crate::{
     entity::{
         AlternativeTitle, Book, BookCover, BookCreator, BookCreators, BookKind, BookLabelIds,
         BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus, BookTitles,
-        CreatorRole, Description, Filter, LinkUrl,
+        CreatorRole, Filter, LinkUrl, Text,
     },
     error::{AppError, EntityError, RouteError},
     route::{PaginationQuery, StoreResp, collect_image_part, json_data_response, json_response},
@@ -119,7 +119,7 @@ impl TryFrom<BookWithRelations> for Book {
         Ok(Book {
             id,
             name: BookName::try_from(name)?,
-            description: Description::try_from(description)?,
+            description: Text::try_from(description)?,
             publication_year,
             content_rating_id,
             status,

@@ -40,11 +40,23 @@ pub enum EntityError {
     #[error("Image must be JPEG, PNG, or WebP")]
     UnsupportedImageFormat,
 
-    #[error("Description can't be empty or whitespace")]
-    DescriptionIsEmptyOrWhitespace,
+    #[error("Text can't be empty or whitespace")]
+    TextIsEmptyOrWhitespace,
 
-    #[error("Description exceeds the 2000-character limit")]
-    DescriptionExceedsCharLimit,
+    #[error("Text exceeds the 2000-character limit")]
+    TextExceedsCharLimit,
+
+    #[error("Email is not a well-formed address")]
+    EmailIsMalformed,
+
+    #[error("Email exceeds the 254-character limit")]
+    EmailExceedsCharLimit,
+
+    #[error("'{0}' is not a valid feedback kind")]
+    InvalidFeedbackKind(String),
+
+    #[error("'{0}' is not a valid feedback status")]
+    InvalidFeedbackStatus(String),
 
     #[error("Link url '{0}...' exceeds the 2048-character limit")]
     LinkUrlExceedsCharLimit(String),

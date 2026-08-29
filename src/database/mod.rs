@@ -2,6 +2,7 @@ mod book;
 mod chapter;
 mod content_rating;
 mod creator;
+mod feedback;
 mod label;
 mod language;
 mod release;
