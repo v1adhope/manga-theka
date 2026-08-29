@@ -13,7 +13,7 @@ The author or artist of a manga title -- a metadata subject, not an account oper
 _Avoid_: Author (when used to encompass artists), contributor
 
 **Guest**:
-An anonymous visitor with no account. Can read content; has no `Role` and no `Session`.
+An anonymous visitor with no account. Can read content and submit `Feedback`; has no `Role` and no `Session`.
 _Avoid_: Anonymous, visitor
 
 ## Authorization
@@ -23,10 +23,10 @@ A capability badge held by a `User`, stored as a per-user set. Four values: `Rea
 _Avoid_: Permission, scope, claim
 
 **Reader**:
-The default `Role` on signup; gates personal features -- creating and managing bookmark lists, managing one's own account, and submitting reports for changes (e.g. corrections, metadata fixes).
+The default `Role` on signup; gates personal features -- creating and managing bookmark lists, managing one's own account, and proposing a new `Book` as a `Draft` and sending it for review (see `Book Visibility`).
 
 **Uploader**:
-A `Role` gating content-write endpoints -- a Contributor who may upload and edit content.
+A `Role` gating content-write endpoints -- editing an already-`Listed` `Book` and uploading its `Chapter`s, `Chapter Release`s, and `Chapter Page`s.
 _Avoid_: Mod, Contributor (as a separate concept)
 
 **Moderator**:
@@ -59,7 +59,7 @@ The publication format of a `Book` -- `Manga`, `Manhwa`, or `Manhua`. A closed, 
 _Avoid_: Type, Format, Origin, Demographic
 
 **Book Status**:
-The publication state of the work behind a `Book` -- `Ongoing`, `Completed`, `Hiatus`, or `Cancelled`. A closed, fixed set; exactly one per `Book`. Describes the work's own progress, not the catalog record's moderation or visibility state.
+The publication state of the work behind a `Book` -- `Ongoing`, `Completed`, `Hiatus`, or `Cancelled`. A closed, fixed set; exactly one per `Book`. Describes the work's own progress, not the catalog record's moderation or visibility state -- that is `Book Visibility`.
 _Avoid_: State, Availability, Progress
 
 **Content Rating**:
@@ -119,3 +119,17 @@ _Avoid_: Page image, Scan page
 **Staged Page**:
 An image uploaded into a `Chapter Release` but not yet given a `Sort Order`, and so not yet part of what readers see. Becomes a `Chapter Page` when a declared order includes it, and ceases to exist when one leaves it out.
 _Avoid_: Draft page, Pending page, Unordered page
+
+## Moderation
+
+**Book Visibility**:
+The lifecycle state of a `Book` as a catalog record, separate from `Book Status` -- `Draft` (being assembled, not yet submitted), `PendingReview` (submitted, awaiting a `Moderator`), `Listed` (approved and public), `Rejected` (declined and not retained), or `Hidden` (removed from public view by a `Moderator`). A closed, fixed set; exactly one per `Book`. Only a `Book`'s submitter can move it from `Draft` to `PendingReview`; a `Moderator` owns every other transition.
+_Avoid_: Status, State, Scope, Publication state, Published (see `Chapter Release`), Draft/Listed/Hidden as standalone terms
+
+**Review Note**:
+The single submitter-visible message carried by a `Book`, explaining its current `Book Visibility` -- why it was `Rejected` or `Hidden`, what to change before resubmitting, or an acknowledgement that it is awaiting review. One per `Book`, replaced whenever the note changes. Not a private staff annotation.
+_Avoid_: Comment, Reason, Moderation note, Internal note
+
+**Feedback**:
+An inbound message from a `Guest` or `User`, no `Role` required, carrying a reply-to email and a note. One of three `kind`s: `Report` (flags a specific `Book` for a removal-worthy problem), `Correction` (a proposed metadata fix for a specific `Book`), or `General` (site-wide feedback tied to no `Book` -- a bug report, a feature request, a question, or a message to the operators); the first two reference a `Book`, `General` does not. Progresses through `Open`, `Resolved`, and `Dismissed`, and is always retained.
+_Avoid_: Complaint, Report (as the entity name), Ticket, Flag
