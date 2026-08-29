@@ -9,7 +9,7 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
-    entity::{Creator, Filter, Name},
+    entity::{Creator, CreatorQuery, Filter, Name},
     error::{AppError, EntityError},
     route::{PaginationQuery, StoreResp, json_data_response, json_response},
     service::Service,
@@ -66,7 +66,7 @@ pub async fn update_creator(
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetCreatorsResp {
-    pub data: Vec<Creator>,
+    pub data: Vec<CreatorQuery>,
     pub next_cursor: Option<Uuid>,
 }
 

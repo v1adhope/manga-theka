@@ -4,31 +4,41 @@ use uuid::Uuid;
 
 use crate::{
     database::Database,
-    entity::{Creator, DEFAULT_LIMIT, Filter, Limit, Name},
+    entity::{Creator, CreatorQuery, CreatorRole, DEFAULT_LIMIT, Filter, Limit, Name},
     error::DatabaseError,
 };
 
 #[derive(sqlx::FromRow)]
-pub(super) struct CreatorRow {
+pub(super) struct CreatorQueryRow {
     pub(super) id: Uuid,
     pub(super) first_name: String,
     pub(super) last_name: String,
+    pub(super) roles: Vec<String>,
     pub(super) created_at: time::OffsetDateTime,
 }
 
-impl TryFrom<CreatorRow> for Creator {
+impl TryFrom<CreatorQueryRow> for CreatorQuery {
     type Error = DatabaseError;
 
-    fn try_from(row: CreatorRow) -> Result<Self, Self::Error> {
+    fn try_from(row: CreatorQueryRow) -> Result<Self, Self::Error> {
         let first_name = Name::try_from(row.first_name)
             .map_err(|e| DatabaseError::invariant_corrupted("first_name", e))?;
         let last_name = Name::try_from(row.last_name)
             .map_err(|e| DatabaseError::invariant_corrupted("last_name", e))?;
 
-        Ok(Creator {
+        let mut roles = Vec::with_capacity(row.roles.len());
+        for role in row.roles {
+            let role: CreatorRole = role
+                .parse()
+                .map_err(|e| DatabaseError::invariant_corrupted("role", e))?;
+            roles.push(role);
+        }
+
+        Ok(CreatorQuery {
             id: row.id,
             first_name,
             last_name,
+            roles,
             created_at: row.created_at,
         })
     }
@@ -73,19 +83,19 @@ impl Database {
     }
 
     #[instrument(name = "db.creator.get", skip_all, fields(creator.id = %id))]
-    pub async fn get_creator(&self, id: Uuid) -> Result<Creator, DatabaseError> {
+    pub async fn get_creator(&self, id: Uuid) -> Result<CreatorQuery, DatabaseError> {
         self.get_creator_inner(id)
             .await
             .inspect_err(DatabaseError::log_internal)
     }
 
-    async fn get_creator_inner(&self, id: Uuid) -> Result<Creator, DatabaseError> {
-        let row = sqlx::query_file_as!(CreatorRow, "queries/get_creator.sql", id)
+    async fn get_creator_inner(&self, id: Uuid) -> Result<CreatorQuery, DatabaseError> {
+        let row = sqlx::query_file_as!(CreatorQueryRow, "queries/get_creator.sql", id)
             .fetch_optional(&self.pool)
             .await?;
 
         match row {
-            Some(row) => Creator::try_from(row),
+            Some(row) => CreatorQuery::try_from(row),
             None => Err(DatabaseError::not_found::<Creator>()),
         }
     }
@@ -94,7 +104,7 @@ impl Database {
     pub async fn get_creators(
         &self,
         filter: &Filter,
-    ) -> Result<(Vec<Creator>, Option<Uuid>), DatabaseError> {
+    ) -> Result<(Vec<CreatorQuery>, Option<Uuid>), DatabaseError> {
         self.get_creators_inner(filter)
             .await
             .inspect_err(DatabaseError::log_internal)
@@ -103,21 +113,26 @@ impl Database {
     async fn get_creators_inner(
         &self,
         filter: &Filter,
-    ) -> Result<(Vec<Creator>, Option<Uuid>), DatabaseError> {
+    ) -> Result<(Vec<CreatorQuery>, Option<Uuid>), DatabaseError> {
         let limit = filter.limit.map_or(DEFAULT_LIMIT, Limit::as_u32);
-        let mut builder: QueryBuilder<Postgres> =
-            QueryBuilder::new("select id, first_name, last_name, created_at from creators");
+        let mut builder: QueryBuilder<Postgres> = QueryBuilder::new(
+            r"select c.id, c.first_name, c.last_name, c.created_at,
+                     coalesce(array_agg(distinct bc.role order by bc.role)
+                              filter (where bc.role is not null), array[]::text[]) as roles
+              from creators c
+              left join book_creators bc on bc.creator_id = c.id",
+        );
 
         if let Some(id) = filter.after {
-            builder.push(" where id < ").push_bind(id);
+            builder.push(" where c.id < ").push_bind(id);
         }
 
         builder
-            .push(" order by id desc limit ")
+            .push(" group by c.id order by c.id desc limit ")
             .push_bind((limit + 1) as i64);
 
         let mut rows = builder
-            .build_query_as::<CreatorRow>()
+            .build_query_as::<CreatorQueryRow>()
             .fetch_all(&self.pool)
             .await?;
 
@@ -127,7 +142,7 @@ impl Database {
             next_cursor = rows.last().map(|r| r.id);
         }
 
-        let mut creators: Vec<Creator> = Vec::with_capacity(rows.len());
+        let mut creators: Vec<CreatorQuery> = Vec::with_capacity(rows.len());
         for row in rows {
             let creator = row.try_into()?;
             creators.push(creator);

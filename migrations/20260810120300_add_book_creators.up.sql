@@ -8,3 +8,5 @@ create table if not exists book_creators (
 	constraint fk_book_creators_creators_creator_id foreign key(creator_id) references creators(id) on delete restrict,
 	constraint enum_book_creators_role check(role in ('Artist', 'Author'))
 );
+
+create index idx_book_creators_creator_id on book_creators(creator_id) include (role);

@@ -9,7 +9,7 @@ use tower::ServiceExt;
 use crate::fakers::CreatorFaker;
 use crate::helpers::{RespWrapper, TestApp, assert_error, assert_stored};
 use fake::Fake;
-use manga_theka::entity::Creator;
+use manga_theka::entity::{Creator, CreatorQuery, CreatorRole};
 
 #[tokio::test]
 async fn store_creator_with_valid_body_passes() {
@@ -214,12 +214,13 @@ async fn get_creator_with_valid_id_passes() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Creator> = serde_json::from_slice(&bytes).unwrap();
+    let wrapper: RespWrapper<CreatorQuery> = serde_json::from_slice(&bytes).unwrap();
     let got = wrapper.data;
 
     assert_eq!(got.id, creator.id);
     assert_eq!(got.first_name, creator.first_name);
     assert_eq!(got.last_name, creator.last_name);
+    assert!(got.roles.is_empty());
     assert_eq!(
         got.created_at.unix_timestamp(),
         creator.created_at.unix_timestamp()
@@ -231,6 +232,34 @@ async fn get_creator_with_unknown_id_returns_404() {
     let app = TestApp::new().await;
     let resp = app.get_creator(uuid::Uuid::now_v7()).await;
     assert_error(resp, StatusCode::NOT_FOUND).await;
+}
+
+#[tokio::test]
+async fn get_creator_returns_distinct_roles_credited_across_books() {
+    let app = TestApp::new().await;
+    let creator = CreatorFaker.fake();
+    app.insert_creator(&creator).await;
+
+    let book_a = app.insert_random_book().await;
+    let book_b = app.insert_random_book().await;
+    let book_c = app.insert_random_book().await;
+
+    app.credit_creator(book_a, creator.id, CreatorRole::Author)
+        .await;
+    app.credit_creator(book_b, creator.id, CreatorRole::Artist)
+        .await;
+    app.credit_creator(book_c, creator.id, CreatorRole::Author)
+        .await;
+
+    let resp = app.get_creator(creator.id).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let wrapper: RespWrapper<CreatorQuery> = serde_json::from_slice(&bytes).unwrap();
+
+    let mut roles: Vec<&str> = wrapper.data.roles.iter().map(AsRef::as_ref).collect();
+    roles.sort();
+    assert_eq!(roles, vec!["Artist", "Author"]);
 }
 
 #[tokio::test]
@@ -247,7 +276,7 @@ async fn get_creators_returns_default_limit_and_next_cursor() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let resp: RespWrapper<Vec<Creator>> = serde_json::from_slice(&bytes).unwrap();
+    let resp: RespWrapper<Vec<CreatorQuery>> = serde_json::from_slice(&bytes).unwrap();
 
     assert_eq!(resp.data.len(), 20);
     assert!(resp.next_cursor.is_some());
@@ -269,7 +298,7 @@ async fn get_creators_with_after_and_limit_3_returns_next_page() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     let body = resp.into_body().collect().await.unwrap().to_bytes();
-    let resp: RespWrapper<Vec<Creator>> = serde_json::from_slice(&body).unwrap();
+    let resp: RespWrapper<Vec<CreatorQuery>> = serde_json::from_slice(&body).unwrap();
 
     let ids: Vec<uuid::Uuid> = resp.data.iter().map(|c| c.id).collect();
     let cursor = resp.next_cursor.unwrap();
@@ -281,7 +310,7 @@ async fn get_creators_with_after_and_limit_3_returns_next_page() {
     assert_eq!(second_resp.status(), StatusCode::OK);
 
     let second_body = second_resp.into_body().collect().await.unwrap().to_bytes();
-    let second_resp: RespWrapper<Vec<Creator>> = serde_json::from_slice(&second_body).unwrap();
+    let second_resp: RespWrapper<Vec<CreatorQuery>> = serde_json::from_slice(&second_body).unwrap();
 
     let second_ids: Vec<uuid::Uuid> = second_resp.data.iter().map(|c| c.id).collect();
 
@@ -305,7 +334,7 @@ async fn get_creators_desc_order_confirmed() {
     let req = Request::get("/creators").body(Body::empty()).unwrap();
     let resp = app.router.oneshot(req).await.unwrap();
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let resp: RespWrapper<Vec<Creator>> = serde_json::from_slice(&bytes).unwrap();
+    let resp: RespWrapper<Vec<CreatorQuery>> = serde_json::from_slice(&bytes).unwrap();
     let returned_ids: Vec<uuid::Uuid> = resp.data.iter().map(|c| c.id).collect();
     assert_eq!(returned_ids, ids);
 }

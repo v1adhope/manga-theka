@@ -15,7 +15,7 @@ use manga_theka::{
     entity::{
         AlternativeTitle, BookCoverQuery, BookCreator, BookLink, BookName, BookQuery, Chapter,
         ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume, ContentRating, CoverUrl,
-        Creator, Description, ImageExtension, Label, Language, LinkUrl, Name,
+        Creator, CreatorRole, Description, ImageExtension, Label, Language, LinkUrl, Name,
     },
     object_storage,
     startup::App,
@@ -744,6 +744,21 @@ values($1, $2, $3, $4);
         .execute(&self.pool)
         .await
         .expect("failed to insert factory creator");
+    }
+
+    pub async fn credit_creator(&self, book_id: Uuid, creator_id: Uuid, role: CreatorRole) {
+        sqlx::query!(
+            r#"
+insert into book_creators(book_id, creator_id, role)
+values($1, $2, $3);
+        "#,
+            book_id,
+            creator_id,
+            role.as_ref()
+        )
+        .execute(&self.pool)
+        .await
+        .expect("failed to insert factory book creator credit");
     }
 
     pub async fn post_cover(&self, book_id: Uuid, image: &[u8]) -> Response {

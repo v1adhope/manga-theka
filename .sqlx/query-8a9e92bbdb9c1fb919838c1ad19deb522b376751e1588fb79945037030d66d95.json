@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select id, first_name, last_name, created_at\nfrom creators\nwhere id = $1;\n",
+  "query": "select c.id, c.first_name, c.last_name, c.created_at,\n       coalesce(array_agg(distinct bc.role order by bc.role) filter (where bc.role is not null), array[]::text[]) as \"roles!\"\nfrom creators c\nleft join book_creators bc on bc.creator_id = c.id\nwhere c.id = $1\ngroup by c.id;\n",
   "describe": {
     "columns": [
       {
@@ -46,6 +46,12 @@
             "name": "created_at"
           }
         }
+      },
+      {
+        "ordinal": 4,
+        "name": "roles!",
+        "type_info": "TextArray",
+        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -57,8 +63,9 @@
       false,
       false,
       false,
-      false
+      false,
+      null
     ]
   },
-  "hash": "1b05d30a8e6afaaf7b773c8670d4d5b0309e12ccddc87736f5fdf5365fe470cc"
+  "hash": "8a9e92bbdb9c1fb919838c1ad19deb522b376751e1588fb79945037030d66d95"
 }
