@@ -143,10 +143,10 @@ impl Dummy<CreatorFaker> for Creator {
     }
 }
 
-pub struct BookCreatorFaker;
+pub struct CreatorQueryFaker;
 
-impl Dummy<BookCreatorFaker> for CreatorQuery {
-    fn dummy_with_rng<R: RngExt + ?Sized>(_config: &BookCreatorFaker, rng: &mut R) -> Self {
+impl Dummy<CreatorQueryFaker> for CreatorQuery {
+    fn dummy_with_rng<R: RngExt + ?Sized>(_config: &CreatorQueryFaker, rng: &mut R) -> Self {
         let mut roles = vec![CreatorRoleFaker.fake_with_rng::<CreatorRole, R>(rng)];
         if rng.random() {
             let other = match roles[0] {
@@ -315,7 +315,7 @@ impl Dummy<BookFaker> for BookQuery {
             .map(|_| AlternativeTitleFaker.fake_with_rng(rng))
             .collect();
         let creators: Vec<CreatorQuery> = (0..rng.random_range(config.creators.clone()))
-            .map(|_| BookCreatorFaker.fake_with_rng(rng))
+            .map(|_| CreatorQueryFaker.fake_with_rng(rng))
             .collect();
 
         BookQuery {
