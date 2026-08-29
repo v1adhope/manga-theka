@@ -41,11 +41,21 @@ pub struct Creator {
     pub id: Uuid,
     pub first_name: Name,
     pub last_name: Name,
-    pub role: CreatorRole,
     #[serde(with = "time::serde::rfc3339")]
     pub created_at: OffsetDateTime,
 }
 
 impl Entity for Creator {
     const NAME: &'static str = "Creator";
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreatorQuery {
+    pub id: Uuid,
+    pub first_name: Name,
+    pub last_name: Name,
+    pub roles: Vec<CreatorRole>,
+    #[serde(with = "time::serde::rfc3339")]
+    pub created_at: OffsetDateTime,
 }

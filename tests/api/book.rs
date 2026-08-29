@@ -5,12 +5,13 @@ use axum::{
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
-use crate::fakers::{BookFaker, CONTENT_RATINGS, LabelFaker};
+use crate::fakers::{BookFaker, CONTENT_RATINGS, CreatorFaker, LabelFaker};
 use crate::helpers::{
-    RespWrapper, TestApp, assert_error, assert_stored, label_keys, link_keys, title_keys,
+    RespWrapper, TestApp, assert_error, assert_stored, creator_keys, label_keys, link_keys,
+    title_keys,
 };
 use fake::Fake;
-use manga_theka::entity::{BookQuery, Label};
+use manga_theka::entity::{BookQuery, Creator, Label};
 
 #[tokio::test]
 async fn store_book_with_valid_body_passes() {
@@ -22,6 +23,8 @@ async fn store_book_with_valid_body_passes() {
         ..Default::default()
     }
     .fake();
+    let creator: Creator = CreatorFaker.fake();
+    app.insert_creator(&creator).await;
 
     let body = serde_json::json!({
         "name": book.name.as_ref(),
@@ -34,6 +37,7 @@ async fn store_book_with_valid_body_passes() {
         "labelIds": book.labels.as_slice().iter().map(|l| l.id).collect::<Vec<_>>(),
         "links": &book.links,
         "titles": &book.titles,
+        "creators": [{ "creatorId": creator.id, "role": "Author" }],
     })
     .to_string();
 
@@ -66,7 +70,15 @@ async fn store_book_with_valid_body_passes() {
         title_keys(got.titles.as_slice()),
         title_keys(book.titles.as_slice())
     );
-    assert!(got.creators.is_empty());
+    assert_eq!(
+        creator_keys(got.creators.as_slice()),
+        vec![(
+            creator.id,
+            creator.first_name.as_ref(),
+            creator.last_name.as_ref(),
+            vec!["Author"]
+        )]
+    );
     assert!(got.updated_at.is_none());
     assert_ne!(got.created_at, time::OffsetDateTime::UNIX_EPOCH);
 }
@@ -199,13 +211,121 @@ async fn store_book_with_unknown_label_id_returns_422() {
 }
 
 #[tokio::test]
+async fn store_book_with_unknown_creator_id_returns_422() {
+    let app = TestApp::new().await;
+    let book: BookQuery = BookFaker::default().fake();
+
+    let body = serde_json::json!({
+        "name": book.name.as_ref(),
+        "description": book.description.as_ref(),
+        "publicationYear": book.publication_year,
+        "contentRatingId": book.content_rating.id,
+        "status": book.status.as_ref(),
+        "kind": book.kind.as_ref(),
+        "publicationLanguageId": book.publication_language.id,
+        "creators": [{ "creatorId": uuid::Uuid::now_v7(), "role": "Author" }],
+    })
+    .to_string();
+
+    let req = Request::post("/books")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body))
+        .unwrap();
+
+    let resp = app.router.oneshot(req).await.unwrap();
+    assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
+
+    let count = sqlx::query_scalar!(r#"select count(*) as "count!" from books"#)
+        .fetch_one(&app.pool)
+        .await
+        .unwrap();
+
+    assert_eq!(count, 0, "failed write must roll back book");
+}
+
+#[tokio::test]
+async fn store_book_with_dual_role_creator_merges_into_one_credit() {
+    let app = TestApp::new().await;
+    let book: BookQuery = BookFaker::default().fake();
+    let creator: Creator = CreatorFaker.fake();
+    app.insert_creator(&creator).await;
+
+    let body = serde_json::json!({
+        "name": book.name.as_ref(),
+        "description": book.description.as_ref(),
+        "publicationYear": book.publication_year,
+        "contentRatingId": book.content_rating.id,
+        "status": book.status.as_ref(),
+        "kind": book.kind.as_ref(),
+        "publicationLanguageId": book.publication_language.id,
+        "creators": [
+            { "creatorId": creator.id, "role": "Author" },
+            { "creatorId": creator.id, "role": "Artist" },
+        ],
+    })
+    .to_string();
+
+    let req = Request::post("/books")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body))
+        .unwrap();
+
+    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let id = assert_stored(resp).await;
+
+    let got = app.fetch_book(id).await;
+
+    assert_eq!(
+        creator_keys(got.creators.as_slice()),
+        vec![(
+            creator.id,
+            creator.first_name.as_ref(),
+            creator.last_name.as_ref(),
+            vec!["Artist", "Author"]
+        )],
+        "a creator credited as both roles on one book must merge into a single entry"
+    );
+}
+
+#[tokio::test]
+async fn store_book_with_duplicate_creator_role_returns_422() {
+    let app = TestApp::new().await;
+    let book: BookQuery = BookFaker::default().fake();
+    let creator: Creator = CreatorFaker.fake();
+    app.insert_creator(&creator).await;
+
+    let body = serde_json::json!({
+        "name": book.name.as_ref(),
+        "description": book.description.as_ref(),
+        "publicationYear": book.publication_year,
+        "contentRatingId": book.content_rating.id,
+        "status": book.status.as_ref(),
+        "kind": book.kind.as_ref(),
+        "publicationLanguageId": book.publication_language.id,
+        "creators": [
+            { "creatorId": creator.id, "role": "Author" },
+            { "creatorId": creator.id, "role": "Author" },
+        ],
+    })
+    .to_string();
+
+    let req = Request::post("/books")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body))
+        .unwrap();
+
+    let resp = app.router.oneshot(req).await.unwrap();
+    assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
+}
+
+#[tokio::test]
 async fn get_book_with_valid_id_passes() {
     let app = TestApp::new().await;
     let book: BookQuery = BookFaker {
         labels: 1..=5,
         links: 1..=5,
         titles: 1..=5,
-        ..Default::default()
+        creators: 1..=5,
     }
     .fake();
 
@@ -249,7 +369,10 @@ async fn get_book_with_valid_id_passes() {
         title_keys(got.titles.as_slice()),
         title_keys(book.titles.as_slice())
     );
-    assert!(got.creators.is_empty());
+    assert_eq!(
+        creator_keys(got.creators.as_slice()),
+        creator_keys(book.creators.as_slice())
+    );
     assert_eq!(got.updated_at, book.updated_at);
     assert_eq!(
         got.created_at.unix_timestamp(),
@@ -289,7 +412,7 @@ async fn get_books_embeds_each_books_own_arrays() {
         labels: 0..=0,
         links: 0..=0,
         titles: 0..=0,
-        ..Default::default()
+        creators: 0..=0,
     }
     .fake();
 
@@ -297,7 +420,7 @@ async fn get_books_embeds_each_books_own_arrays() {
         labels: 1..=5,
         links: 1..=5,
         titles: 1..=5,
-        ..Default::default()
+        creators: 1..=5,
     }
     .fake();
 
@@ -324,6 +447,10 @@ async fn get_books_embeds_each_books_own_arrays() {
     assert_eq!(
         title_keys(got_full.titles.as_slice()),
         title_keys(full.titles.as_slice())
+    );
+    assert_eq!(
+        creator_keys(got_full.creators.as_slice()),
+        creator_keys(full.creators.as_slice())
     );
 
     let got_bare = listed.data.iter().find(|b| b.id == bare.id).unwrap();

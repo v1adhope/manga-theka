@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into book_creators(book_id, creator_id, role)\nselect $1, credit.creator_id, credit.role\nfrom unnest($2::uuid[], $3::text[]) as credit(creator_id, role);\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6f0c6d0e4adf5ff15c6fceffe55def4b0bf8318b89898cbe34ebbce9c2d5052c"
+}

@@ -5,11 +5,11 @@ use tracing::{Level, instrument};
 use uuid::Uuid;
 
 use crate::{
-    database::{Database, creator::CreatorRow, label::LabelRow},
+    database::{Database, creator::CreatorQueryRow, label::LabelRow},
     entity::{
-        AlternativeTitle, Book, BookCover, BookCoverQuery, BookCreators, BookKind, BookLabels,
+        AlternativeTitle, Book, BookCover, BookCoverQuery, BookCreatorsQuery, BookKind, BookLabels,
         BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus, BookTitles,
-        ContentRating, CoverUrl, Creator, DEFAULT_LIMIT, Description, Filter, ImageExtension,
+        ContentRating, CoverUrl, CreatorQuery, DEFAULT_LIMIT, Description, Filter, ImageExtension,
         Label, Language, Limit, LinkUrl,
     },
     error::DatabaseError,
@@ -126,22 +126,24 @@ struct BookCreatorRow {
     id: Uuid,
     first_name: String,
     last_name: String,
-    role: String,
+    roles: Vec<String>,
     created_at: time::OffsetDateTime,
 }
 
-impl TryFrom<BookCreatorRow> for Creator {
+impl TryFrom<BookCreatorRow> for (Uuid, CreatorQuery) {
     type Error = DatabaseError;
 
     fn try_from(row: BookCreatorRow) -> Result<Self, Self::Error> {
-        CreatorRow {
+        let creator = CreatorQueryRow {
             id: row.id,
             first_name: row.first_name,
             last_name: row.last_name,
-            role: row.role,
+            roles: row.roles,
             created_at: row.created_at,
         }
-        .try_into()
+        .try_into()?;
+
+        Ok((row.book_id, creator))
     }
 }
 
@@ -150,7 +152,7 @@ struct BookWithRelations {
     labels: Vec<Label>,
     links: Vec<BookLink>,
     titles: Vec<AlternativeTitle>,
-    creators: Vec<Creator>,
+    creators: Vec<CreatorQuery>,
 }
 
 impl TryFrom<BookWithRelations> for BookQuery {
@@ -183,7 +185,7 @@ impl TryFrom<BookWithRelations> for BookQuery {
             .map_err(|e| DatabaseError::invariant_corrupted("links", e))?;
         let titles = BookTitles::try_from(titles)
             .map_err(|e| DatabaseError::invariant_corrupted("titles", e))?;
-        let creators = BookCreators::try_from(creators)
+        let creators = BookCreatorsQuery::try_from(creators)
             .map_err(|e| DatabaseError::invariant_corrupted("creators", e))?;
 
         Ok(BookQuery {
@@ -482,15 +484,14 @@ impl Database {
     async fn get_books_creators(
         &self,
         book_ids: &[Uuid],
-    ) -> Result<HashMap<Uuid, Vec<Creator>>, DatabaseError> {
+    ) -> Result<HashMap<Uuid, Vec<CreatorQuery>>, DatabaseError> {
         let rows = sqlx::query_file_as!(BookCreatorRow, "queries/get_books_creators.sql", book_ids)
             .fetch_all(&self.pool)
             .await?;
 
-        let mut creators: HashMap<Uuid, Vec<Creator>> = HashMap::with_capacity(book_ids.len());
+        let mut creators: HashMap<Uuid, Vec<CreatorQuery>> = HashMap::with_capacity(book_ids.len());
         for row in rows {
-            let book_id = row.book_id;
-            let creator: Creator = row.try_into()?;
+            let (book_id, creator) = row.try_into()?;
             creators.entry(book_id).or_default().push(creator);
         }
 
@@ -504,6 +505,7 @@ impl Database {
         Self::store_book_labels(&mut *conn, item).await?;
         Self::store_book_links(&mut *conn, item).await?;
         Self::store_book_titles(&mut *conn, item).await?;
+        Self::store_book_creators(&mut *conn, item).await?;
 
         Ok(())
     }
@@ -567,6 +569,33 @@ impl Database {
         Ok(())
     }
 
+    async fn store_book_creators(
+        conn: &mut PgConnection,
+        item: &Book,
+    ) -> Result<(), DatabaseError> {
+        if item.creators.is_empty() {
+            return Ok(());
+        }
+
+        let mut creator_ids: Vec<Uuid> = Vec::with_capacity(item.creators.len());
+        let mut roles: Vec<String> = Vec::with_capacity(item.creators.len());
+        for credit in item.creators.as_slice() {
+            creator_ids.push(credit.creator_id);
+            roles.push(credit.role.as_ref().to_owned());
+        }
+
+        sqlx::query_file!(
+            "queries/store_book_creators.sql",
+            item.id,
+            &creator_ids,
+            &roles
+        )
+        .execute(conn)
+        .await?;
+
+        Ok(())
+    }
+
     async fn delete_book_relations(conn: &mut PgConnection, id: Uuid) -> Result<(), DatabaseError> {
         sqlx::query_file!("queries/delete_book_labels.sql", id)
             .execute(&mut *conn)
@@ -575,6 +604,9 @@ impl Database {
             .execute(&mut *conn)
             .await?;
         sqlx::query_file!("queries/delete_book_titles.sql", id)
+            .execute(&mut *conn)
+            .await?;
+        sqlx::query_file!("queries/delete_book_creators.sql", id)
             .execute(&mut *conn)
             .await?;
 

@@ -10,7 +10,7 @@ use fake::rand::RngExt;
 use manga_theka::entity::{
     AlternativeTitle, BookKind, BookLink, BookLinkKind, BookName, BookQuery, BookStatus, Chapter,
     ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume, ContentRating, Creator,
-    CreatorRole, Description, Label, LabelKind, Language, LinkUrl, Name,
+    CreatorQuery, CreatorRole, Description, Label, LabelKind, Language, LinkUrl, Name,
 };
 use time::OffsetDateTime;
 use uuid::{Uuid, uuid};
@@ -138,7 +138,29 @@ impl Dummy<CreatorFaker> for Creator {
             id: Uuid::now_v7(),
             first_name: NameFaker.fake_with_rng(rng),
             last_name: NameFaker.fake_with_rng(rng),
-            role: CreatorRoleFaker.fake_with_rng(rng),
+            created_at: OffsetDateTime::now_utc(),
+        }
+    }
+}
+
+pub struct CreatorQueryFaker;
+
+impl Dummy<CreatorQueryFaker> for CreatorQuery {
+    fn dummy_with_rng<R: RngExt + ?Sized>(_config: &CreatorQueryFaker, rng: &mut R) -> Self {
+        let mut roles = vec![CreatorRoleFaker.fake_with_rng::<CreatorRole, R>(rng)];
+        if rng.random() {
+            let other = match roles[0] {
+                CreatorRole::Artist => CreatorRole::Author,
+                CreatorRole::Author => CreatorRole::Artist,
+            };
+            roles.push(other);
+        }
+
+        CreatorQuery {
+            id: Uuid::now_v7(),
+            first_name: NameFaker.fake_with_rng(rng),
+            last_name: NameFaker.fake_with_rng(rng),
+            roles,
             created_at: OffsetDateTime::now_utc(),
         }
     }
@@ -292,8 +314,8 @@ impl Dummy<BookFaker> for BookQuery {
         let titles: Vec<AlternativeTitle> = (0..rng.random_range(config.titles.clone()))
             .map(|_| AlternativeTitleFaker.fake_with_rng(rng))
             .collect();
-        let creators: Vec<Creator> = (0..rng.random_range(config.creators.clone()))
-            .map(|_| CreatorFaker.fake_with_rng(rng))
+        let creators: Vec<CreatorQuery> = (0..rng.random_range(config.creators.clone()))
+            .map(|_| CreatorQueryFaker.fake_with_rng(rng))
             .collect();
 
         BookQuery {

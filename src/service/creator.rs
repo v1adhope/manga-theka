@@ -1,7 +1,7 @@
 use uuid::Uuid;
 
 use crate::{
-    entity::{Creator, Filter},
+    entity::{Creator, CreatorQuery, Filter},
     error::ServiceError,
     service::Service,
 };
@@ -11,14 +11,14 @@ impl Service {
         self.database.store_creator(&item).await.map_err(Into::into)
     }
 
-    pub async fn get_creator(&self, id: Uuid) -> Result<Creator, ServiceError> {
+    pub async fn get_creator(&self, id: Uuid) -> Result<CreatorQuery, ServiceError> {
         self.database.get_creator(id).await.map_err(Into::into)
     }
 
     pub async fn get_creators(
         &self,
         filter: Filter,
-    ) -> Result<(Vec<Creator>, Option<Uuid>), ServiceError> {
+    ) -> Result<(Vec<CreatorQuery>, Option<Uuid>), ServiceError> {
         self.database
             .get_creators(&filter)
             .await

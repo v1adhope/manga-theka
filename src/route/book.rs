@@ -10,8 +10,9 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        AlternativeTitle, Book, BookCover, BookKind, BookLabelIds, BookLink, BookLinkKind,
-        BookLinks, BookName, BookQuery, BookStatus, BookTitles, Description, Filter, LinkUrl,
+        AlternativeTitle, Book, BookCover, BookCreator, BookCreators, BookKind, BookLabelIds,
+        BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus, BookTitles,
+        CreatorRole, Description, Filter, LinkUrl,
     },
     error::{AppError, EntityError, RouteError},
     route::{PaginationQuery, StoreResp, collect_image_part, json_data_response, json_response},
@@ -34,6 +35,13 @@ pub struct AlternativeTitleReq {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct BookCreatorReq {
+    pub creator_id: Uuid,
+    pub role: CreatorRole,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BookReq {
     pub name: String,
     pub description: String,
@@ -48,6 +56,8 @@ pub struct BookReq {
     pub links: Vec<BookLinkReq>,
     #[serde(default)]
     pub titles: Vec<AlternativeTitleReq>,
+    #[serde(default)]
+    pub creators: Vec<BookCreatorReq>,
 }
 
 struct BookWithRelations {
@@ -79,6 +89,7 @@ impl TryFrom<BookWithRelations> for Book {
             label_ids,
             links: link_reqs,
             titles: title_reqs,
+            creators: creator_reqs,
         } = req;
 
         let mut links = Vec::with_capacity(link_reqs.len());
@@ -97,6 +108,14 @@ impl TryFrom<BookWithRelations> for Book {
             });
         }
 
+        let creators: Vec<BookCreator> = creator_reqs
+            .into_iter()
+            .map(|c| BookCreator {
+                creator_id: c.creator_id,
+                role: c.role,
+            })
+            .collect();
+
         Ok(Book {
             id,
             name: BookName::try_from(name)?,
@@ -109,6 +128,7 @@ impl TryFrom<BookWithRelations> for Book {
             label_ids: BookLabelIds::try_from(label_ids)?,
             links: BookLinks::try_from(links)?,
             titles: BookTitles::try_from(titles)?,
+            creators: BookCreators::try_from(creators)?,
             updated_at,
             created_at,
         })

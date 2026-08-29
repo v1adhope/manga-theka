@@ -1,10 +1,21 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select id, first_name, last_name, role, created_at\nfrom creators\nwhere id = $1;\n",
+  "query": "select bc.book_id, c.id, c.first_name, c.last_name,\n       array_agg(bc.role order by bc.role) as \"roles!\", c.created_at\nfrom book_creators bc\njoin creators c on c.id = bc.creator_id\nwhere bc.book_id = any($1::uuid[])\ngroup by bc.book_id, c.id\norder by c.id;\n",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
+        "name": "book_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "book_creators",
+            "name": "book_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
         "name": "id",
         "type_info": "Uuid",
         "origin": {
@@ -15,7 +26,7 @@
         }
       },
       {
-        "ordinal": 1,
+        "ordinal": 2,
         "name": "first_name",
         "type_info": "Text",
         "origin": {
@@ -26,7 +37,7 @@
         }
       },
       {
-        "ordinal": 2,
+        "ordinal": 3,
         "name": "last_name",
         "type_info": "Text",
         "origin": {
@@ -37,18 +48,13 @@
         }
       },
       {
-        "ordinal": 3,
-        "name": "role",
-        "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "creators",
-            "name": "role"
-          }
-        }
+        "ordinal": 4,
+        "name": "roles!",
+        "type_info": "TextArray",
+        "origin": "Expression"
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -61,7 +67,7 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "UuidArray"
       ]
     },
     "nullable": [
@@ -69,8 +75,9 @@
       false,
       false,
       false,
+      null,
       false
     ]
   },
-  "hash": "96bf49e070808df1d866d2eeee46bdbb041b861517b1fb10cc3352bde5e6f139"
+  "hash": "dec47142b80b13fc9d4c371b7b767da71f5deedc6c1a290a8b9323a9217d3858"
 }
