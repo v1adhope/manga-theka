@@ -111,6 +111,13 @@ impl From<sqlx::Error> for DatabaseError {
                     };
                 }
                 Some("fk_book_creators_creators_creator_id") => {
+                    if db_err.message().starts_with("insert or update") {
+                        return Self::DoesNotExist {
+                            field: "Book creator",
+                            source: err,
+                        };
+                    }
+
                     return Self::InUse {
                         field: "Creator",
                         source: err,

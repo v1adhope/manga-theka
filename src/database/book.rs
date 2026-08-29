@@ -591,19 +591,7 @@ impl Database {
             &roles
         )
         .execute(conn)
-        .await
-        .map_err(
-            |e| match e.as_database_error().and_then(|d| d.constraint()) {
-                // fk_book_creators_creators_creator_id also fires from delete_creator (a Creator
-                // still referenced by a book), where it correctly means InUse; here, on insert, a
-                // violation can only mean the referenced Creator does not exist.
-                Some("fk_book_creators_creators_creator_id") => DatabaseError::DoesNotExist {
-                    field: "Book creator",
-                    source: e,
-                },
-                _ => DatabaseError::from(e),
-            },
-        )?;
+        .await?;
 
         Ok(())
     }
