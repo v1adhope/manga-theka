@@ -13,9 +13,10 @@ use manga_theka::{
     config::{Config, Database},
     database,
     entity::{
-        AlternativeTitle, BookCoverQuery, BookCreator, BookLink, BookName, BookQuery, Chapter,
+        AlternativeTitle, BookCoverQuery, BookLink, BookName, BookQuery, Chapter,
         ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume, ContentRating, CoverUrl,
-        Creator, CreatorRole, Description, ImageExtension, Label, Language, LinkUrl, Name,
+        Creator, CreatorQuery, CreatorRole, Description, ImageExtension, Label, Language, LinkUrl,
+        Name,
     },
     object_storage,
     startup::App,
@@ -121,7 +122,7 @@ pub fn title_keys(titles: &[AlternativeTitle]) -> Vec<(Uuid, &str)> {
     keys
 }
 
-pub fn creator_keys(creators: &[BookCreator]) -> Vec<(Uuid, &str, &str, Vec<&str>)> {
+pub fn creator_keys(creators: &[CreatorQuery]) -> Vec<(Uuid, &str, &str, Vec<&str>)> {
     let mut keys: Vec<(Uuid, &str, &str, Vec<&str>)> = creators
         .iter()
         .map(|c| {
@@ -474,7 +475,7 @@ order by language_id, name;
         })
         .collect();
 
-        let creators: Vec<BookCreator> = sqlx::query!(
+        let creators: Vec<CreatorQuery> = sqlx::query!(
             r#"
 select c.id, c.first_name, c.last_name,
        array_agg(bc.role order by bc.role) as "roles!", c.created_at
@@ -490,7 +491,7 @@ order by c.id;
         .await
         .expect("failed to read book creators")
         .into_iter()
-        .map(|r| BookCreator {
+        .map(|r| CreatorQuery {
             id: r.id,
             first_name: Name::try_from(r.first_name).expect("stored first name must be valid"),
             last_name: Name::try_from(r.last_name).expect("stored last name must be valid"),

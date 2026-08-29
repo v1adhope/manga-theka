@@ -8,9 +8,9 @@ use fake::faker::lorem::en::{Sentence, Word};
 use fake::faker::name::en::FirstName;
 use fake::rand::RngExt;
 use manga_theka::entity::{
-    AlternativeTitle, BookCreator, BookKind, BookLink, BookLinkKind, BookName, BookQuery,
-    BookStatus, Chapter, ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume,
-    ContentRating, Creator, CreatorRole, Description, Label, LabelKind, Language, LinkUrl, Name,
+    AlternativeTitle, BookKind, BookLink, BookLinkKind, BookName, BookQuery, BookStatus, Chapter,
+    ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume, ContentRating, Creator,
+    CreatorQuery, CreatorRole, Description, Label, LabelKind, Language, LinkUrl, Name,
 };
 use time::OffsetDateTime;
 use uuid::{Uuid, uuid};
@@ -145,7 +145,7 @@ impl Dummy<CreatorFaker> for Creator {
 
 pub struct BookCreatorFaker;
 
-impl Dummy<BookCreatorFaker> for BookCreator {
+impl Dummy<BookCreatorFaker> for CreatorQuery {
     fn dummy_with_rng<R: RngExt + ?Sized>(_config: &BookCreatorFaker, rng: &mut R) -> Self {
         let mut roles = vec![CreatorRoleFaker.fake_with_rng::<CreatorRole, R>(rng)];
         if rng.random() {
@@ -156,7 +156,7 @@ impl Dummy<BookCreatorFaker> for BookCreator {
             roles.push(other);
         }
 
-        BookCreator {
+        CreatorQuery {
             id: Uuid::now_v7(),
             first_name: NameFaker.fake_with_rng(rng),
             last_name: NameFaker.fake_with_rng(rng),
@@ -314,7 +314,7 @@ impl Dummy<BookFaker> for BookQuery {
         let titles: Vec<AlternativeTitle> = (0..rng.random_range(config.titles.clone()))
             .map(|_| AlternativeTitleFaker.fake_with_rng(rng))
             .collect();
-        let creators: Vec<BookCreator> = (0..rng.random_range(config.creators.clone()))
+        let creators: Vec<CreatorQuery> = (0..rng.random_range(config.creators.clone()))
             .map(|_| BookCreatorFaker.fake_with_rng(rng))
             .collect();
 

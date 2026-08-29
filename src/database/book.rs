@@ -5,12 +5,12 @@ use tracing::{Level, instrument};
 use uuid::Uuid;
 
 use crate::{
-    database::{Database, label::LabelRow},
+    database::{Database, creator::CreatorQueryRow, label::LabelRow},
     entity::{
-        AlternativeTitle, Book, BookCover, BookCoverQuery, BookCreator, BookCreators, BookKind,
-        BookLabels, BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus, BookTitles,
-        ContentRating, CoverUrl, CreatorRole, DEFAULT_LIMIT, Description, Filter, ImageExtension,
-        Label, Language, Limit, LinkUrl, Name,
+        AlternativeTitle, Book, BookCover, BookCoverQuery, BookCreators, BookKind, BookLabels,
+        BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus, BookTitles,
+        ContentRating, CoverUrl, CreatorQuery, DEFAULT_LIMIT, Description, Filter, ImageExtension,
+        Label, Language, Limit, LinkUrl,
     },
     error::DatabaseError,
 };
@@ -130,30 +130,20 @@ struct BookCreatorRow {
     created_at: time::OffsetDateTime,
 }
 
-impl TryFrom<BookCreatorRow> for BookCreator {
+impl TryFrom<BookCreatorRow> for (Uuid, CreatorQuery) {
     type Error = DatabaseError;
 
     fn try_from(row: BookCreatorRow) -> Result<Self, Self::Error> {
-        let first_name = Name::try_from(row.first_name)
-            .map_err(|e| DatabaseError::invariant_corrupted("first_name", e))?;
-        let last_name = Name::try_from(row.last_name)
-            .map_err(|e| DatabaseError::invariant_corrupted("last_name", e))?;
-
-        let mut roles = Vec::with_capacity(row.roles.len());
-        for role in row.roles {
-            let role: CreatorRole = role
-                .parse()
-                .map_err(|e| DatabaseError::invariant_corrupted("role", e))?;
-            roles.push(role);
-        }
-
-        Ok(BookCreator {
+        let creator = CreatorQueryRow {
             id: row.id,
-            first_name,
-            last_name,
-            roles,
+            first_name: row.first_name,
+            last_name: row.last_name,
+            roles: row.roles,
             created_at: row.created_at,
-        })
+        }
+        .try_into()?;
+
+        Ok((row.book_id, creator))
     }
 }
 
@@ -162,7 +152,7 @@ struct BookWithRelations {
     labels: Vec<Label>,
     links: Vec<BookLink>,
     titles: Vec<AlternativeTitle>,
-    creators: Vec<BookCreator>,
+    creators: Vec<CreatorQuery>,
 }
 
 impl TryFrom<BookWithRelations> for BookQuery {
@@ -494,15 +484,14 @@ impl Database {
     async fn get_books_creators(
         &self,
         book_ids: &[Uuid],
-    ) -> Result<HashMap<Uuid, Vec<BookCreator>>, DatabaseError> {
+    ) -> Result<HashMap<Uuid, Vec<CreatorQuery>>, DatabaseError> {
         let rows = sqlx::query_file_as!(BookCreatorRow, "queries/get_books_creators.sql", book_ids)
             .fetch_all(&self.pool)
             .await?;
 
-        let mut creators: HashMap<Uuid, Vec<BookCreator>> = HashMap::with_capacity(book_ids.len());
+        let mut creators: HashMap<Uuid, Vec<CreatorQuery>> = HashMap::with_capacity(book_ids.len());
         for row in rows {
-            let book_id = row.book_id;
-            let creator: BookCreator = row.try_into()?;
+            let (book_id, creator) = row.try_into()?;
             creators.entry(book_id).or_default().push(creator);
         }
 
