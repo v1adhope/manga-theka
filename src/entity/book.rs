@@ -196,7 +196,7 @@ pub struct Book {
     pub label_ids: BookLabelIds,
     pub links: BookLinks,
     pub titles: BookTitles,
-    pub creators: BookCreatorRefs,
+    pub creators: BookCreators,
     pub updated_at: Option<OffsetDateTime>,
     pub created_at: OffsetDateTime,
 }
@@ -219,7 +219,7 @@ pub struct BookQuery {
     pub labels: BookLabels,
     pub links: BookLinks,
     pub titles: BookTitles,
-    pub creators: BookCreators,
+    pub creators: BookCreatorsQuery,
     #[serde(with = "time::serde::rfc3339::option")]
     pub updated_at: Option<OffsetDateTime>,
     #[serde(with = "time::serde::rfc3339")]
@@ -242,7 +242,7 @@ pub struct AlternativeTitle {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct BookCreatorRef {
+pub struct BookCreator {
     pub creator_id: Uuid,
     pub role: CreatorRole,
 }
@@ -282,8 +282,8 @@ impl Bounded for BookCreatorsBound {
     const NAME: &'static str = "book creators";
 }
 
-pub type BookCreators = BoundedVec<CreatorQuery, BookCreatorsBound>;
-pub type BookCreatorRefs = BoundedVec<BookCreatorRef, BookCreatorsBound>;
+pub type BookCreatorsQuery = BoundedVec<CreatorQuery, BookCreatorsBound>;
+pub type BookCreators = BoundedVec<BookCreator, BookCreatorsBound>;
 
 #[derive(Debug)]
 pub struct BookCover {
@@ -316,8 +316,8 @@ mod tests {
     use uuid::Uuid;
 
     use crate::entity::{
-        AlternativeTitle, BookCreators, BookLabelIds, BookLink, BookLinkKind, BookLinks, BookName,
-        BookTitles, CreatorQuery, CreatorRole, Description, LinkUrl, MAX_BOOK_CREATORS,
+        AlternativeTitle, BookCreatorsQuery, BookLabelIds, BookLink, BookLinkKind, BookLinks,
+        BookName, BookTitles, CreatorQuery, CreatorRole, Description, LinkUrl, MAX_BOOK_CREATORS,
         MAX_BOOK_LABELS, MAX_BOOK_LINKS, MAX_BOOK_TITLES, Name,
     };
 
@@ -392,7 +392,7 @@ mod tests {
         let creators: Vec<CreatorQuery> =
             (0..MAX_BOOK_CREATORS).map(|_| sample_creator()).collect();
 
-        assert!(BookCreators::try_from(creators).is_ok());
+        assert!(BookCreatorsQuery::try_from(creators).is_ok());
     }
 
     #[test]
@@ -400,7 +400,7 @@ mod tests {
         let creators: Vec<CreatorQuery> =
             (0..=MAX_BOOK_CREATORS).map(|_| sample_creator()).collect();
 
-        assert!(BookCreators::try_from(creators).is_err());
+        assert!(BookCreatorsQuery::try_from(creators).is_err());
     }
 
     #[test]

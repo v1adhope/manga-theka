@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::{
     database::{Database, creator::CreatorQueryRow, label::LabelRow},
     entity::{
-        AlternativeTitle, Book, BookCover, BookCoverQuery, BookCreators, BookKind, BookLabels,
+        AlternativeTitle, Book, BookCover, BookCoverQuery, BookCreatorsQuery, BookKind, BookLabels,
         BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus, BookTitles,
         ContentRating, CoverUrl, CreatorQuery, DEFAULT_LIMIT, Description, Filter, ImageExtension,
         Label, Language, Limit, LinkUrl,
@@ -185,7 +185,7 @@ impl TryFrom<BookWithRelations> for BookQuery {
             .map_err(|e| DatabaseError::invariant_corrupted("links", e))?;
         let titles = BookTitles::try_from(titles)
             .map_err(|e| DatabaseError::invariant_corrupted("titles", e))?;
-        let creators = BookCreators::try_from(creators)
+        let creators = BookCreatorsQuery::try_from(creators)
             .map_err(|e| DatabaseError::invariant_corrupted("creators", e))?;
 
         Ok(BookQuery {

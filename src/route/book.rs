@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        AlternativeTitle, Book, BookCover, BookCreatorRef, BookCreatorRefs, BookKind, BookLabelIds,
+        AlternativeTitle, Book, BookCover, BookCreator, BookCreators, BookKind, BookLabelIds,
         BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus, BookTitles,
         CreatorRole, Description, Filter, LinkUrl,
     },
@@ -108,9 +108,9 @@ impl TryFrom<BookWithRelations> for Book {
             });
         }
 
-        let creators: Vec<BookCreatorRef> = creator_reqs
+        let creators: Vec<BookCreator> = creator_reqs
             .into_iter()
-            .map(|c| BookCreatorRef {
+            .map(|c| BookCreator {
                 creator_id: c.creator_id,
                 role: c.role,
             })
@@ -128,7 +128,7 @@ impl TryFrom<BookWithRelations> for Book {
             label_ids: BookLabelIds::try_from(label_ids)?,
             links: BookLinks::try_from(links)?,
             titles: BookTitles::try_from(titles)?,
-            creators: BookCreatorRefs::try_from(creators)?,
+            creators: BookCreators::try_from(creators)?,
             updated_at,
             created_at,
         })
