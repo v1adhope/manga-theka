@@ -5,8 +5,7 @@ use uuid::Uuid;
 use crate::{
     database::Database,
     entity::{
-        DEFAULT_LIMIT, Email, Feedback, FeedbackFilter, FeedbackKind, FeedbackStatus,
-        FeedbackStatusUpdate, Limit, SortOrder, Text,
+        Email, Feedback, FeedbackFilter, FeedbackKind, FeedbackStatus, FeedbackStatusUpdate, Text,
     },
     error::DatabaseError,
 };
@@ -106,12 +105,10 @@ impl Database {
         &self,
         filter: &FeedbackFilter,
     ) -> Result<(Vec<Feedback>, Option<Uuid>), DatabaseError> {
-        let limit = filter.page.limit.map_or(DEFAULT_LIMIT, Limit::as_u32);
-        let (cursor_comparison, direction) = match filter.page.sort_order.unwrap_or(SortOrder::Desc)
-        {
-            SortOrder::Asc => (">", "asc"),
-            SortOrder::Desc => ("<", "desc"),
-        };
+        let limit = filter.page.effective_limit();
+        let sort_order = filter.page.effective_sort_order();
+        let fetch_limit = super::fetch_limit(limit);
+        let (cursor_comparison, direction) = super::cursor_op(sort_order);
 
         let mut builder: QueryBuilder<Postgres> = QueryBuilder::new(
             r"select f.id, f.kind, f.status, f.email, f.note, f.book_id, f.updated_at, f.created_at
@@ -138,18 +135,14 @@ impl Database {
             .push(" order by f.id ")
             .push(direction)
             .push(" limit ")
-            .push_bind(i64::from(limit) + 1);
+            .push_bind(fetch_limit);
 
         let mut rows = builder
             .build_query_as::<FeedbackRow>()
             .fetch_all(&self.pool)
             .await?;
 
-        let mut next_cursor = None;
-        if rows.len() > limit as usize {
-            rows.pop();
-            next_cursor = rows.last().map(|r| r.id);
-        }
+        let next_cursor = super::take_page(&mut rows, limit, |r| r.id);
 
         let mut feedbacks: Vec<Feedback> = Vec::with_capacity(rows.len());
         for row in rows {

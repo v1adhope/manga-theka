@@ -37,6 +37,14 @@ impl Filter {
     pub fn builder() -> FilterBuilder {
         FilterBuilder::default()
     }
+
+    pub fn effective_limit(&self) -> u32 {
+        self.limit.map_or(DEFAULT_LIMIT, Limit::as_u32)
+    }
+
+    pub fn effective_sort_order(&self) -> SortOrder {
+        self.sort_order.unwrap_or(SortOrder::Desc)
+    }
 }
 
 #[derive(Debug, Default)]

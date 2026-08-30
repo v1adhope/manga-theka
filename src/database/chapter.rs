@@ -8,7 +8,7 @@ use crate::{
     database::Database,
     entity::{
         Chapter, ChapterLocalization, ChapterLocalizations, ChapterName, ChapterNumber,
-        ChapterVolume, DEFAULT_LIMIT, Filter, Limit, SortOrder,
+        ChapterVolume, Filter,
     },
     error::DatabaseError,
 };
@@ -194,11 +194,10 @@ impl Database {
         book_id: Uuid,
         filter: &Filter,
     ) -> Result<(Vec<Chapter>, Option<Uuid>), DatabaseError> {
-        let limit = filter.limit.map_or(DEFAULT_LIMIT, Limit::as_u32);
-        let (cursor_comparison, direction) = match filter.sort_order.unwrap_or(SortOrder::Desc) {
-            SortOrder::Asc => (">", "asc"),
-            SortOrder::Desc => ("<", "desc"),
-        };
+        let limit = filter.effective_limit();
+        let sort_order = filter.effective_sort_order();
+        let fetch_limit = super::fetch_limit(limit);
+        let (cursor_comparison, direction) = super::cursor_op(sort_order);
 
         let mut builder: QueryBuilder<Postgres> = QueryBuilder::new(
             r"select c.id, c.book_id, c.number, c.name, c.volume, c.updated_at, c.created_at
@@ -222,7 +221,7 @@ impl Database {
             .push(" order by c.number ")
             .push(direction)
             .push(" limit ")
-            .push_bind(i64::from(limit) + 1);
+            .push_bind(fetch_limit);
 
         let mut rows = builder
             .build_query_as::<ChapterRow>()
@@ -233,11 +232,7 @@ impl Database {
             return Ok((Vec::new(), None));
         }
 
-        let mut next_cursor = None;
-        if rows.len() > limit as usize {
-            rows.pop();
-            next_cursor = rows.last().map(|r| r.id);
-        }
+        let next_cursor = super::take_page(&mut rows, limit, |r| r.id);
 
         let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
         let mut localizations = self.get_chapters_localizations(&ids).await?;

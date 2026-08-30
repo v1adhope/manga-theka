@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     database::Database,
-    entity::{Creator, CreatorQuery, CreatorRole, DEFAULT_LIMIT, Filter, Limit, Name},
+    entity::{Creator, CreatorQuery, CreatorRole, Filter, Name},
     error::DatabaseError,
 };
 
@@ -114,7 +114,11 @@ impl Database {
         &self,
         filter: &Filter,
     ) -> Result<(Vec<CreatorQuery>, Option<Uuid>), DatabaseError> {
-        let limit = filter.limit.map_or(DEFAULT_LIMIT, Limit::as_u32);
+        let limit = filter.effective_limit();
+        let sort_order = filter.effective_sort_order();
+        let fetch_limit = super::fetch_limit(limit);
+        let (cursor_comparison, direction) = super::cursor_op(sort_order);
+
         let mut builder: QueryBuilder<Postgres> = QueryBuilder::new(
             r"select c.id, c.first_name, c.last_name, c.created_at,
                      coalesce(array_agg(distinct bc.role order by bc.role)
@@ -124,23 +128,24 @@ impl Database {
         );
 
         if let Some(id) = filter.after {
-            builder.push(" where c.id < ").push_bind(id);
+            builder
+                .push(" where c.id ")
+                .push(cursor_comparison)
+                .push_bind(id);
         }
 
         builder
-            .push(" group by c.id order by c.id desc limit ")
-            .push_bind((limit + 1) as i64);
+            .push(" group by c.id order by c.id ")
+            .push(direction)
+            .push(" limit ")
+            .push_bind(fetch_limit);
 
         let mut rows = builder
             .build_query_as::<CreatorQueryRow>()
             .fetch_all(&self.pool)
             .await?;
 
-        let mut next_cursor = None;
-        if rows.len() > limit as usize {
-            rows.pop();
-            next_cursor = rows.last().map(|r| r.id);
-        }
+        let next_cursor = super::take_page(&mut rows, limit, |r| r.id);
 
         let mut creators: Vec<CreatorQuery> = Vec::with_capacity(rows.len());
         for row in rows {
