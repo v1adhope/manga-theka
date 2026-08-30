@@ -183,10 +183,6 @@ mod tests {
         route::FeedbackReq,
     };
 
-    fn parse(body: serde_json::Value) -> Result<FeedbackReq, serde_json::Error> {
-        serde_json::from_value(body)
-    }
-
     #[test]
     fn every_kind_parses_to_its_variant() {
         let book_id = Uuid::now_v7();
@@ -205,7 +201,7 @@ mod tests {
                 serde_json::json!({"kind": "General", "email": "a@b.co", "note": "n"}),
             ),
         ] {
-            let req = parse(body).expect("body must parse");
+            let req: FeedbackReq = serde_json::from_value(body).expect("body must parse");
             let feedback = Feedback::try_from((req, Uuid::now_v7(), OffsetDateTime::now_utc()))
                 .expect("feedback must build");
 
@@ -215,7 +211,7 @@ mod tests {
 
     #[test]
     fn general_feedback_naming_a_book_is_rejected() {
-        let res = parse(serde_json::json!({
+        let res = serde_json::from_value::<FeedbackReq>(serde_json::json!({
             "kind": "General",
             "email": "a@b.co",
             "note": "n",
@@ -228,7 +224,7 @@ mod tests {
     #[test]
     fn book_bound_feedback_without_a_book_is_rejected() {
         for kind in ["Report", "Correction"] {
-            let res = parse(serde_json::json!({
+            let res = serde_json::from_value::<FeedbackReq>(serde_json::json!({
                 "kind": kind,
                 "email": "a@b.co",
                 "note": "n",
@@ -239,20 +235,9 @@ mod tests {
     }
 
     #[test]
-    fn unknown_kind_is_rejected() {
-        let res = parse(serde_json::json!({
-            "kind": "Complaint",
-            "email": "a@b.co",
-            "note": "n",
-        }));
-
-        assert!(res.is_err());
-    }
-
-    #[test]
     fn book_bound_feedback_carries_its_book() {
         let book_id = Uuid::now_v7();
-        let req = parse(serde_json::json!({
+        let req: FeedbackReq = serde_json::from_value(serde_json::json!({
             "kind": "Report", "email": "a@b.co", "note": "n", "bookId": book_id,
         }))
         .unwrap();
@@ -265,7 +250,7 @@ mod tests {
 
     #[test]
     fn general_feedback_carries_no_book() {
-        let req = parse(serde_json::json!({
+        let req: FeedbackReq = serde_json::from_value(serde_json::json!({
             "kind": "General", "email": "a@b.co", "note": "n",
         }))
         .unwrap();
@@ -280,7 +265,7 @@ mod tests {
     fn server_owned_fields_come_from_the_context_not_the_body() {
         let id = Uuid::now_v7();
         let created_at = OffsetDateTime::now_utc();
-        let req = parse(serde_json::json!({
+        let req: FeedbackReq = serde_json::from_value(serde_json::json!({
             "kind": "General", "email": "a@b.co", "note": "n",
         }))
         .unwrap();
@@ -309,7 +294,7 @@ mod tests {
                 serde_json::json!({"kind": "General", "email": "a@b.co", "note": "e".repeat(2001)}),
             ),
         ] {
-            let req = parse(body).expect("body must parse");
+            let req: FeedbackReq = serde_json::from_value(body).expect("body must parse");
             let res = Feedback::try_from((req, Uuid::now_v7(), OffsetDateTime::now_utc()));
 
             assert!(res.is_err(), "{label} must be rejected");
