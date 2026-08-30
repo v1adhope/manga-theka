@@ -87,7 +87,7 @@ pub enum SortOrder {
 
 #[cfg(test)]
 mod tests {
-    use crate::entity::filter::{Limit, MAX_LIMIT};
+    use crate::entity::filter::{DEFAULT_LIMIT, Filter, Limit, MAX_LIMIT, SortOrder};
 
     #[test]
     fn limit_zero_is_rejected() {
@@ -111,5 +111,36 @@ mod tests {
     fn limit_above_max_is_rejected() {
         let res = Limit::try_from(MAX_LIMIT + 1);
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn omitted_limit_falls_back_to_the_default() {
+        let filter = Filter::builder().build().unwrap();
+
+        assert_eq!(filter.effective_limit(), DEFAULT_LIMIT);
+    }
+
+    #[test]
+    fn provided_limit_wins_over_the_default() {
+        let filter = Filter::builder().limit(Some(1)).build().unwrap();
+
+        assert_eq!(filter.effective_limit(), 1);
+    }
+
+    #[test]
+    fn omitted_sort_order_falls_back_to_descending() {
+        let filter = Filter::builder().build().unwrap();
+
+        assert!(matches!(filter.effective_sort_order(), SortOrder::Desc));
+    }
+
+    #[test]
+    fn provided_sort_order_wins_over_the_default() {
+        let filter = Filter::builder()
+            .sort_order(Some(SortOrder::Asc))
+            .build()
+            .unwrap();
+
+        assert!(matches!(filter.effective_sort_order(), SortOrder::Asc));
     }
 }
