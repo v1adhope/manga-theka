@@ -82,13 +82,14 @@ impl AsRef<str> for Name {
 }
 
 fn validate_name(s: String) -> Result<String, EntityError> {
-    if s.trim().is_empty() {
+    let s = s.trim();
+    if s.is_empty() {
         return Err(EntityError::NameIsEmptyOrWhitespace);
     }
     if s.chars().count() > 255 {
-        return Err(EntityError::NameExceedsCharLimit(s));
+        return Err(EntityError::NameExceedsCharLimit(s.to_owned()));
     }
-    Ok(s)
+    Ok(s.to_owned())
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -127,13 +128,14 @@ impl TryFrom<String> for Text {
     type Error = EntityError;
 
     fn try_from(s: String) -> Result<Self, Self::Error> {
-        if s.trim().is_empty() {
+        let s = s.trim();
+        if s.is_empty() {
             return Err(EntityError::TextIsEmptyOrWhitespace);
         }
         if s.chars().count() > 2000 {
             return Err(EntityError::TextExceedsCharLimit);
         }
-        Ok(Self(s))
+        Ok(Self(s.to_owned()))
     }
 }
 
@@ -200,6 +202,19 @@ mod tests {
     }
 
     #[test]
+    fn name_is_trimmed() {
+        let name = Name::try_from(" \tё\n ".to_owned()).unwrap();
+
+        assert_eq!(name.as_ref(), "ё");
+    }
+
+    #[test]
+    fn name_255_chars_with_surrounding_whitespace_is_valid() {
+        let res = Name::try_from(format!(" {} ", "ё".repeat(255)));
+        assert!(res.is_ok());
+    }
+
+    #[test]
     fn not_letters_are_rejected() {
         let res = Name::try_from("123".to_owned());
         assert!(res.is_err());
@@ -215,6 +230,19 @@ mod tests {
     fn text_longer_2001_chars_is_rejected() {
         let res = Text::try_from("ё".repeat(2001));
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn text_is_trimmed() {
+        let text = Text::try_from(" \tё\n ".to_owned()).unwrap();
+
+        assert_eq!(text.as_ref(), "ё");
+    }
+
+    #[test]
+    fn text_2000_chars_with_surrounding_whitespace_is_valid() {
+        let res = Text::try_from(format!(" {} ", "ё".repeat(2000)));
+        assert!(res.is_ok());
     }
 
     #[test]
