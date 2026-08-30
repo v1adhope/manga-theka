@@ -22,6 +22,7 @@ pub struct ChapterReleaseReq {
     pub language_id: Uuid,
 }
 
+// deferred: gate to Uploader/Moderator/Admin
 pub async fn store_chapter_release(
     State(service): State<Service>,
     Path(chapter_id): Path<Uuid>,
@@ -57,6 +58,7 @@ pub async fn get_chapter_release(
     Ok(json_data_response(StatusCode::OK, release))
 }
 
+// deferred: gate to Uploader/Moderator/Admin; scope staged pages to the calling uploader
 pub async fn upload_chapter_pages(
     State(service): State<Service>,
     Path(release_id): Path<Uuid>,
@@ -95,6 +97,7 @@ pub struct CommitReq {
     pub page_order: Vec<Uuid>,
 }
 
+// deferred: gate to Uploader/Moderator/Admin; commit only the caller's own staged pages
 pub async fn commit_chapter_release(
     State(service): State<Service>,
     Path(id): Path<Uuid>,
@@ -139,6 +142,7 @@ pub async fn get_chapter_page(
     Ok((StatusCode::FOUND, [(header::LOCATION, url)]))
 }
 
+// deferred: gate to Uploader/Moderator/Admin
 pub async fn delete_chapter_release(
     State(service): State<Service>,
     Path(id): Path<Uuid>,

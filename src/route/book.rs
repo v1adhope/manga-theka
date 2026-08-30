@@ -135,6 +135,7 @@ impl TryFrom<BookWithRelations> for Book {
     }
 }
 
+// deferred: gate to any signed-in User; record the caller as the submitter
 pub async fn store_book(
     State(service): State<Service>,
     Json(req): Json<BookReq>,
@@ -154,6 +155,7 @@ pub async fn store_book(
     Ok(json_data_response(StatusCode::CREATED, StoreResp { id }))
 }
 
+// deferred: gate to Uploader/Moderator/Admin, plus the submitter on their own Draft
 pub async fn update_book(
     State(service): State<Service>,
     Path(id): Path<Uuid>,
@@ -202,6 +204,7 @@ pub async fn get_book(
     Ok(json_data_response(StatusCode::OK, book))
 }
 
+// deferred: gate to Moderator/Admin
 pub async fn delete_book(
     State(service): State<Service>,
     Path(id): Path<Uuid>,
@@ -210,6 +213,7 @@ pub async fn delete_book(
     Ok(StatusCode::NO_CONTENT)
 }
 
+// deferred: gate to Uploader/Moderator/Admin
 pub async fn store_book_cover(
     State(service): State<Service>,
     Path(book_id): Path<Uuid>,
@@ -255,6 +259,7 @@ pub struct MainCoverReq {
     pub cover_id: Uuid,
 }
 
+// deferred: gate to Uploader/Moderator/Admin
 pub async fn update_book_main_cover(
     State(service): State<Service>,
     Path(book_id): Path<Uuid>,
@@ -264,6 +269,7 @@ pub async fn update_book_main_cover(
     Ok(StatusCode::NO_CONTENT)
 }
 
+// deferred: gate to Uploader/Moderator/Admin
 pub async fn delete_book_cover(
     State(service): State<Service>,
     Path(cover_id): Path<Uuid>,
