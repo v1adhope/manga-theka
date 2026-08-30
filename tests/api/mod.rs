@@ -4,6 +4,7 @@ mod chapter;
 mod content_rating;
 mod creator;
 mod fakers;
+mod feedback;
 mod healthz;
 mod helpers;
 mod label;

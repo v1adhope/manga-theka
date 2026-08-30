@@ -9,8 +9,8 @@ use crate::{
     entity::{
         AlternativeTitle, Book, BookCover, BookCoverQuery, BookCreatorsQuery, BookKind, BookLabels,
         BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus, BookTitles,
-        ContentRating, CoverUrl, CreatorQuery, DEFAULT_LIMIT, Description, Filter, ImageExtension,
-        Label, Language, Limit, LinkUrl,
+        ContentRating, CoverUrl, CreatorQuery, Filter, ImageExtension, Label, Language, LinkUrl,
+        Text,
     },
     error::DatabaseError,
 };
@@ -169,7 +169,7 @@ impl TryFrom<BookWithRelations> for BookQuery {
 
         let name = BookName::try_from(row.name)
             .map_err(|e| DatabaseError::invariant_corrupted("name", e))?;
-        let description = Description::try_from(row.description)
+        let description = Text::try_from(row.description)
             .map_err(|e| DatabaseError::invariant_corrupted("description", e))?;
         let status: BookStatus = row
             .status
@@ -334,7 +334,11 @@ impl Database {
         &self,
         filter: &Filter,
     ) -> Result<(Vec<BookQuery>, Option<Uuid>), DatabaseError> {
-        let limit = filter.limit.map_or(DEFAULT_LIMIT, Limit::as_u32);
+        let limit = filter.effective_limit();
+        let sort_order = filter.effective_sort_order();
+        let fetch_limit = super::fetch_limit(limit);
+        let (cursor_comparison, direction) = super::cursor_op(sort_order);
+
         let mut builder: QueryBuilder<Postgres> = QueryBuilder::new(
             r"select b.id, b.name, b.description, b.publication_year,
                      cr.id as content_rating_id, cr.name as content_rating_name,
@@ -347,12 +351,17 @@ impl Database {
         );
 
         if let Some(id) = filter.after {
-            builder.push(" where b.id < ").push_bind(id);
+            builder
+                .push(" where b.id ")
+                .push(cursor_comparison)
+                .push_bind(id);
         }
 
         builder
-            .push(" order by b.id desc limit ")
-            .push_bind((limit + 1) as i64);
+            .push(" order by b.id ")
+            .push(direction)
+            .push(" limit ")
+            .push_bind(fetch_limit);
 
         let mut rows = builder
             .build_query_as::<BookRow>()
@@ -363,11 +372,7 @@ impl Database {
             return Ok((Vec::new(), None));
         }
 
-        let mut next_cursor = None;
-        if rows.len() > limit as usize {
-            rows.pop();
-            next_cursor = rows.last().map(|r| r.id);
-        }
+        let next_cursor = super::take_page(&mut rows, limit, |r| r.id);
 
         let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
         let mut labels = self.get_books_labels(&ids).await?;

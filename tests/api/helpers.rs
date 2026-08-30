@@ -15,8 +15,8 @@ use manga_theka::{
     entity::{
         AlternativeTitle, BookCoverQuery, BookLink, BookName, BookQuery, Chapter,
         ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume, ContentRating, CoverUrl,
-        Creator, CreatorQuery, CreatorRole, Description, ImageExtension, Label, Language, LinkUrl,
-        Name,
+        Creator, CreatorQuery, CreatorRole, Email, Feedback, ImageExtension, Label, Language,
+        LinkUrl, Name, Text,
     },
     object_storage,
     startup::App,
@@ -507,8 +507,7 @@ order by c.id;
         BookQuery {
             id,
             name: BookName::try_from(row.name).expect("stored name must be valid"),
-            description: Description::try_from(row.description)
-                .expect("stored description must be valid"),
+            description: Text::try_from(row.description).expect("stored description must be valid"),
             publication_year: row.publication_year,
             content_rating: ContentRating {
                 id: row.content_rating_id,
@@ -820,6 +819,91 @@ values($1, $2, $3);
             .unwrap();
 
         self.router.clone().oneshot(req).await.unwrap()
+    }
+
+    pub async fn post_feedback(&self, body: serde_json::Value) -> Response {
+        let req = Request::post("/feedback")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap()
+    }
+
+    pub async fn insert_feedback(&self, f: &Feedback) {
+        sqlx::query!(
+            r#"
+insert into feedback(id, kind, status, email, note, book_id, updated_at, created_at)
+values($1, $2, $3, $4, $5, $6, $7, $8);
+        "#,
+            f.id,
+            f.kind.as_ref(),
+            f.status.as_ref(),
+            f.email.as_ref(),
+            f.note.as_ref(),
+            f.book_id,
+            f.updated_at,
+            f.created_at
+        )
+        .execute(&self.pool)
+        .await
+        .expect("failed to insert factory feedback");
+    }
+
+    pub async fn fetch_feedback(&self, id: Uuid) -> Feedback {
+        let row = sqlx::query!(
+            r#"
+select f.id, f.kind, f.status, f.email, f.note, f.book_id, f.updated_at, f.created_at
+from feedback f
+where f.id = $1;
+        "#,
+            id
+        )
+        .fetch_one(&self.pool)
+        .await
+        .expect("failed to read feedback");
+
+        Feedback {
+            id: row.id,
+            kind: row.kind.parse().unwrap(),
+            status: row.status.parse().unwrap(),
+            email: Email::try_from(row.email).unwrap(),
+            note: Text::try_from(row.note).unwrap(),
+            book_id: row.book_id,
+            updated_at: row.updated_at,
+            created_at: row.created_at,
+        }
+    }
+
+    pub async fn count_feedback(&self) -> i64 {
+        sqlx::query_scalar!(r#"select count(*) as "count!" from feedback"#)
+            .fetch_one(&self.pool)
+            .await
+            .expect("failed to count feedback")
+    }
+
+    pub async fn get_feedbacks(&self, path: &str) -> Response {
+        let req = Request::get(path).body(Body::empty()).unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap()
+    }
+
+    pub async fn get_feedback(&self, id: Uuid) -> Response {
+        let req = Request::get(format!("/feedback/{id}"))
+            .body(Body::empty())
+            .unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap()
+    }
+
+    pub async fn put_feedback_status(&self, id: Uuid, status: &str) -> StatusCode {
+        let body = serde_json::json!({ "status": status }).to_string();
+        let req = Request::put(format!("/feedback/{id}/status"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body))
+            .unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap().status()
     }
 
     pub async fn delete_chapter(&self, id: Uuid) -> Response {

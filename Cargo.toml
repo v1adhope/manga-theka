@@ -36,6 +36,7 @@ tracing-subscriber = { version = "0.3", features = [
   "env-filter",
   "fmt",
   "json",
+  "time",
 ] }
 tracing-log = "0.2"
 uuid = { version = "1", features = ["v7", "serde"] }
