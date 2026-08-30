@@ -882,13 +882,13 @@ where f.id = $1;
             .expect("failed to count feedback")
     }
 
-    pub async fn get_feedback_list(&self, path: &str) -> Response {
+    pub async fn get_feedbacks(&self, path: &str) -> Response {
         let req = Request::get(path).body(Body::empty()).unwrap();
 
         self.router.clone().oneshot(req).await.unwrap()
     }
 
-    pub async fn get_one_feedback(&self, id: Uuid) -> Response {
+    pub async fn get_feedback(&self, id: Uuid) -> Response {
         let req = Request::get(format!("/feedback/{id}"))
             .body(Body::empty())
             .unwrap();

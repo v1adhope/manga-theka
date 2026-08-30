@@ -214,7 +214,7 @@ async fn get_feedbacks_filters_by_kind() {
         app.insert_feedback(&feedback).await;
     }
 
-    let resp = app.get_feedback_list("/feedback?kind=Report").await;
+    let resp = app.get_feedbacks("/feedback?kind=Report").await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -241,7 +241,7 @@ async fn get_feedbacks_filters_by_status() {
         app.insert_feedback(&feedback).await;
     }
 
-    let resp = app.get_feedback_list("/feedback?status=Dismissed").await;
+    let resp = app.get_feedbacks("/feedback?status=Dismissed").await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -274,9 +274,7 @@ async fn get_feedbacks_combines_kind_and_status_filters() {
         app.insert_feedback(&feedback).await;
     }
 
-    let resp = app
-        .get_feedback_list("/feedback?kind=Report&status=Open")
-        .await;
+    let resp = app.get_feedbacks("/feedback?kind=Report&status=Open").await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -298,12 +296,12 @@ async fn get_feedbacks_orders_by_submission_date() {
         app.insert_feedback(&feedback).await;
     }
 
-    let resp = app.get_feedback_list("/feedback?order=Asc").await;
+    let resp = app.get_feedbacks("/feedback?order=Asc").await;
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
     let asc: RespWrapper<Vec<Feedback>> = serde_json::from_slice(&bytes).unwrap();
     let asc_ids: Vec<uuid::Uuid> = asc.data.iter().map(|f| f.id).collect();
 
-    let resp = app.get_feedback_list("/feedback?order=Desc").await;
+    let resp = app.get_feedbacks("/feedback?order=Desc").await;
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
     let desc: RespWrapper<Vec<Feedback>> = serde_json::from_slice(&bytes).unwrap();
     let desc_ids: Vec<uuid::Uuid> = desc.data.iter().map(|f| f.id).collect();
@@ -324,7 +322,7 @@ async fn get_feedbacks_returns_default_limit_and_next_cursor() {
         app.insert_feedback(&feedback).await;
     }
 
-    let resp = app.get_feedback_list("/feedback").await;
+    let resp = app.get_feedbacks("/feedback").await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -343,7 +341,7 @@ async fn get_feedbacks_with_after_and_limit_3_returns_next_page() {
         app.insert_feedback(&feedback).await;
     }
 
-    let resp = app.get_feedback_list("/feedback?limit=3").await;
+    let resp = app.get_feedbacks("/feedback?limit=3").await;
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
     let first: RespWrapper<Vec<Feedback>> = serde_json::from_slice(&bytes).unwrap();
 
@@ -351,7 +349,7 @@ async fn get_feedbacks_with_after_and_limit_3_returns_next_page() {
     let cursor = first.next_cursor.unwrap();
 
     let resp = app
-        .get_feedback_list(&format!("/feedback?limit=3&after={cursor}"))
+        .get_feedbacks(&format!("/feedback?limit=3&after={cursor}"))
         .await;
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
     let second: RespWrapper<Vec<Feedback>> = serde_json::from_slice(&bytes).unwrap();
@@ -367,7 +365,7 @@ async fn get_feedbacks_with_after_and_limit_3_returns_next_page() {
 async fn get_feedbacks_zero_limit_returns_422() {
     let app = TestApp::new().await;
 
-    let resp = app.get_feedback_list("/feedback?limit=0").await;
+    let resp = app.get_feedbacks("/feedback?limit=0").await;
 
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
@@ -376,7 +374,7 @@ async fn get_feedbacks_zero_limit_returns_422() {
 async fn get_feedbacks_invalid_after_returns_400() {
     let app = TestApp::new().await;
 
-    let resp = app.get_feedback_list("/feedback?after=not-a-uuid").await;
+    let resp = app.get_feedbacks("/feedback?after=not-a-uuid").await;
 
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
@@ -386,7 +384,7 @@ async fn get_feedbacks_unknown_filter_values_return_400() {
     let app = TestApp::new().await;
 
     for query in ["/feedback?kind=Complaint", "/feedback?status=Closed"] {
-        let resp = app.get_feedback_list(query).await;
+        let resp = app.get_feedbacks(query).await;
 
         assert_error(resp, StatusCode::BAD_REQUEST).await;
     }
@@ -404,7 +402,7 @@ async fn get_feedback_with_valid_id_passes() {
         .fake();
         app.insert_feedback(&feedback).await;
 
-        let resp = app.get_one_feedback(feedback.id).await;
+        let resp = app.get_feedback(feedback.id).await;
         assert_eq!(resp.status(), StatusCode::OK);
 
         let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -420,7 +418,7 @@ async fn get_feedback_with_valid_id_passes() {
 async fn get_feedback_with_unknown_id_returns_404() {
     let app = TestApp::new().await;
 
-    let resp = app.get_one_feedback(uuid::Uuid::now_v7()).await;
+    let resp = app.get_feedback(uuid::Uuid::now_v7()).await;
 
     assert_error(resp, StatusCode::NOT_FOUND).await;
 }
@@ -429,7 +427,7 @@ async fn get_feedback_with_unknown_id_returns_404() {
 async fn get_feedback_with_malformed_id_returns_400() {
     let app = TestApp::new().await;
 
-    let resp = app.get_feedback_list("/feedback/not-a-uuid").await;
+    let resp = app.get_feedbacks("/feedback/not-a-uuid").await;
 
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
