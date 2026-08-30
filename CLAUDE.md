@@ -21,8 +21,10 @@ This is an API for reading and hosting user-uploaded manga, manhwa, and manhua.
 
 ## Where things live
 
-- See `docs/rust.md` for Rust coding standards, style, and patterns.
-- See `docs/git.md` for version control, branching, and commit rules.
-- See `docs/issue-tracker.md` for issue tracking conventions, lifecycle, and PR linkage.
-- See `docs/sql.md` for SQL coding standards, query guidelines, and schema conventions.
-- See `docs/domain.md` for how to consume this repo's domain documentation when exploring.
+See a doc when the task touches its area.
+
+- `docs/rust.md` — before writing or editing any `.rs` file.
+- `docs/git.md` — before branching, committing, or pushing.
+- `docs/issue-tracker.md` — before creating, reading, or commenting on a GitHub issue or PR.
+- `docs/sql.md` — before writing or editing a SQL query, migration, or schema.
+- `docs/domain.md` — before exploring the codebase to understand domain behavior or architectural decisions.
