@@ -153,6 +153,18 @@ impl From<sqlx::Error> for DatabaseError {
                         source: err,
                     };
                 }
+                Some("enum_books_visibility") => {
+                    return Self::DoesNotExist {
+                        field: "Book visibility",
+                        source: err,
+                    };
+                }
+                Some("check_length_books_note") => {
+                    return Self::OutOfRange {
+                        field: "Book note",
+                        source: err,
+                    };
+                }
                 Some("enum_books_kind") => {
                     return Self::DoesNotExist {
                         field: "Book kind",
@@ -285,6 +297,17 @@ impl From<sqlx::Error> for DatabaseError {
                 }
                 Some("fk_chapter_pages_chapter_releases_release_id") => {
                     return Self::not_found::<ChapterRelease>();
+                }
+                Some("fk_chapter_releases_books_book_id")
+                | Some("fk_chapter_pages_books_book_id") => {
+                    if db_err.message().starts_with("insert or update") {
+                        return Self::not_found::<Book>();
+                    }
+
+                    return Self::InUse {
+                        field: "Book with releases",
+                        source: err,
+                    };
                 }
                 Some("fk_chapter_releases_languages_language_id") => {
                     return Self::DoesNotExist {

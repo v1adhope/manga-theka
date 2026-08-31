@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::{
     entity::{
         ChapterPageParams, ChapterPages, ChapterRelease, MAX_PARTS_PER_REQUEST, Ordinal, PageOrder,
+        UserClaims,
     },
     error::{AppError, RouteError},
     route::{StoreResp, collect_image_part, json_data_response},
@@ -64,7 +65,7 @@ pub async fn upload_chapter_pages(
     Path(release_id): Path<Uuid>,
     mut multipart: Multipart,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    service.ensure_chapter_release_exists(release_id).await?;
+    service.ensure_chapter_release_writable(release_id).await?;
 
     let mut images = Vec::with_capacity(MAX_PARTS_PER_REQUEST);
 
@@ -110,33 +111,43 @@ pub async fn commit_chapter_release(
     Ok(StatusCode::NO_CONTENT)
 }
 
+// deferred: also admit the book's submitter once `books` records one
 pub async fn get_chapter_pages(
     State(service): State<Service>,
     Path(release_id): Path<Uuid>,
     Query(params): Query<ChapterPageParams>,
+    claims: UserClaims,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    let pages = service.get_chapter_pages(release_id, params).await?;
+    let pages = service
+        .get_chapter_pages(release_id, params, &claims)
+        .await?;
 
     Ok(json_data_response(StatusCode::OK, pages))
 }
 
+// deferred: also admit the book's submitter once `books` records one
 pub async fn get_chapter_page_image(
     State(service): State<Service>,
     Path((release_id, page_id)): Path<(Uuid, Uuid)>,
+    claims: UserClaims,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    let url = service.presign_chapter_page(release_id, page_id).await?;
+    let url = service
+        .presign_chapter_page(release_id, page_id, &claims)
+        .await?;
 
     Ok((StatusCode::FOUND, [(header::LOCATION, url)]))
 }
 
+// deferred: also admit the book's submitter once `books` records one
 pub async fn get_chapter_page(
     State(service): State<Service>,
     Path((release_id, page_number)): Path<(Uuid, i32)>,
+    claims: UserClaims,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let number = Ordinal::try_from(page_number)?;
 
     let url = service
-        .presign_chapter_page_by_number(release_id, number)
+        .presign_chapter_page_by_number(release_id, number, &claims)
         .await?;
 
     Ok((StatusCode::FOUND, [(header::LOCATION, url)]))

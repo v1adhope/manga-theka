@@ -4,8 +4,9 @@ use uuid::Uuid;
 use crate::{
     database::Database,
     entity::{
-        ChapterPage, ChapterPageParams, ChapterPageQuery, ChapterPages, ChapterRelease,
-        ChapterReleaseQuery, ImageExtension, Language, Ordinal, PageOrder, PageStatus, PageUrl,
+        BookVisibility, ChapterPage, ChapterPageParams, ChapterPageQuery, ChapterPages,
+        ChapterRelease, ChapterReleaseQuery, ImageExtension, Language, Ordinal, PageOrder,
+        PageStatus, PageUrl,
     },
     error::DatabaseError,
 };
@@ -175,18 +176,24 @@ impl Database {
     }
 
     #[instrument(name = "db.chapter_release.exists", skip_all, fields(release.id = %id))]
-    pub async fn ensure_chapter_release_exists(&self, id: Uuid) -> Result<(), DatabaseError> {
-        let row = sqlx::query_file!("queries/chapter_release_exists.sql", id)
-            .fetch_one(&self.pool)
+    pub async fn ensure_chapter_release_exists(
+        &self,
+        id: Uuid,
+    ) -> Result<BookVisibility, DatabaseError> {
+        let visibility = sqlx::query_file_scalar!("queries/book_visibility_by_release.sql", id)
+            .fetch_optional(&self.pool)
             .await
             .map_err(DatabaseError::from)
             .inspect_err(DatabaseError::log_internal)?;
 
-        if !row.exists {
+        let Some(visibility) = visibility else {
             return Err(DatabaseError::not_found::<ChapterRelease>());
-        }
+        };
 
-        Ok(())
+        visibility
+            .parse()
+            .map_err(|e| DatabaseError::invariant_corrupted("visibility", e))
+            .inspect_err(DatabaseError::log_internal)
     }
 
     #[instrument(name = "db.chapter_release.commit", skip_all, fields(release.id = %id, pages = order.len()))]
@@ -341,11 +348,13 @@ impl Database {
         &self,
         release_id: Uuid,
         number: Ordinal,
+        unlisted_allowed: bool,
     ) -> Result<Uuid, DatabaseError> {
         let id = sqlx::query_file_scalar!(
             "queries/get_chapter_page_id.sql",
             release_id,
-            number.as_i32()
+            number.as_i32(),
+            unlisted_allowed
         )
         .fetch_optional(&self.pool)
         .await
@@ -364,17 +373,21 @@ impl Database {
         &self,
         release_id: Uuid,
         id: Uuid,
-    ) -> Result<(), DatabaseError> {
-        let row = sqlx::query_file!("queries/chapter_page_exists.sql", id, release_id)
-            .fetch_one(&self.pool)
-            .await
-            .map_err(DatabaseError::from)
-            .inspect_err(DatabaseError::log_internal)?;
+    ) -> Result<BookVisibility, DatabaseError> {
+        let visibility =
+            sqlx::query_file_scalar!("queries/book_visibility_by_page.sql", id, release_id)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(DatabaseError::from)
+                .inspect_err(DatabaseError::log_internal)?;
 
-        if !row.exists {
+        let Some(visibility) = visibility else {
             return Err(DatabaseError::not_found::<ChapterPage>());
-        }
+        };
 
-        Ok(())
+        visibility
+            .parse()
+            .map_err(|e| DatabaseError::invariant_corrupted("visibility", e))
+            .inspect_err(DatabaseError::log_internal)
     }
 }

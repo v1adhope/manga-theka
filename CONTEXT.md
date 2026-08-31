@@ -123,11 +123,11 @@ _Avoid_: Draft page, Pending page, Unordered page
 ## Moderation
 
 **Book Visibility**:
-The lifecycle state of a `Book` as a catalog record, separate from `Book Status` -- `Draft` (being assembled, not yet submitted), `PendingReview` (submitted, awaiting a `Moderator`), `Listed` (approved and public), `Rejected` (declined and not retained), or `Hidden` (removed from public view by a `Moderator`). A closed, fixed set; exactly one per `Book`. Only a `Book`'s submitter can move it from `Draft` to `PendingReview`; a `Moderator` owns every other transition.
+The lifecycle state of a `Book` as a catalog record, separate from `Book Status` -- `Draft` (being assembled, not yet submitted), `PendingReview` (submitted, awaiting a `Moderator`), `Listed` (approved and public), `Rejected` (declined and not retained), or `Hidden` (removed from public view by a `Moderator`). A closed, fixed set; exactly one per `Book`. Only a `Book`'s submitter can move it from `Draft` to `PendingReview`; a `Moderator` owns every other transition. `PendingReview` is the only state that can return to `Draft`, so an approved or hidden `Book` never becomes a draft again. Writes follow the state: a `Draft` accepts its own metadata and `Book Cover`s but no `Chapter`s, a `Listed` `Book` accepts everything, and `PendingReview`, `Rejected`, and `Hidden` accept nothing. A `Guest` is served the `Chapter Page`s and `Book Cover` images of a `Listed` `Book` only; a `Moderator` reads them in any state.
 _Avoid_: Status, State, Scope, Publication state, Published (see `Chapter Release`), Draft/Listed/Hidden as standalone terms
 
 **Review Note**:
-The single submitter-visible message carried by a `Book`, explaining its current `Book Visibility` -- why it was `Rejected` or `Hidden`, what to change before resubmitting, or an acknowledgement that it is awaiting review. One per `Book`, replaced whenever the note changes. Not a private staff annotation.
+The single submitter-visible message carried by a `Book`, explaining its current `Book Visibility` -- why it was `Rejected` or `Hidden`, what to change before resubmitting, or an acknowledgement that it is awaiting review. One per `Book`, surfaced as the `note` field, replaced whenever the note changes and cleared when a `Book` becomes `Listed` without a replacement. Required on any move into `Draft`, `Rejected`, or `Hidden`; written by the system on submission. Set without changing state by repeating the `Book`'s current `Book Visibility`. Not a private staff annotation.
 _Avoid_: Comment, Reason, Moderation note, Internal note
 
 **Feedback**:

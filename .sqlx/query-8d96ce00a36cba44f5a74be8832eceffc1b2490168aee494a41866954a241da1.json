@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select b.visibility\nfrom books b\njoin chapters c on c.book_id = b.id\nwhere c.id = $1;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "visibility",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "books",
+            "name": "visibility"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "8d96ce00a36cba44f5a74be8832eceffc1b2490168aee494a41866954a241da1"
+}

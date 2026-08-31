@@ -3,15 +3,21 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        ChapterPageParams, ChapterPageQuery, ChapterPages, ChapterRelease, ChapterReleaseQuery,
-        Ordinal, PageOrder, UPLOAD_CHUNK_SIZE,
+        ChapterPage, ChapterPageParams, ChapterPageQuery, ChapterPages, ChapterRelease,
+        ChapterReleaseQuery, Ordinal, PageOrder, UPLOAD_CHUNK_SIZE, UserClaims,
     },
     error::{ObjectStorageError, ServiceError},
-    service::Service,
+    service::{
+        Service,
+        book::{ensure_content_writable, ensure_readable},
+    },
 };
 
 impl Service {
     pub async fn store_chapter_release(&self, item: ChapterRelease) -> Result<(), ServiceError> {
+        let visibility = self.database.ensure_chapter_exists(item.chapter_id).await?;
+        ensure_content_writable(visibility)?;
+
         self.database
             .store_chapter_release(&item)
             .await
@@ -44,14 +50,19 @@ impl Service {
             .map_err(Into::into)
     }
 
-    pub async fn ensure_chapter_release_exists(&self, id: Uuid) -> Result<(), ServiceError> {
-        self.database
-            .ensure_chapter_release_exists(id)
-            .await
-            .map_err(Into::into)
+    pub async fn ensure_chapter_release_writable(&self, id: Uuid) -> Result<(), ServiceError> {
+        let visibility = self.database.ensure_chapter_release_exists(id).await?;
+
+        ensure_content_writable(visibility)
     }
 
     pub async fn store_chapter_pages(&self, item: ChapterPages) -> Result<(), ServiceError> {
+        let visibility = self
+            .database
+            .ensure_chapter_release_exists(item.release_id)
+            .await?;
+        ensure_content_writable(visibility)?;
+
         let existing = self.database.count_chapter_pages(item.release_id).await? as usize;
         ChapterRelease::ensure_row_capacity(existing, item.images.len())?;
 
@@ -82,6 +93,9 @@ impl Service {
         id: Uuid,
         order: &PageOrder,
     ) -> Result<(), ServiceError> {
+        let visibility = self.database.ensure_chapter_release_exists(id).await?;
+        ensure_content_writable(visibility)?;
+
         let removed = self.database.commit_chapter_release(id, order).await?;
 
         let _ = self.storage.delete_chapter_pages(&removed).await;
@@ -93,10 +107,13 @@ impl Service {
         &self,
         release_id: Uuid,
         params: ChapterPageParams,
+        claims: &UserClaims,
     ) -> Result<Vec<ChapterPageQuery>, ServiceError> {
-        self.database
+        let visibility = self
+            .database
             .ensure_chapter_release_exists(release_id)
             .await?;
+        ensure_readable::<ChapterRelease>(visibility, claims)?;
 
         self.database
             .get_chapter_pages(release_id, params)
@@ -108,10 +125,13 @@ impl Service {
         &self,
         release_id: Uuid,
         id: Uuid,
+        claims: &UserClaims,
     ) -> Result<String, ServiceError> {
-        self.database
+        let visibility = self
+            .database
             .ensure_chapter_page_exists(release_id, id)
             .await?;
+        ensure_readable::<ChapterPage>(visibility, claims)?;
 
         self.storage
             .presign_chapter_page(id)
@@ -123,10 +143,11 @@ impl Service {
         &self,
         release_id: Uuid,
         number: Ordinal,
+        claims: &UserClaims,
     ) -> Result<String, ServiceError> {
         let id = self
             .database
-            .get_chapter_page_id(release_id, number)
+            .get_chapter_page_id(release_id, number, claims.can_moderate())
             .await?;
 
         self.storage
@@ -136,6 +157,9 @@ impl Service {
     }
 
     pub async fn delete_chapter_release(&self, id: Uuid) -> Result<(), ServiceError> {
+        let visibility = self.database.ensure_chapter_release_exists(id).await?;
+        ensure_content_writable(visibility)?;
+
         let page_ids = self.database.get_chapter_release_page_ids(id).await?;
 
         self.database.delete_chapter_release(id).await?;

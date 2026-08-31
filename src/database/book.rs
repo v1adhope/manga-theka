@@ -7,10 +7,10 @@ use uuid::Uuid;
 use crate::{
     database::{Database, creator::CreatorQueryRow, label::LabelRow},
     entity::{
-        AlternativeTitle, Book, BookCover, BookCoverQuery, BookCreatorsQuery, BookKind, BookLabels,
-        BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus, BookTitles,
-        ContentRating, CoverUrl, CreatorQuery, Filter, ImageExtension, Label, Language, LinkUrl,
-        Text,
+        AlternativeTitle, Book, BookCover, BookCoverQuery, BookCreatorsQuery, BookFilter, BookKind,
+        BookLabels, BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus, BookTitles,
+        BookVisibility, BookVisibilityUpdate, ContentRating, CoverUrl, CreatorQuery,
+        ImageExtension, Label, Language, LinkUrl, Text,
     },
     error::DatabaseError,
 };
@@ -29,6 +29,9 @@ struct BookRow {
     publication_language_id: Uuid,
     publication_language_code: String,
     publication_language_name: String,
+    visibility: String,
+    note: Option<String>,
+    submitted_at: Option<time::OffsetDateTime>,
     updated_at: Option<time::OffsetDateTime>,
     created_at: time::OffsetDateTime,
 }
@@ -179,6 +182,15 @@ impl TryFrom<BookWithRelations> for BookQuery {
             .kind
             .parse()
             .map_err(|e| DatabaseError::invariant_corrupted("kind", e))?;
+        let visibility: BookVisibility = row
+            .visibility
+            .parse()
+            .map_err(|e| DatabaseError::invariant_corrupted("visibility", e))?;
+        let note = row
+            .note
+            .map(Text::try_from)
+            .transpose()
+            .map_err(|e| DatabaseError::invariant_corrupted("note", e))?;
         let labels = BookLabels::try_from(labels)
             .map_err(|e| DatabaseError::invariant_corrupted("labels", e))?;
         let links = BookLinks::try_from(links)
@@ -209,6 +221,9 @@ impl TryFrom<BookWithRelations> for BookQuery {
             links,
             titles,
             creators,
+            visibility,
+            note,
+            submitted_at: row.submitted_at,
             updated_at: row.updated_at,
             created_at: row.created_at,
         })
@@ -323,7 +338,7 @@ impl Database {
     )]
     pub async fn get_books(
         &self,
-        filter: &Filter,
+        filter: &BookFilter,
     ) -> Result<(Vec<BookQuery>, Option<Uuid>), DatabaseError> {
         self.get_books_inner(filter)
             .await
@@ -332,10 +347,10 @@ impl Database {
 
     async fn get_books_inner(
         &self,
-        filter: &Filter,
+        filter: &BookFilter,
     ) -> Result<(Vec<BookQuery>, Option<Uuid>), DatabaseError> {
-        let limit = filter.effective_limit();
-        let sort_order = filter.effective_sort_order();
+        let limit = filter.page.effective_limit();
+        let sort_order = filter.page.effective_sort_order();
         let fetch_limit = super::fetch_limit(limit);
         let (cursor_comparison, direction) = super::cursor_op(sort_order);
 
@@ -344,15 +359,21 @@ impl Database {
                      cr.id as content_rating_id, cr.name as content_rating_name,
                      cr.code as content_rating_code, b.status, b.kind,
                      l.id as publication_language_id, l.code as publication_language_code,
-                     l.name as publication_language_name, b.updated_at, b.created_at
+                     l.name as publication_language_name, b.visibility, b.note, b.submitted_at,
+                     b.updated_at, b.created_at
               from books b
               join content_ratings cr on cr.id = b.content_rating
-              join languages l on l.id = b.publication_language",
+              join languages l on l.id = b.publication_language
+              where true",
         );
 
-        if let Some(id) = filter.after {
+        builder
+            .push(" and b.visibility = ")
+            .push_bind(filter.effective_visibility().as_ref());
+
+        if let Some(id) = filter.page.after {
             builder
-                .push(" where b.id ")
+                .push(" and b.id ")
                 .push(cursor_comparison)
                 .push_bind(id);
         }
@@ -412,19 +433,43 @@ impl Database {
         Ok(())
     }
 
+    #[instrument(name = "db.book.set_visibility", skip_all, fields(book.id = %item.id))]
+    pub async fn set_book_visibility(
+        &self,
+        item: &BookVisibilityUpdate,
+    ) -> Result<bool, DatabaseError> {
+        let row = sqlx::query_file!(
+            "queries/set_book_visibility.sql",
+            item.id,
+            item.to.as_ref(),
+            item.note.as_ref().map(AsRef::as_ref),
+            item.submitted_at,
+            item.from.as_ref(),
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(DatabaseError::from)
+        .inspect_err(DatabaseError::log_internal)?;
+
+        Ok(row.is_some())
+    }
+
     #[instrument(name = "db.book.exists", skip_all, fields(book.id = %id))]
-    pub async fn ensure_book_exists(&self, id: Uuid) -> Result<(), DatabaseError> {
-        let row = sqlx::query_file!("queries/book_exists.sql", id)
-            .fetch_one(&self.pool)
+    pub async fn ensure_book_exists(&self, id: Uuid) -> Result<BookVisibility, DatabaseError> {
+        let visibility = sqlx::query_file_scalar!("queries/book_visibility.sql", id)
+            .fetch_optional(&self.pool)
             .await
             .map_err(DatabaseError::from)
             .inspect_err(DatabaseError::log_internal)?;
 
-        if !row.exists {
+        let Some(visibility) = visibility else {
             return Err(DatabaseError::not_found::<Book>());
-        }
+        };
 
-        Ok(())
+        visibility
+            .parse()
+            .map_err(|e| DatabaseError::invariant_corrupted("visibility", e))
+            .inspect_err(DatabaseError::log_internal)
     }
 
     #[instrument(name = "db.book.labels", skip_all, level = Level::DEBUG, fields(books = book_ids.len()))]
@@ -662,18 +707,24 @@ impl Database {
     }
 
     #[instrument(name = "db.book_cover.exists", skip_all, fields(cover.id = %id))]
-    pub async fn ensure_book_cover_exists(&self, id: Uuid) -> Result<(), DatabaseError> {
-        let row = sqlx::query_file!("queries/book_cover_exists.sql", id)
-            .fetch_one(&self.pool)
+    pub async fn ensure_book_cover_exists(
+        &self,
+        id: Uuid,
+    ) -> Result<BookVisibility, DatabaseError> {
+        let visibility = sqlx::query_file_scalar!("queries/book_visibility_by_cover.sql", id)
+            .fetch_optional(&self.pool)
             .await
             .map_err(DatabaseError::from)
             .inspect_err(DatabaseError::log_internal)?;
 
-        if !row.exists {
+        let Some(visibility) = visibility else {
             return Err(DatabaseError::not_found::<BookCover>());
-        }
+        };
 
-        Ok(())
+        visibility
+            .parse()
+            .map_err(|e| DatabaseError::invariant_corrupted("visibility", e))
+            .inspect_err(DatabaseError::log_internal)
     }
 
     #[instrument(name = "db.book_cover.ids", skip_all, fields(book.id = %book_id))]

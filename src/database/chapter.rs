@@ -7,8 +7,8 @@ use uuid::Uuid;
 use crate::{
     database::Database,
     entity::{
-        Chapter, ChapterLocalization, ChapterLocalizations, ChapterName, ChapterNumber,
-        ChapterVolume, Filter,
+        BookVisibility, Chapter, ChapterLocalization, ChapterLocalizations, ChapterName,
+        ChapterNumber, ChapterVolume, Filter,
     },
     error::DatabaseError,
 };
@@ -252,18 +252,21 @@ impl Database {
     }
 
     #[instrument(name = "db.chapter.exists", skip_all, fields(chapter.id = %id))]
-    pub async fn ensure_chapter_exists(&self, id: Uuid) -> Result<(), DatabaseError> {
-        let row = sqlx::query_file!("queries/chapter_exists.sql", id)
-            .fetch_one(&self.pool)
+    pub async fn ensure_chapter_exists(&self, id: Uuid) -> Result<BookVisibility, DatabaseError> {
+        let visibility = sqlx::query_file_scalar!("queries/book_visibility_by_chapter.sql", id)
+            .fetch_optional(&self.pool)
             .await
             .map_err(DatabaseError::from)
             .inspect_err(DatabaseError::log_internal)?;
 
-        if !row.exists {
+        let Some(visibility) = visibility else {
             return Err(DatabaseError::not_found::<Chapter>());
-        }
+        };
 
-        Ok(())
+        visibility
+            .parse()
+            .map_err(|e| DatabaseError::invariant_corrupted("visibility", e))
+            .inspect_err(DatabaseError::log_internal)
     }
 
     #[instrument(name = "db.chapter.delete", skip_all, fields(chapter.id = %id))]

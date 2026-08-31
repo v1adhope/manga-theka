@@ -13,7 +13,7 @@ use manga_theka::{
     config::{Config, Database},
     database,
     entity::{
-        AlternativeTitle, BookCoverQuery, BookLink, BookName, BookQuery, Chapter,
+        AlternativeTitle, BookCoverQuery, BookLink, BookName, BookQuery, BookVisibility, Chapter,
         ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume, ContentRating, CoverUrl,
         Creator, CreatorQuery, CreatorRole, Email, Feedback, ImageExtension, Label, Language,
         LinkUrl, Name, Text,
@@ -41,6 +41,13 @@ pub struct BookSample {
     pub labels: i64,
     pub links: i64,
     pub titles: i64,
+}
+
+#[derive(Debug)]
+pub struct BookState {
+    pub visibility: Option<String>,
+    pub note: Option<String>,
+    pub submitted_at: Option<time::OffsetDateTime>,
 }
 
 #[derive(Debug)]
@@ -246,12 +253,83 @@ impl TestApp {
             .len()
     }
 
+    pub async fn insert_book_with_visibility(&self, visibility: BookVisibility) -> Uuid {
+        let book: BookQuery = BookFaker {
+            visibility,
+            ..Default::default()
+        }
+        .fake();
+
+        self.insert_book(&book).await;
+
+        book.id
+    }
+
+    pub async fn fetch_book_state(&self, id: Uuid) -> BookState {
+        let row = sqlx::query!(
+            r#"
+select (select b.visibility from books b where b.id = $1) as "visibility?",
+       (select b.note from books b where b.id = $1) as "note?",
+       (select b.submitted_at from books b where b.id = $1) as "submitted_at?";
+        "#,
+            id
+        )
+        .fetch_one(&self.pool)
+        .await
+        .expect("failed to read book state");
+
+        BookState {
+            visibility: row.visibility,
+            note: row.note,
+            submitted_at: row.submitted_at,
+        }
+    }
+
+    pub async fn put_visibility(&self, id: Uuid, visibility: &str, note: Option<&str>) -> Response {
+        let body = match note {
+            Some(note) => serde_json::json!({ "visibility": visibility, "note": note }),
+            None => serde_json::json!({ "visibility": visibility }),
+        }
+        .to_string();
+        let req = Request::put(format!("/books/{id}/visibility"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body))
+            .unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap()
+    }
+
+    pub async fn get_books(&self, path: &str) -> Response {
+        let req = Request::get(path).body(Body::empty()).unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap()
+    }
+
+    pub async fn get_body(&self, path: &str) -> (StatusCode, String) {
+        let req = Request::get(path).body(Body::empty()).unwrap();
+        let resp = self.router.clone().oneshot(req).await.unwrap();
+        let status = resp.status();
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+
+        (status, String::from_utf8_lossy(&bytes).into_owned())
+    }
+
+    pub async fn get_as_moderator(&self, path: &str) -> Response {
+        let req = Request::get(path)
+            .header("x-user-id", Uuid::now_v7().to_string())
+            .header("x-user-role", "Moderator")
+            .body(Body::empty())
+            .unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap()
+    }
+
     pub async fn insert_book(&self, b: &BookQuery) {
         sqlx::query!(
             r#"
 insert into books(id, name, description, publication_year, content_rating, status, kind,
-                  publication_language, updated_at, created_at)
-values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
+                  publication_language, visibility, note, submitted_at, updated_at, created_at)
+values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
         "#,
             b.id,
             b.name.as_ref(),
@@ -261,6 +339,9 @@ values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
             b.status.as_ref() as _,
             b.kind.as_ref() as _,
             b.publication_language.id,
+            b.visibility.as_ref() as _,
+            b.note.as_ref().map(AsRef::as_ref) as Option<&str>,
+            b.submitted_at,
             b.updated_at,
             b.created_at
         )
@@ -402,7 +483,8 @@ select (select b.name from books b where b.id = $1) as "name?",
     pub async fn fetch_book(&self, id: Uuid) -> BookQuery {
         let row = sqlx::query!(
             r#"
-select b.name, b.description, b.publication_year, b.status, b.kind, b.updated_at, b.created_at,
+select b.name, b.description, b.publication_year, b.status, b.kind, b.visibility, b.note,
+       b.submitted_at, b.updated_at, b.created_at,
        cr.id as content_rating_id, cr.name as content_rating_name, cr.code as content_rating_code,
        l.id as language_id, l.code as language_code, l.name as language_name
 from books b
@@ -527,6 +609,16 @@ order by c.id;
             creators: creators
                 .try_into()
                 .expect("too many creators in test fixture"),
+            visibility: row
+                .visibility
+                .parse()
+                .expect("stored visibility must be valid"),
+            note: row
+                .note
+                .map(Text::try_from)
+                .transpose()
+                .expect("stored note must be valid"),
+            submitted_at: row.submitted_at,
             updated_at: row.updated_at,
             created_at: row.created_at,
         }
@@ -960,8 +1052,10 @@ where id = $1;
 
         sqlx::query!(
             r#"
-insert into chapter_releases(id, chapter_id, language_id, version)
-values($1, $2, $3, 1);
+insert into chapter_releases(id, chapter_id, book_id, language_id, version)
+select $1, $2, c.book_id, $3, 1
+from chapters c
+where c.id = $2;
         "#,
             id,
             chapter_id,
@@ -992,8 +1086,10 @@ values($1, $2, $3, 1);
 
         sqlx::query!(
             r#"
-insert into chapter_pages(id, release_id, sort_order, extension)
-values($1, $2, $3, $4);
+insert into chapter_pages(id, release_id, book_id, sort_order, extension)
+select $1, $2, cr.book_id, $3, $4
+from chapter_releases cr
+where cr.id = $2;
         "#,
             id,
             release_id,
@@ -1086,6 +1182,16 @@ order by sort_order;
         .fetch_all(&self.pool)
         .await
         .expect("failed to read committed chapter page order")
+    }
+
+    pub async fn post_chapter(&self, book_id: Uuid, number: f32) -> Response {
+        let body = serde_json::json!({ "number": number }).to_string();
+        let req = Request::post(format!("/books/{book_id}/chapters"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body))
+            .unwrap();
+
+        self.router.clone().oneshot(req).await.unwrap()
     }
 
     pub async fn post_release(&self, chapter_id: Uuid, language_id: Uuid) -> Response {
