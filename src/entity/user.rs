@@ -40,7 +40,7 @@ impl AsRef<str> for Role {
 
 #[derive(Debug, Default)]
 pub struct UserClaims {
-    pub id: Option<Uuid>,
+    pub id: Uuid,
     pub roles: Vec<Role>,
 }
 
@@ -62,7 +62,7 @@ mod tests {
 
     fn claims(roles: &[Role]) -> UserClaims {
         UserClaims {
-            id: Some(Uuid::now_v7()),
+            id: Uuid::now_v7(),
             roles: roles.to_vec(),
         }
     }
@@ -85,6 +85,7 @@ mod tests {
     fn a_guest_holds_nothing() {
         let guest = UserClaims::default();
 
+        assert!(guest.id.is_nil());
         assert!(!guest.can_moderate());
     }
 

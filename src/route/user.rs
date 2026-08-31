@@ -16,7 +16,8 @@ fn claims_from_headers(headers: &HeaderMap) -> UserClaims {
     let id = headers
         .get(USER_ID_HEADER)
         .and_then(|value| value.to_str().ok())
-        .and_then(|value| Uuid::parse_str(value.trim()).ok());
+        .and_then(|value| Uuid::parse_str(value.trim()).ok())
+        .unwrap_or_default();
 
     let roles = headers
         .get_all(USER_ROLE_HEADER)
@@ -57,7 +58,7 @@ mod tests {
     fn no_headers_is_a_guest() {
         let claims = claims_from_headers(&HeaderMap::new());
 
-        assert_eq!(claims.id, None);
+        assert!(claims.id.is_nil());
         assert!(claims.roles.is_empty());
     }
 
@@ -69,7 +70,7 @@ mod tests {
             ("x-user-role", "Moderator"),
         ]));
 
-        assert_eq!(claims.id, Some(id));
+        assert_eq!(claims.id, id);
         assert!(claims.can_moderate());
     }
 
@@ -92,7 +93,7 @@ mod tests {
             ("x-user-role", "Owner"),
         ]));
 
-        assert_eq!(claims.id, None);
+        assert!(claims.id.is_nil());
         assert!(claims.roles.is_empty());
     }
 }
