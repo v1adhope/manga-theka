@@ -16,28 +16,32 @@ _Avoid_: Author (when used to encompass artists), contributor
 An anonymous visitor with no account. Can read content and submit `Feedback`; has no `Role` and no `Session`.
 _Avoid_: Anonymous, visitor
 
+**Submitter**:
+The `User` who proposed a `Book` as a `Draft` -- one per `Book`, and the only one who can send it for review. Reads that `Book` in any `Book Visibility` and is the audience for its `Book Note`, standing that follows from having submitted rather than from any `Role`.
+_Avoid_: Owner, Proposer, Uploader (a `Role`, not a relation to one `Book`)
+
 ## Authorization
 
 **Role**:
-A capability badge held by a `User`, stored as a per-user set. Four values: `Reader` (default on signup), `Uploader`, `Moderator`, `Admin`. No implicit hierarchy -- a `User` holds one or more of these at any time; granted roles can be revoked at any time.
+A capability badge held by a `User`. Four values: `Reader` (default on signup), `Uploader`, `Moderator`, `Admin`. No implicit hierarchy -- a `User` holds one or more of these at any time; granted roles can be revoked at any time.
 _Avoid_: Permission, scope, claim
 
 **Reader**:
 The default `Role` on signup; gates personal features -- creating and managing bookmark lists, managing one's own account, and proposing a new `Book` as a `Draft` and sending it for review (see `Book Visibility`).
 
 **Uploader**:
-A `Role` gating content-write endpoints -- editing an already-`Listed` `Book` and uploading its `Chapter`s, `Chapter Release`s, and `Chapter Page`s.
+A `Role` gating content writes -- editing an already-`Listed` `Book` and uploading its `Chapter`s, `Chapter Release`s, and `Chapter Page`s, none of which requires moderation.
 _Avoid_: Mod, Contributor (as a separate concept)
 
 **Moderator**:
-A content-supervisor `Role` gating content-moderation endpoints (reviewing, hiding, handling reports) and the only `Role` besides `Admin` that can change another User's role -- specifically, can grant or revoke the `Uploader` role.
+A content-supervisor `Role` gating content moderation -- reviewing, hiding, handling reports -- and the only `Role` besides `Admin` that can change another User's role -- specifically, can grant or revoke the `Uploader` role.
 _Avoid_: Mod
 
 **Admin**:
-A `Role` granting full administrative control. Gates user-promotion and administrative endpoints; can grant and revoke any `Role`.
+A `Role` granting full administrative control. Gates user promotion and administration; can grant and revoke any `Role`.
 
 **Session**:
-A single authenticated context for a `User`. A `User` may have multiple concurrent Sessions, each revocable on its own via logout, by id, or altogether via logout-all.
+A single authenticated context for a `User`. A `User` may have multiple concurrent Sessions, each revocable on its own or all at once.
 _Avoid_: Login, connection
 
 ## Catalog
@@ -47,7 +51,7 @@ The top-level catalog entity for a manga, manhwa, or manhua work. Always has exa
 _Avoid_: Title (ambiguous, see `Book Name`/`Alternative Title`), Series, Manga (too narrow -- also covers Manhwa/Manhua)
 
 **Book Name**:
-The single canonical, always-present English name of a `Book`, stored directly on the book row. The source of truth when no `Alternative Title` applies.
+The single canonical, always-present English name of a `Book`. The source of truth when no `Alternative Title` applies.
 _Avoid_: Title, Localized name
 
 **Alternative Title**:
@@ -79,15 +83,15 @@ The semantic, reader-facing identifier of a `Chapter` (e.g. "Chapter 12", "Chapt
 _Avoid_: Order, Index, Sort Order
 
 **Chapter Name**:
-The canonical English-of-record name of a `Chapter`. Nullable -- not every chapter has one.
+The canonical English-of-record name of a `Chapter`. Optional -- not every chapter has one.
 _Avoid_: Chapter Title
 
 **Chapter Localization**:
-A `Chapter Name`'s rendering in a specific language, one row per language including English (mirrored in). Unlike `Alternative Title`, at most one per language.
+A `Chapter Name`'s rendering in a specific language, including English, which is mirrored in from the `Chapter Name`. Unlike `Alternative Title`, at most one per language.
 _Avoid_: Chapter Translation
 
 **Chapter Volume**:
-The volume a `Chapter` belongs to within its `Book`, as a whole number 0-1000. Nullable -- not every `Book` is split into volumes.
+The volume a `Chapter` belongs to within its `Book`, as a whole number 0-1000. Optional -- not every `Book` is split into volumes.
 _Avoid_: Tankobon, Part, Book (in the print sense)
 
 **Label**:
@@ -101,7 +105,7 @@ _Avoid_: External link, Reference
 ## Media
 
 **Cover**:
-The `Book`'s designated gallery image -- the one flagged as main, or, when none is flagged, the oldest image in the gallery. At most one image per `Book` carries the flag. Promoting a different image changes which one is the Cover; the rest of the gallery has no meaningful order.
+The `Book`'s main gallery image -- the one designated as such, or, when none is designated, the oldest image in the gallery. A `Book` designates at most one. Promoting a different image changes which one is the Cover; the rest of the gallery has no meaningful order.
 _Avoid_: Thumbnail, Primary image
 
 **Sort Order**:
@@ -109,11 +113,11 @@ The physical position of a `Chapter Page` within its `Chapter Release`, starting
 _Avoid_: Number, Position, Rank (see `Chapter Number` for the semantic counterpart)
 
 **Chapter Release**:
-A single-language, ordered set of `Chapter Page`s belonging to a `Chapter`. A `Chapter` may have multiple Releases -- different languages, or competing releases in the same language. Its `Chapter` and language are fixed after creation; its pages are changed by declaring a new whole order. Carries a revision counter starting at 1, bumped once per commit (never on upload) and exposed read-only as the `version` field. Published once it holds at least one `Chapter Page`; listed for its `Chapter` from creation regardless, so one that has never been committed appears with a zero page count. Always a translation -- its language can never be the `Book`'s original publication language.
+A single-language, ordered set of `Chapter Page`s belonging to a `Chapter`. A `Chapter` may have multiple Releases -- different languages, or competing releases in the same language. Its `Chapter` and language are fixed after creation; its pages are changed by declaring a new whole order. Carries a revision counter starting at 1, bumped once each time a new order is committed and never on upload; it is never set by hand. Published once it holds at least one `Chapter Page`; listed for its `Chapter` from creation regardless, so one that has never been committed appears with a zero page count. Always a translation -- its language can never be the `Book`'s original publication language.
 _Avoid_: Scan, Scanlation, Version, Draft (for an unpublished one)
 
 **Chapter Page**:
-A single image holding a position in its `Chapter Release`, addressed to readers by its `Sort Order` (as `page_number`) rather than its id. A Release's pages change together, as a redeclared order, rather than one at a time.
+A single image holding a position in its `Chapter Release`, addressed to readers by its `Sort Order` rather than by its own identity. A Release's pages change together, as a redeclared order, rather than one at a time.
 _Avoid_: Page image, Scan page
 
 **Staged Page**:
@@ -123,13 +127,13 @@ _Avoid_: Draft page, Pending page, Unordered page
 ## Moderation
 
 **Book Visibility**:
-The lifecycle state of a `Book` as a catalog record, separate from `Book Status` -- `Draft` (being assembled, not yet submitted), `PendingReview` (submitted, awaiting a `Moderator`), `Listed` (approved and public), `Rejected` (declined and not retained), or `Hidden` (removed from public view by a `Moderator`). A closed, fixed set; exactly one per `Book`. Only a `Book`'s submitter can move it from `Draft` to `PendingReview`; a `Moderator` owns every other transition. `PendingReview` is the only state that can return to `Draft`, so an approved or hidden `Book` never becomes a draft again. Writes follow the state: a `Draft` accepts its own metadata and `Book Cover`s but no `Chapter`s, a `Listed` `Book` accepts everything, and `PendingReview`, `Rejected`, and `Hidden` accept nothing. A `Guest` is served the `Chapter Page`s and `Book Cover` images of a `Listed` `Book` only; a `Moderator` reads them in any state.
+The lifecycle state of a `Book` as a catalog record, separate from `Book Status` -- `Draft` (being assembled, not yet submitted), `PendingReview` (submitted, awaiting moderation), `Listed` (approved and public), `Rejected` (declined and not retained), or `Hidden` (removed from public view by moderation). A closed, fixed set; exactly one per `Book`. Only a `Book`'s submitter can move it from `Draft` to `PendingReview`; a moderator owns every other transition. `PendingReview` is the only state that can return to `Draft`, so an approved or hidden `Book` never becomes a draft again. Writes follow the state: a `Draft` accepts its own metadata and gallery images but no `Chapter`s, a `Listed` `Book` accepts everything, and `PendingReview`, `Rejected`, and `Hidden` accept nothing. Reads follow the state as well: outside `Listed`, only a moderator or the `Book`'s submitter sees a `Book` and its contents.
 _Avoid_: Status, State, Scope, Publication state, Published (see `Chapter Release`), Draft/Listed/Hidden as standalone terms
 
-**Review Note**:
-The single submitter-visible message carried by a `Book`, explaining its current `Book Visibility` -- why it was `Rejected` or `Hidden`, what to change before resubmitting, or an acknowledgement that it is awaiting review. One per `Book`, surfaced as the `note` field, replaced whenever the note changes and cleared when a `Book` becomes `Listed` without a replacement. Required on any move into `Draft`, `Rejected`, or `Hidden`; written by the system on submission. Set without changing state by repeating the `Book`'s current `Book Visibility`. Not a private staff annotation.
-_Avoid_: Comment, Reason, Moderation note, Internal note
+**Book Note**:
+The single submitter-visible message carried by a `Book`, explaining its current `Book Visibility` -- why it was `Rejected` or `Hidden`, what to change before resubmitting, or an acknowledgement that it is awaiting review. One per `Book`, replaced whenever it changes and cleared when a `Book` becomes `Listed` without a replacement. Required on any move into `Draft`, `Rejected`, or `Hidden`; written by the system on submission. Can also be replaced on its own, leaving the `Book Visibility` unchanged. Not a private staff annotation.
+_Avoid_: Review note, Comment, Reason, Moderation note, Internal note
 
 **Feedback**:
-An inbound message from a `Guest` or `User`, no `Role` required, carrying a reply-to email and a note. One of three `kind`s: `Report` (flags a specific `Book` for a removal-worthy problem), `Correction` (a proposed metadata fix for a specific `Book`), or `General` (site-wide feedback tied to no `Book` -- a bug report, a feature request, a question, or a message to the operators); the first two reference a `Book`, `General` does not. Progresses through `Open`, `Resolved`, and `Dismissed`, and is always retained.
+An inbound message from a `Guest` or `User`, no `Role` required, carrying a reply-to email and a note. One of three kinds: `Report` (flags a specific `Book` for a removal-worthy problem), `Correction` (a proposed metadata fix for a specific `Book`), or `General` (site-wide feedback tied to no `Book` -- a bug report, a feature request, a question, or a message to the operators); the first two reference a `Book`, `General` does not. Progresses through `Open`, `Resolved`, and `Dismissed`, and is always retained.
 _Avoid_: Complaint, Report (as the entity name), Ticket, Flag
