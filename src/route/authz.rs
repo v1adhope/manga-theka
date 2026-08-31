@@ -43,7 +43,7 @@ mod tests {
     use axum::http::{HeaderMap, HeaderValue};
     use uuid::Uuid;
 
-    use crate::{entity::Role, route::user::claims_from_headers};
+    use crate::{entity::Role, route::authz::claims_from_headers};
 
     fn headers(pairs: &[(&'static str, &str)]) -> HeaderMap {
         let mut headers = HeaderMap::new();

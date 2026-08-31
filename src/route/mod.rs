@@ -1,3 +1,4 @@
+mod authz;
 mod book;
 mod chapter;
 mod content_rating;
@@ -7,7 +8,6 @@ mod healthz;
 mod label;
 mod language;
 mod release;
-mod user;
 
 pub use book::*;
 pub use chapter::*;
