@@ -13,7 +13,7 @@ pub(super) fn ensure_book_writable(visibility: BookVisibility) -> Result<(), Ser
 pub(super) fn ensure_content_writable(visibility: BookVisibility) -> Result<(), ServiceError> {
     match visibility {
         BookVisibility::Listed => Ok(()),
-        blocked => Err(EntityError::BookContentNotWritable(blocked).into()),
+        blocked => Err(EntityError::BookNotWritable(blocked).into()),
     }
 }
 

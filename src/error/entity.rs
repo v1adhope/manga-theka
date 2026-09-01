@@ -43,11 +43,8 @@ pub enum EntityError {
     #[error("A book can't move from {0} to {1}")]
     IllegalVisibilityTransition(BookVisibility, BookVisibility),
 
-    #[error("A book can't be edited while {0}")]
+    #[error("A book and its contents can't be changed while {0}")]
     BookNotWritable(BookVisibility),
-
-    #[error("Chapters and pages can only be changed while a book is Listed, not while {0}")]
-    BookContentNotWritable(BookVisibility),
 
     #[error("'{0}' is not a valid book link kind")]
     InvalidBookLinkKind(String),
@@ -127,9 +124,9 @@ impl IntoResponse for EntityError {
         let status = match self {
             Self::UnsupportedImageFormat => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             Self::ImageExceedsByteLimit(_) => StatusCode::PAYLOAD_TOO_LARGE,
-            Self::IllegalVisibilityTransition(_, _)
-            | Self::BookNotWritable(_)
-            | Self::BookContentNotWritable(_) => StatusCode::CONFLICT,
+            Self::IllegalVisibilityTransition(_, _) | Self::BookNotWritable(_) => {
+                StatusCode::CONFLICT
+            }
             _ => StatusCode::UNPROCESSABLE_ENTITY,
         };
 
