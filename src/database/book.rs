@@ -66,7 +66,7 @@ impl TryFrom<BookLinkRow> for BookLink {
     type Error = DatabaseError;
 
     fn try_from(row: BookLinkRow) -> Result<Self, Self::Error> {
-        let kind: BookLinkKind = row.kind.parse().or_corrupted("kind")?;
+        let kind: BookLinkKind = row.kind.parse().or_corrupted("link.kind")?;
         let url = LinkUrl::try_from(row.url).or_corrupted("url")?;
 
         Ok(BookLink { kind, url })
@@ -83,7 +83,7 @@ impl TryFrom<BookTitleRow> for AlternativeTitle {
     type Error = DatabaseError;
 
     fn try_from(row: BookTitleRow) -> Result<Self, Self::Error> {
-        let name = BookName::try_from(row.name).or_corrupted("name")?;
+        let name = BookName::try_from(row.name).or_corrupted("title.name")?;
 
         Ok(AlternativeTitle {
             language_id: row.language_id,

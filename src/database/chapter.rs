@@ -34,7 +34,7 @@ impl TryFrom<ChapterLocalizationRow> for ChapterLocalization {
     type Error = DatabaseError;
 
     fn try_from(row: ChapterLocalizationRow) -> Result<Self, Self::Error> {
-        let name = ChapterName::try_from(row.name).or_corrupted("name")?;
+        let name = ChapterName::try_from(row.name).or_corrupted("localization.name")?;
 
         Ok(ChapterLocalization {
             language_id: row.language_id,
