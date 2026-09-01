@@ -3,13 +3,13 @@ use uuid::Uuid;
 use crate::{
     entity::{Chapter, Filter},
     error::ServiceError,
-    service::{Service, visibility::ensure_content_writable},
+    service::Service,
 };
 
 impl Service {
     pub async fn store_chapter(&self, item: Chapter) -> Result<(), ServiceError> {
         let visibility = self.database.get_book_visibility(item.book_id).await?;
-        ensure_content_writable(visibility)?;
+        visibility.ensure_content_writable()?;
 
         self.database.store_chapter(&item).await.map_err(Into::into)
     }
@@ -36,7 +36,7 @@ impl Service {
             .database
             .get_book_visibility_by_chapter(item.id)
             .await?;
-        ensure_content_writable(visibility)?;
+        visibility.ensure_content_writable()?;
 
         self.database
             .update_chapter(&item)
@@ -46,7 +46,7 @@ impl Service {
 
     pub async fn delete_chapter(&self, id: Uuid) -> Result<(), ServiceError> {
         let visibility = self.database.get_book_visibility_by_chapter(id).await?;
-        ensure_content_writable(visibility)?;
+        visibility.ensure_content_writable()?;
 
         self.database.delete_chapter(id).await.map_err(Into::into)
     }

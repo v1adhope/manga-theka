@@ -6,10 +6,7 @@ use crate::{
         VisibilityTransition,
     },
     error::ServiceError,
-    service::{
-        Service,
-        visibility::{ensure_book_writable, ensure_readable},
-    },
+    service::Service,
 };
 
 impl Service {
@@ -30,7 +27,7 @@ impl Service {
 
     pub async fn update_book(&self, item: Book) -> Result<(), ServiceError> {
         let visibility = self.database.get_book_visibility(item.id).await?;
-        ensure_book_writable(visibility)?;
+        visibility.ensure_book_writable()?;
 
         self.database.update_book(&item).await.map_err(Into::into)
     }
@@ -60,7 +57,7 @@ impl Service {
 
     pub async fn store_book_cover(&self, item: BookCover) -> Result<(), ServiceError> {
         let visibility = self.database.get_book_visibility(item.book_id).await?;
-        ensure_book_writable(visibility)?;
+        visibility.ensure_book_writable()?;
 
         self.storage.upload_book_cover(&item).await?;
 
@@ -89,7 +86,7 @@ impl Service {
         claims: Option<&UserClaims>,
     ) -> Result<String, ServiceError> {
         let visibility = self.database.get_book_visibility_by_cover(id).await?;
-        ensure_readable::<BookCover>(visibility, claims)?;
+        visibility.ensure_readable::<BookCover>(claims)?;
 
         self.storage
             .presign_book_cover(id)
@@ -99,7 +96,7 @@ impl Service {
 
     pub async fn promote_book_cover(&self, book_id: Uuid, id: Uuid) -> Result<(), ServiceError> {
         let visibility = self.database.get_book_visibility(book_id).await?;
-        ensure_book_writable(visibility)?;
+        visibility.ensure_book_writable()?;
 
         self.database
             .promote_book_cover(book_id, id)
@@ -109,7 +106,7 @@ impl Service {
 
     pub async fn delete_book_cover(&self, id: Uuid) -> Result<(), ServiceError> {
         let visibility = self.database.get_book_visibility_by_cover(id).await?;
-        ensure_book_writable(visibility)?;
+        visibility.ensure_book_writable()?;
 
         self.database.delete_book_cover(id).await?;
 

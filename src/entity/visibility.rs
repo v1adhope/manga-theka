@@ -3,7 +3,10 @@ use std::{fmt, str::FromStr};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::{entity::Text, error::EntityError};
+use crate::{
+    entity::{Entity, Text, UserClaims},
+    error::{DatabaseError, EntityError},
+};
 
 pub const SUBMITTED_NOTE: &str = "Your submission has been received and is currently under review. \
                                   We'll process it within 3 business days - thanks for your patience!";
@@ -47,6 +50,34 @@ impl AsRef<str> for BookVisibility {
 impl fmt::Display for BookVisibility {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_ref())
+    }
+}
+
+impl BookVisibility {
+    pub fn ensure_book_writable(&self) -> Result<(), EntityError> {
+        match self {
+            Self::Draft | Self::Listed => Ok(()),
+            blocked => Err(EntityError::BookNotWritable(*blocked)),
+        }
+    }
+
+    pub fn ensure_content_writable(&self) -> Result<(), EntityError> {
+        match self {
+            Self::Listed => Ok(()),
+            blocked => Err(EntityError::BookNotWritable(*blocked)),
+        }
+    }
+
+    pub fn ensure_readable<T: Entity>(
+        &self,
+        claims: Option<&UserClaims>,
+    ) -> Result<(), DatabaseError> {
+        // deferred: also admit the book's submitter once `books` records one (issue #3)
+        if *self == Self::Listed || claims.is_some_and(UserClaims::can_moderate) {
+            return Ok(());
+        }
+
+        Err(DatabaseError::not_found::<T>())
     }
 }
 
