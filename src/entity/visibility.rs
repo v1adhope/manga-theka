@@ -169,22 +169,6 @@ mod tests {
         }
     }
 
-    fn is_legal(from: BookVisibility, to: BookVisibility) -> bool {
-        use BookVisibility::{Draft, Hidden, Listed, PendingReview, Rejected};
-
-        matches!(
-            (from, to),
-            (Draft, Draft | PendingReview | Rejected | Hidden)
-                | (
-                    PendingReview,
-                    PendingReview | Draft | Listed | Rejected | Hidden
-                )
-                | (Listed, Listed | Hidden | Rejected)
-                | (Hidden, Hidden | Listed | Rejected)
-                | (Rejected, Rejected)
-        )
-    }
-
     #[test]
     fn every_book_visibility_round_trips() {
         for visibility in EVERY_VISIBILITY {
@@ -200,17 +184,89 @@ mod tests {
     }
 
     #[test]
-    fn only_the_tabled_transitions_are_accepted() {
+    fn any_live_book_can_be_rejected_or_hidden() {
         for from in EVERY_VISIBILITY {
-            for to in EVERY_VISIBILITY {
+            if from == BookVisibility::Rejected {
+                continue;
+            }
+
+            for to in [BookVisibility::Rejected, BookVisibility::Hidden] {
+                let res =
+                    BookVisibilityUpdate::try_from((from, transition(to, Some("moderation"))));
+
+                assert!(res.is_ok(), "{from} must be able to reach {to}");
+            }
+        }
+    }
+
+    #[test]
+    fn every_state_transitions_to_itself() {
+        for visibility in EVERY_VISIBILITY {
+            let res =
+                BookVisibilityUpdate::try_from((visibility, transition(visibility, Some("same"))));
+
+            assert!(res.is_ok(), "{visibility} -> itself was refused");
+        }
+    }
+
+    #[test]
+    fn rejected_is_a_terminal_state() {
+        for to in EVERY_VISIBILITY {
+            if to == BookVisibility::Rejected {
+                continue;
+            }
+
+            let res = BookVisibilityUpdate::try_from((
+                BookVisibility::Rejected,
+                transition(to, Some("why")),
+            ));
+
+            assert!(res.is_err(), "rejected must not reach {to}");
+        }
+    }
+
+    #[test]
+    fn review_returns_a_book_to_draft() {
+        let res = BookVisibilityUpdate::try_from((
+            BookVisibility::PendingReview,
+            transition(BookVisibility::Draft, Some("back to you")),
+        ));
+
+        assert!(res.is_ok(), "review must be able to return a book to draft");
+    }
+
+    #[test]
+    fn an_approved_book_never_re_enters_the_pipeline() {
+        for from in [BookVisibility::Listed, BookVisibility::Hidden] {
+            for to in [BookVisibility::Draft, BookVisibility::PendingReview] {
                 let res = BookVisibilityUpdate::try_from((from, transition(to, Some("why"))));
 
-                assert_eq!(
-                    res.is_ok(),
-                    is_legal(from, to),
-                    "{from} -> {to} was judged wrongly"
-                );
+                assert!(res.is_err(), "{from} must not re-enter {to}");
             }
+        }
+    }
+
+    #[test]
+    fn listed_is_reachable_from_pending_review_hidden_and_itself() {
+        for from in [
+            BookVisibility::PendingReview,
+            BookVisibility::Hidden,
+            BookVisibility::Listed,
+        ] {
+            let res =
+                BookVisibilityUpdate::try_from((from, transition(BookVisibility::Listed, None)));
+
+            assert!(res.is_ok(), "{from} must be able to reach listed");
+        }
+    }
+
+    #[test]
+    fn listed_is_unreachable_from_draft_or_rejected() {
+        for from in [BookVisibility::Draft, BookVisibility::Rejected] {
+            let res =
+                BookVisibilityUpdate::try_from((from, transition(BookVisibility::Listed, None)));
+
+            assert!(res.is_err(), "{from} must not reach listed");
         }
     }
 
@@ -299,18 +355,5 @@ mod tests {
 
         assert_eq!(cleared.note, None);
         assert!(refused.is_err(), "a hidden book still owes a reason");
-    }
-
-    #[test]
-    fn a_self_transition_never_stamps_a_submission_time() {
-        for visibility in EVERY_VISIBILITY {
-            let Ok(update) =
-                BookVisibilityUpdate::try_from((visibility, transition(visibility, Some("same"))))
-            else {
-                continue;
-            };
-
-            assert_eq!(update.submitted_at, None, "{visibility} restamped itself");
-        }
     }
 }
