@@ -147,11 +147,7 @@ impl Service {
     ) -> Result<String, ServiceError> {
         let id = self
             .database
-            .get_chapter_page_id(
-                release_id,
-                number,
-                claims.is_some_and(UserClaims::can_moderate),
-            )
+            .get_chapter_page_id(release_id, number, claims)
             .await?;
 
         self.storage
