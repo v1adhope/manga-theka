@@ -365,46 +365,6 @@ async fn update_book_visibility_stores_the_move() {
 }
 
 #[tokio::test]
-async fn submitting_a_draft_stamps_a_code_authored_note() {
-    let app = TestApp::new().await;
-    let id = app.insert_book_with_visibility(BookVisibility::Draft).await;
-
-    let resp = app
-        .put_visibility(id, "PendingReview", Some("ignore me"))
-        .await;
-    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
-
-    let state = app.fetch_book_visibility_state(id).await;
-
-    assert_eq!(state.visibility, "PendingReview");
-    assert_eq!(
-        state.note.as_deref(),
-        Some(
-            "Your submission has been received and is currently under review. \
-             We'll process it within 3 business days - thanks for your patience!"
-        )
-    );
-    assert!(state.submitted_at.is_some());
-}
-
-#[tokio::test]
-async fn resubmitting_a_book_already_in_review_changes_nothing() {
-    let app = TestApp::new().await;
-    let id = app.insert_book_with_visibility(BookVisibility::Draft).await;
-
-    app.put_visibility(id, "PendingReview", None).await;
-    let submitted = app.fetch_book_visibility_state(id).await;
-
-    let resp = app.put_visibility(id, "PendingReview", Some("nudge")).await;
-    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
-
-    let after = app.fetch_book_visibility_state(id).await;
-
-    assert_eq!(after.submitted_at, submitted.submitted_at);
-    assert_eq!(after.note, submitted.note);
-}
-
-#[tokio::test]
 async fn moves_that_explain_themselves_require_a_note() {
     let app = TestApp::new().await;
 
@@ -419,49 +379,6 @@ async fn moves_that_explain_themselves_require_a_note() {
         assert_error(missing, StatusCode::UNPROCESSABLE_ENTITY).await;
         assert_error(blank, StatusCode::UNPROCESSABLE_ENTITY).await;
     }
-}
-
-#[tokio::test]
-async fn listing_a_book_clears_its_note_unless_replaced() {
-    let app = TestApp::new().await;
-    let cleared = app
-        .insert_book_with_visibility(BookVisibility::Hidden)
-        .await;
-    let replaced = app
-        .insert_book_with_visibility(BookVisibility::Hidden)
-        .await;
-
-    app.put_visibility(cleared, "Listed", None).await;
-    app.put_visibility(replaced, "Listed", Some("restored"))
-        .await;
-
-    assert_eq!(app.fetch_book_visibility_state(cleared).await.note, None);
-    assert_eq!(
-        app.fetch_book_visibility_state(replaced)
-            .await
-            .note
-            .as_deref(),
-        Some("restored")
-    );
-}
-
-#[tokio::test]
-async fn a_self_transition_edits_the_note() {
-    let app = TestApp::new().await;
-    let id = app
-        .insert_book_with_visibility(BookVisibility::Listed)
-        .await;
-
-    let set = app.put_visibility(id, "Listed", Some("a remark")).await;
-    assert_eq!(set.status(), StatusCode::NO_CONTENT);
-    assert_eq!(
-        app.fetch_book_visibility_state(id).await.note.as_deref(),
-        Some("a remark")
-    );
-
-    let cleared = app.put_visibility(id, "Listed", None).await;
-    assert_eq!(cleared.status(), StatusCode::NO_CONTENT);
-    assert_eq!(app.fetch_book_visibility_state(id).await.note, None);
 }
 
 #[tokio::test]

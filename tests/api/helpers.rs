@@ -47,7 +47,6 @@ pub struct BookSample {
 pub struct BookVisibilityState {
     pub visibility: String,
     pub note: Option<String>,
-    pub submitted_at: Option<time::OffsetDateTime>,
     pub updated_at: Option<time::OffsetDateTime>,
 }
 
@@ -269,7 +268,7 @@ impl TestApp {
     pub async fn fetch_book_visibility_state(&self, id: Uuid) -> BookVisibilityState {
         let row = sqlx::query!(
             r#"
-select b.visibility, b.note, b.submitted_at, b.updated_at
+select b.visibility, b.note, b.updated_at
 from books b
 where b.id = $1;
         "#,
@@ -282,7 +281,6 @@ where b.id = $1;
         BookVisibilityState {
             visibility: row.visibility,
             note: row.note,
-            submitted_at: row.submitted_at,
             updated_at: row.updated_at,
         }
     }
