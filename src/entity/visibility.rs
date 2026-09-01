@@ -81,14 +81,13 @@ impl TryFrom<(BookVisibility, VisibilityTransition)> for BookVisibilityUpdate {
             now,
         } = item;
 
-        if from != visibility {
-            match (from, visibility) {
-                (Draft, PendingReview | Rejected | Hidden)
-                | (PendingReview, Draft | Listed | Rejected | Hidden)
-                | (Listed, Hidden | Rejected)
-                | (Hidden, Listed | Rejected) => {}
-                _ => return Err(EntityError::IllegalVisibilityTransition(from, visibility)),
-            }
+        match (from, visibility) {
+            (Draft, Draft | PendingReview | Rejected | Hidden)
+            | (PendingReview, PendingReview | Draft | Listed | Rejected | Hidden)
+            | (Listed, Listed | Hidden | Rejected)
+            | (Hidden, Hidden | Listed | Rejected)
+            | (Rejected, Rejected) => {}
+            _ => return Err(EntityError::IllegalVisibilityTransition(from, visibility)),
         }
 
         let (note, submitted_at) = match visibility {
