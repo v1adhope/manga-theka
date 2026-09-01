@@ -328,6 +328,38 @@ async fn a_reader_role_does_not_unlock_unlisted_content() {
 }
 
 #[tokio::test]
+async fn a_broken_identity_returns_401_rather_than_reading_as_anonymous() {
+    let app = TestApp::new().await;
+    let book_id = app
+        .insert_book_with_visibility(BookVisibility::Listed)
+        .await;
+    let cover_id = app.insert_cover(book_id, COVER_PNG).await;
+    let chapter_id = app.insert_random_chapter(book_id).await;
+    let release_id = app.insert_random_release(book_id, chapter_id).await;
+    let page_id = app.insert_page(release_id, Some(1), COVER_PNG).await;
+
+    for path in [
+        format!("/covers/{cover_id}/image"),
+        format!("/releases/{release_id}/pages"),
+        format!("/releases/{release_id}/pages/1"),
+        format!("/releases/{release_id}/pages/{page_id}/image"),
+    ] {
+        let req = Request::get(&path)
+            .header("x-user-id", "not-a-uuid")
+            .header("x-user-role", "Reader")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.router.clone().oneshot(req).await.unwrap();
+
+        assert_eq!(
+            resp.status(),
+            StatusCode::UNAUTHORIZED,
+            "{path} with a broken identity"
+        );
+    }
+}
+
+#[tokio::test]
 async fn update_book_visibility_accepts_only_the_tabled_moves() {
     let app = TestApp::new().await;
 

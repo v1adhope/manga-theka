@@ -319,9 +319,11 @@ pub async fn get_book_covers(
 pub async fn get_book_cover_image(
     State(service): State<Service>,
     Path(cover_id): Path<Uuid>,
-    claims: UserClaims,
+    claims: Option<UserClaims>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    let url = service.presign_book_cover(cover_id, &claims).await?;
+    let url = service
+        .presign_book_cover(cover_id, claims.as_ref())
+        .await?;
 
     Ok((StatusCode::FOUND, [(header::LOCATION, url)]))
 }

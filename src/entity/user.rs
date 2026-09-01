@@ -38,7 +38,7 @@ impl AsRef<str> for Role {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct UserClaims {
     pub id: Uuid,
     pub roles: Vec<Role>,
@@ -79,14 +79,6 @@ mod tests {
     fn unknown_role_is_rejected() {
         let res = "Owner".parse::<Role>();
         assert!(res.is_err());
-    }
-
-    #[test]
-    fn a_guest_holds_nothing() {
-        let guest = UserClaims::default();
-
-        assert!(guest.id.is_nil());
-        assert!(!guest.can_moderate());
     }
 
     #[test]

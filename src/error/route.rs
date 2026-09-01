@@ -14,6 +14,9 @@ pub enum RouteError {
 
     #[error("Request is missing an image part")]
     ImagePartMissing,
+
+    #[error("Invalid credentials")]
+    InvalidCredentials,
 }
 
 impl IntoResponse for RouteError {
@@ -23,6 +26,7 @@ impl IntoResponse for RouteError {
             Self::ImagePartMissing => {
                 error_response(StatusCode::UNPROCESSABLE_ENTITY, self.to_string())
             }
+            Self::InvalidCredentials => error_response(StatusCode::UNAUTHORIZED, self.to_string()),
         }
     }
 }

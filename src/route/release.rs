@@ -116,10 +116,10 @@ pub async fn get_chapter_pages(
     State(service): State<Service>,
     Path(release_id): Path<Uuid>,
     Query(params): Query<ChapterPageParams>,
-    claims: UserClaims,
+    claims: Option<UserClaims>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let pages = service
-        .get_chapter_pages(release_id, params, &claims)
+        .get_chapter_pages(release_id, params, claims.as_ref())
         .await?;
 
     Ok(json_data_response(StatusCode::OK, pages))
@@ -129,10 +129,10 @@ pub async fn get_chapter_pages(
 pub async fn get_chapter_page_image(
     State(service): State<Service>,
     Path((release_id, page_id)): Path<(Uuid, Uuid)>,
-    claims: UserClaims,
+    claims: Option<UserClaims>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let url = service
-        .presign_chapter_page(release_id, page_id, &claims)
+        .presign_chapter_page(release_id, page_id, claims.as_ref())
         .await?;
 
     Ok((StatusCode::FOUND, [(header::LOCATION, url)]))
@@ -142,12 +142,12 @@ pub async fn get_chapter_page_image(
 pub async fn get_chapter_page(
     State(service): State<Service>,
     Path((release_id, page_number)): Path<(Uuid, i32)>,
-    claims: UserClaims,
+    claims: Option<UserClaims>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let number = Ordinal::try_from(page_number)?;
 
     let url = service
-        .presign_chapter_page_by_number(release_id, number, &claims)
+        .presign_chapter_page_by_number(release_id, number, claims.as_ref())
         .await?;
 
     Ok((StatusCode::FOUND, [(header::LOCATION, url)]))

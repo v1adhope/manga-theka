@@ -107,7 +107,7 @@ impl Service {
         &self,
         release_id: Uuid,
         params: ChapterPageParams,
-        claims: &UserClaims,
+        claims: Option<&UserClaims>,
     ) -> Result<Vec<ChapterPageQuery>, ServiceError> {
         let visibility = self
             .database
@@ -125,7 +125,7 @@ impl Service {
         &self,
         release_id: Uuid,
         id: Uuid,
-        claims: &UserClaims,
+        claims: Option<&UserClaims>,
     ) -> Result<String, ServiceError> {
         let visibility = self
             .database
@@ -143,11 +143,15 @@ impl Service {
         &self,
         release_id: Uuid,
         number: Ordinal,
-        claims: &UserClaims,
+        claims: Option<&UserClaims>,
     ) -> Result<String, ServiceError> {
         let id = self
             .database
-            .get_chapter_page_id(release_id, number, claims.can_moderate())
+            .get_chapter_page_id(
+                release_id,
+                number,
+                claims.is_some_and(UserClaims::can_moderate),
+            )
             .await?;
 
         self.storage
