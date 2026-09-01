@@ -18,6 +18,7 @@ mod language;
 mod release;
 mod resource_url;
 mod user;
+mod visibility;
 
 pub use book::*;
 pub use bounded_vec::*;
@@ -32,6 +33,7 @@ pub use language::*;
 pub use release::*;
 pub use resource_url::*;
 pub use user::*;
+pub use visibility::*;
 
 pub trait Entity {
     const NAME: &'static str;

@@ -9,8 +9,8 @@ use crate::{
     entity::{
         AlternativeTitle, Book, BookCover, BookCoverQuery, BookCreatorsQuery, BookFilter, BookKind,
         BookLabels, BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus, BookTitles,
-        BookVisibility, BookVisibilityUpdate, ContentRating, CoverUrl, CreatorQuery,
-        ImageExtension, Label, Language, LinkUrl, Text,
+        BookVisibility, ContentRating, CoverUrl, CreatorQuery, ImageExtension, Label, Language,
+        LinkUrl, Text,
     },
     error::DatabaseError,
 };
@@ -410,37 +410,6 @@ impl Database {
         Ok(())
     }
 
-    #[instrument(name = "db.book.set_visibility", skip_all, fields(book.id = %item.id))]
-    pub async fn set_book_visibility(
-        &self,
-        item: &BookVisibilityUpdate,
-    ) -> Result<bool, DatabaseError> {
-        let row = sqlx::query_file!(
-            "queries/set_book_visibility.sql",
-            item.id,
-            item.to.as_ref(),
-            item.note.as_ref().map(AsRef::as_ref),
-            item.submitted_at,
-            item.from.as_ref(),
-        )
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(DatabaseError::from)
-        .inspect_err(DatabaseError::log_internal)?;
-
-        Ok(row.is_some())
-    }
-
-    #[instrument(name = "db.book.exists", skip_all, fields(book.id = %id))]
-    pub async fn ensure_book_exists(&self, id: Uuid) -> Result<BookVisibility, DatabaseError> {
-        sqlx::query_file_scalar!("queries/book_visibility.sql", id)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(DatabaseError::from)
-            .inspect_err(DatabaseError::log_internal)
-            .and_then(super::require_visibility::<Book>)
-    }
-
     #[instrument(name = "db.book.labels", skip_all, level = Level::DEBUG, fields(books = book_ids.len()))]
     async fn get_books_labels(
         &self,
@@ -673,19 +642,6 @@ impl Database {
         }
 
         Ok(covers)
-    }
-
-    #[instrument(name = "db.book_cover.exists", skip_all, fields(cover.id = %id))]
-    pub async fn ensure_book_cover_exists(
-        &self,
-        id: Uuid,
-    ) -> Result<BookVisibility, DatabaseError> {
-        sqlx::query_file_scalar!("queries/book_visibility_by_cover.sql", id)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(DatabaseError::from)
-            .inspect_err(DatabaseError::log_internal)
-            .and_then(super::require_visibility::<BookCover>)
     }
 
     #[instrument(name = "db.book_cover.ids", skip_all, fields(book.id = %book_id))]

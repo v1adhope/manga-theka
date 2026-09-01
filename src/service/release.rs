@@ -9,7 +9,7 @@ use crate::{
     error::{ObjectStorageError, ServiceError},
     service::{
         Service,
-        book::{ensure_content_writable, ensure_readable},
+        visibility::{ensure_content_writable, ensure_readable},
     },
 };
 

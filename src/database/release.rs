@@ -4,9 +4,9 @@ use uuid::Uuid;
 use crate::{
     database::{Database, Invariant},
     entity::{
-        BookVisibility, ChapterPage, ChapterPageParams, ChapterPageQuery, ChapterPages,
-        ChapterRelease, ChapterReleaseQuery, ImageExtension, Language, Ordinal, PageOrder,
-        PageStatus, PageUrl, UserClaims,
+        ChapterPage, ChapterPageParams, ChapterPageQuery, ChapterPages, ChapterRelease,
+        ChapterReleaseQuery, ImageExtension, Language, Ordinal, PageOrder, PageStatus, PageUrl,
+        UserClaims,
     },
     error::DatabaseError,
 };
@@ -165,19 +165,6 @@ impl Database {
         }
 
         Ok(releases)
-    }
-
-    #[instrument(name = "db.chapter_release.exists", skip_all, fields(release.id = %id))]
-    pub async fn ensure_chapter_release_exists(
-        &self,
-        id: Uuid,
-    ) -> Result<BookVisibility, DatabaseError> {
-        sqlx::query_file_scalar!("queries/book_visibility_by_release.sql", id)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(DatabaseError::from)
-            .inspect_err(DatabaseError::log_internal)
-            .and_then(super::require_visibility::<ChapterRelease>)
     }
 
     #[instrument(name = "db.chapter_release.commit", skip_all, fields(release.id = %id, pages = order.len()))]
@@ -350,19 +337,5 @@ impl Database {
         };
 
         Ok(id)
-    }
-
-    #[instrument(name = "db.chapter_page.exists", skip_all, fields(release.id = %release_id, page.id = %id))]
-    pub async fn ensure_chapter_page_exists(
-        &self,
-        release_id: Uuid,
-        id: Uuid,
-    ) -> Result<BookVisibility, DatabaseError> {
-        sqlx::query_file_scalar!("queries/book_visibility_by_page.sql", id, release_id)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(DatabaseError::from)
-            .inspect_err(DatabaseError::log_internal)
-            .and_then(super::require_visibility::<ChapterPage>)
     }
 }

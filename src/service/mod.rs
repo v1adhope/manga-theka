@@ -6,6 +6,7 @@ mod feedback;
 mod label;
 mod language;
 mod release;
+mod visibility;
 
 use crate::{database::Database, object_storage::ObjectStorage};
 

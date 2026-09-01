@@ -3,7 +3,7 @@ use uuid::Uuid;
 use crate::{
     entity::{Chapter, Filter},
     error::ServiceError,
-    service::{Service, book::ensure_content_writable},
+    service::{Service, visibility::ensure_content_writable},
 };
 
 impl Service {

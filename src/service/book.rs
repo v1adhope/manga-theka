@@ -2,41 +2,15 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        Book, BookCover, BookCoverQuery, BookFilter, BookQuery, BookVisibility,
-        BookVisibilityUpdate, Entity, UserClaims, VisibilityTransition,
+        Book, BookCover, BookCoverQuery, BookFilter, BookQuery, BookVisibilityUpdate, UserClaims,
+        VisibilityTransition,
     },
-    error::{DatabaseError, EntityError, ServiceError},
-    service::Service,
+    error::{EntityError, ServiceError},
+    service::{
+        Service,
+        visibility::{ensure_book_writable, ensure_readable},
+    },
 };
-
-pub(super) fn ensure_book_writable(visibility: BookVisibility) -> Result<(), ServiceError> {
-    match visibility {
-        BookVisibility::Draft | BookVisibility::Listed => Ok(()),
-        blocked => Err(EntityError::BookNotWritable(blocked).into()),
-    }
-}
-
-pub(super) fn ensure_content_writable(visibility: BookVisibility) -> Result<(), ServiceError> {
-    match visibility {
-        BookVisibility::Listed => Ok(()),
-        blocked => Err(EntityError::BookContentNotWritable(blocked).into()),
-    }
-}
-
-// `T` is the resource the caller asked for, not the book: refusing to serve unlisted content
-// must be indistinguishable from that resource never having existed, or the 404 becomes an
-// oracle telling anyone holding an id that a book was moderated away rather than deleted.
-pub(super) fn ensure_readable<T: Entity>(
-    visibility: BookVisibility,
-    claims: Option<&UserClaims>,
-) -> Result<(), ServiceError> {
-    // deferred: also admit the book's submitter once `books` records one (issue #3)
-    if visibility == BookVisibility::Listed || claims.is_some_and(UserClaims::can_moderate) {
-        return Ok(());
-    }
-
-    Err(DatabaseError::not_found::<T>().into())
-}
 
 impl Service {
     pub async fn store_book(&self, item: Book) -> Result<(), ServiceError> {

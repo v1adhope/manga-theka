@@ -6,15 +6,12 @@ mod feedback;
 mod label;
 mod language;
 mod release;
+mod visibility;
 
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::{
-    config,
-    entity::{BookVisibility, Entity, SortOrder},
-    error::DatabaseError,
-};
+use crate::{config, entity::SortOrder, error::DatabaseError};
 
 trait Invariant<T> {
     fn or_corrupted(self, field: &'static str) -> Result<T, DatabaseError>;
@@ -24,19 +21,6 @@ impl<T, E: std::error::Error> Invariant<T> for Result<T, E> {
     fn or_corrupted(self, field: &'static str) -> Result<T, DatabaseError> {
         self.map_err(|e| DatabaseError::invariant_corrupted(field, e))
     }
-}
-
-fn require_visibility<T: Entity>(
-    visibility: Option<String>,
-) -> Result<BookVisibility, DatabaseError> {
-    let Some(visibility) = visibility else {
-        return Err(DatabaseError::not_found::<T>());
-    };
-
-    visibility
-        .parse()
-        .or_corrupted("visibility")
-        .inspect_err(DatabaseError::log_internal)
 }
 
 fn cursor_op(order: SortOrder) -> (&'static str, &'static str) {
@@ -88,9 +72,8 @@ mod tests {
     use uuid::Uuid;
 
     use crate::{
-        database::{cursor_op, fetch_limit, require_visibility, take_page},
-        entity::{Book, BookVisibility, SortOrder},
-        error::DatabaseError,
+        database::{cursor_op, fetch_limit, take_page},
+        entity::SortOrder,
     };
 
     struct Row {
@@ -151,33 +134,6 @@ mod tests {
         assert_eq!(next_cursor, Some(Uuid::from_u128(3)));
         assert_eq!(rows.len(), 3);
         assert_eq!(rows.last().unwrap().id, Uuid::from_u128(3));
-    }
-
-    #[test]
-    fn a_missing_row_is_reported_as_not_found() {
-        let visibility = require_visibility::<Book>(None);
-
-        assert!(matches!(visibility, Err(DatabaseError::NotFound { .. })));
-    }
-
-    #[test]
-    fn an_unknown_visibility_is_reported_as_a_corrupted_invariant() {
-        let visibility = require_visibility::<Book>(Some("Unlisted".to_owned()));
-
-        assert!(matches!(
-            visibility,
-            Err(DatabaseError::InvariantCorrupted {
-                field: "visibility",
-                ..
-            })
-        ));
-    }
-
-    #[test]
-    fn a_stored_visibility_is_parsed() {
-        let visibility = require_visibility::<Book>(Some("Listed".to_owned()));
-
-        assert!(matches!(visibility, Ok(BookVisibility::Listed)));
     }
 
     #[test]
