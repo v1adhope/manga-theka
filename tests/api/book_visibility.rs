@@ -59,9 +59,9 @@ async fn store_book_starts_it_as_a_draft() {
     let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     let id = uuid::Uuid::parse_str(v["data"]["id"].as_str().unwrap()).unwrap();
 
-    let state = app.fetch_book_state(id).await;
+    let state = app.fetch_book_visibility_state(id).await;
 
-    assert_eq!(state.visibility.as_deref(), Some("Draft"));
+    assert_eq!(state.visibility, "Draft");
 }
 
 #[tokio::test]
@@ -387,9 +387,9 @@ async fn update_book_visibility_stores_the_move() {
     let resp = app.put_visibility(id, "Hidden", Some("parked")).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let state = app.fetch_book_state(id).await;
+    let state = app.fetch_book_visibility_state(id).await;
 
-    assert_eq!(state.visibility.as_deref(), Some("Hidden"));
+    assert_eq!(state.visibility, "Hidden");
     assert_eq!(state.note.as_deref(), Some("parked"));
 }
 
@@ -403,9 +403,9 @@ async fn submitting_a_draft_stamps_a_code_authored_note() {
         .await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let state = app.fetch_book_state(id).await;
+    let state = app.fetch_book_visibility_state(id).await;
 
-    assert_eq!(state.visibility.as_deref(), Some("PendingReview"));
+    assert_eq!(state.visibility, "PendingReview");
     assert_eq!(
         state.note.as_deref(),
         Some(
@@ -422,12 +422,12 @@ async fn resubmitting_a_book_already_in_review_changes_nothing() {
     let id = app.insert_book_with_visibility(BookVisibility::Draft).await;
 
     app.put_visibility(id, "PendingReview", None).await;
-    let submitted = app.fetch_book_state(id).await;
+    let submitted = app.fetch_book_visibility_state(id).await;
 
     let resp = app.put_visibility(id, "PendingReview", Some("nudge")).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let after = app.fetch_book_state(id).await;
+    let after = app.fetch_book_visibility_state(id).await;
 
     assert_eq!(after.submitted_at, submitted.submitted_at);
     assert_eq!(after.note, submitted.note);
@@ -464,9 +464,12 @@ async fn listing_a_book_clears_its_note_unless_replaced() {
     app.put_visibility(replaced, "Listed", Some("restored"))
         .await;
 
-    assert_eq!(app.fetch_book_state(cleared).await.note, None);
+    assert_eq!(app.fetch_book_visibility_state(cleared).await.note, None);
     assert_eq!(
-        app.fetch_book_state(replaced).await.note.as_deref(),
+        app.fetch_book_visibility_state(replaced)
+            .await
+            .note
+            .as_deref(),
         Some("restored")
     );
 }
@@ -481,13 +484,13 @@ async fn a_self_transition_edits_the_note() {
     let set = app.put_visibility(id, "Listed", Some("a remark")).await;
     assert_eq!(set.status(), StatusCode::NO_CONTENT);
     assert_eq!(
-        app.fetch_book_state(id).await.note.as_deref(),
+        app.fetch_book_visibility_state(id).await.note.as_deref(),
         Some("a remark")
     );
 
     let cleared = app.put_visibility(id, "Listed", None).await;
     assert_eq!(cleared.status(), StatusCode::NO_CONTENT);
-    assert_eq!(app.fetch_book_state(id).await.note, None);
+    assert_eq!(app.fetch_book_visibility_state(id).await.note, None);
 }
 
 #[tokio::test]

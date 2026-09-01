@@ -44,8 +44,8 @@ pub struct BookSample {
 }
 
 #[derive(Debug)]
-pub struct BookState {
-    pub visibility: Option<String>,
+pub struct BookVisibilityState {
+    pub visibility: String,
     pub note: Option<String>,
     pub submitted_at: Option<time::OffsetDateTime>,
 }
@@ -265,20 +265,20 @@ impl TestApp {
         book.id
     }
 
-    pub async fn fetch_book_state(&self, id: Uuid) -> BookState {
+    pub async fn fetch_book_visibility_state(&self, id: Uuid) -> BookVisibilityState {
         let row = sqlx::query!(
             r#"
-select (select b.visibility from books b where b.id = $1) as "visibility?",
-       (select b.note from books b where b.id = $1) as "note?",
-       (select b.submitted_at from books b where b.id = $1) as "submitted_at?";
+select b.visibility, b.note, b.submitted_at
+from books b
+where b.id = $1;
         "#,
             id
         )
         .fetch_one(&self.pool)
         .await
-        .expect("failed to read book state");
+        .expect("failed to read book visibility state");
 
-        BookState {
+        BookVisibilityState {
             visibility: row.visibility,
             note: row.note,
             submitted_at: row.submitted_at,
