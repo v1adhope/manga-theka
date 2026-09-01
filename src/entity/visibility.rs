@@ -96,6 +96,7 @@ pub struct BookVisibilityUpdate {
     pub to: BookVisibility,
     pub note: Option<Text>,
     pub submitted_at: Option<OffsetDateTime>,
+    pub updated_at: OffsetDateTime,
 }
 
 impl TryFrom<(BookVisibility, VisibilityTransition)> for BookVisibilityUpdate {
@@ -139,6 +140,7 @@ impl TryFrom<(BookVisibility, VisibilityTransition)> for BookVisibilityUpdate {
             to: visibility,
             note,
             submitted_at,
+            updated_at: now,
         })
     }
 }
@@ -290,6 +292,23 @@ mod tests {
         .unwrap();
 
         assert!(update.submitted_at.is_some());
+    }
+
+    #[test]
+    fn every_transition_stamps_the_update_time() {
+        let now = OffsetDateTime::now_utc();
+        let update = BookVisibilityUpdate::try_from((
+            BookVisibility::Draft,
+            VisibilityTransition {
+                id: Uuid::now_v7(),
+                visibility: BookVisibility::Hidden,
+                note: Some(Text::try_from("parked".to_owned()).unwrap()),
+                now,
+            },
+        ))
+        .unwrap();
+
+        assert_eq!(update.updated_at, now);
     }
 
     #[test]

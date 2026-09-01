@@ -361,6 +361,7 @@ async fn update_book_visibility_stores_the_move() {
 
     assert_eq!(state.visibility, "Hidden");
     assert_eq!(state.note.as_deref(), Some("parked"));
+    assert!(state.updated_at.is_some());
 }
 
 #[tokio::test]

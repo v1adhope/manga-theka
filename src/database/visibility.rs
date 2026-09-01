@@ -35,6 +35,7 @@ impl Database {
             item.to.as_ref(),
             item.note.as_ref().map(AsRef::as_ref),
             item.submitted_at,
+            item.updated_at,
             item.from.as_ref(),
         )
         .fetch_optional(&self.pool)

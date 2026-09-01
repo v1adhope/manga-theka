@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "update books\nset visibility = $2, note = $3, submitted_at = coalesce($4, submitted_at)\nwhere id = $1 and visibility = $5\nreturning id;\n",
+  "query": "update books\nset visibility = $2, note = $3, submitted_at = coalesce($4, submitted_at), updated_at = $5\nwhere id = $1 and visibility = $6\nreturning id;\n",
   "describe": {
     "columns": [
       {
@@ -21,6 +21,7 @@
         "Text",
         "Text",
         "Timestamptz",
+        "Timestamptz",
         "Text"
       ]
     },
@@ -28,5 +29,5 @@
       false
     ]
   },
-  "hash": "61ec0b0ed127b497355070712a035abab319bcef83fe726d4d80faa20b0aed5e"
+  "hash": "7a6cb2e6ec3ff9632e91779bdfa1398984ec16a10ca318e3bcabcee44a09a5d9"
 }
