@@ -5,7 +5,7 @@ use crate::{
         Book, BookCover, BookCoverQuery, BookFilter, BookQuery, BookVisibilityUpdate, UserClaims,
         VisibilityTransition,
     },
-    error::{EntityError, ServiceError},
+    error::ServiceError,
     service::{
         Service,
         visibility::{ensure_book_writable, ensure_readable},
@@ -40,13 +40,12 @@ impl Service {
         item: VisibilityTransition,
     ) -> Result<(), ServiceError> {
         let from = self.database.get_book_visibility(item.id).await?;
-        let update = BookVisibilityUpdate::try_from((from, item))?;
+        let item = BookVisibilityUpdate::try_from((from, item))?;
 
-        if !self.database.set_book_visibility(&update).await? {
-            return Err(EntityError::IllegalVisibilityTransition(update.from, update.to).into());
-        }
-
-        Ok(())
+        self.database
+            .set_book_visibility(&item)
+            .await
+            .map_err(Into::into)
     }
 
     pub async fn delete_book(&self, id: Uuid) -> Result<(), ServiceError> {

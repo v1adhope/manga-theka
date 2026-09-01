@@ -28,7 +28,7 @@ impl Database {
     pub async fn set_book_visibility(
         &self,
         item: &BookVisibilityUpdate,
-    ) -> Result<bool, DatabaseError> {
+    ) -> Result<(), DatabaseError> {
         let row = sqlx::query_file!(
             "queries/set_book_visibility.sql",
             item.id,
@@ -42,7 +42,11 @@ impl Database {
         .map_err(DatabaseError::from)
         .inspect_err(DatabaseError::log_internal)?;
 
-        Ok(row.is_some())
+        if row.is_none() {
+            return Err(DatabaseError::not_found::<Book>());
+        }
+
+        Ok(())
     }
 
     #[instrument(name = "db.book.visibility", skip_all, fields(book.id = %id))]
