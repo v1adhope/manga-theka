@@ -29,7 +29,7 @@ impl Service {
     }
 
     pub async fn update_book(&self, item: Book) -> Result<(), ServiceError> {
-        let visibility = self.database.ensure_book_exists(item.id).await?;
+        let visibility = self.database.get_book_visibility(item.id).await?;
         ensure_book_writable(visibility)?;
 
         self.database.update_book(&item).await.map_err(Into::into)
@@ -39,7 +39,7 @@ impl Service {
         &self,
         item: VisibilityTransition,
     ) -> Result<(), ServiceError> {
-        let from = self.database.ensure_book_exists(item.id).await?;
+        let from = self.database.get_book_visibility(item.id).await?;
         let update = BookVisibilityUpdate::try_from((from, item))?;
 
         if !self.database.set_book_visibility(&update).await? {
@@ -60,7 +60,7 @@ impl Service {
     }
 
     pub async fn store_book_cover(&self, item: BookCover) -> Result<(), ServiceError> {
-        let visibility = self.database.ensure_book_exists(item.book_id).await?;
+        let visibility = self.database.get_book_visibility(item.book_id).await?;
         ensure_book_writable(visibility)?;
 
         self.storage.upload_book_cover(&item).await?;
@@ -75,7 +75,7 @@ impl Service {
         &self,
         book_id: Uuid,
     ) -> Result<Vec<BookCoverQuery>, ServiceError> {
-        self.database.ensure_book_exists(book_id).await?;
+        self.database.get_book_visibility(book_id).await?;
 
         self.database
             .get_book_covers(book_id)
@@ -89,7 +89,7 @@ impl Service {
         id: Uuid,
         claims: Option<&UserClaims>,
     ) -> Result<String, ServiceError> {
-        let visibility = self.database.ensure_book_cover_exists(id).await?;
+        let visibility = self.database.get_book_visibility_by_cover(id).await?;
         ensure_readable::<BookCover>(visibility, claims)?;
 
         self.storage
@@ -99,7 +99,7 @@ impl Service {
     }
 
     pub async fn promote_book_cover(&self, book_id: Uuid, id: Uuid) -> Result<(), ServiceError> {
-        let visibility = self.database.ensure_book_exists(book_id).await?;
+        let visibility = self.database.get_book_visibility(book_id).await?;
         ensure_book_writable(visibility)?;
 
         self.database
@@ -109,7 +109,7 @@ impl Service {
     }
 
     pub async fn delete_book_cover(&self, id: Uuid) -> Result<(), ServiceError> {
-        let visibility = self.database.ensure_book_cover_exists(id).await?;
+        let visibility = self.database.get_book_visibility_by_cover(id).await?;
         ensure_book_writable(visibility)?;
 
         self.database.delete_book_cover(id).await?;

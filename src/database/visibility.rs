@@ -45,8 +45,8 @@ impl Database {
         Ok(row.is_some())
     }
 
-    #[instrument(name = "db.book.exists", skip_all, fields(book.id = %id))]
-    pub async fn ensure_book_exists(&self, id: Uuid) -> Result<BookVisibility, DatabaseError> {
+    #[instrument(name = "db.book.visibility", skip_all, fields(book.id = %id))]
+    pub async fn get_book_visibility(&self, id: Uuid) -> Result<BookVisibility, DatabaseError> {
         sqlx::query_file_scalar!("queries/book_visibility.sql", id)
             .fetch_optional(&self.pool)
             .await
@@ -55,8 +55,8 @@ impl Database {
             .and_then(require_visibility::<Book>)
     }
 
-    #[instrument(name = "db.book_cover.exists", skip_all, fields(cover.id = %id))]
-    pub async fn ensure_book_cover_exists(
+    #[instrument(name = "db.book_cover.visibility", skip_all, fields(cover.id = %id))]
+    pub async fn get_book_visibility_by_cover(
         &self,
         id: Uuid,
     ) -> Result<BookVisibility, DatabaseError> {
@@ -68,8 +68,11 @@ impl Database {
             .and_then(require_visibility::<BookCover>)
     }
 
-    #[instrument(name = "db.chapter.exists", skip_all, fields(chapter.id = %id))]
-    pub async fn ensure_chapter_exists(&self, id: Uuid) -> Result<BookVisibility, DatabaseError> {
+    #[instrument(name = "db.chapter.visibility", skip_all, fields(chapter.id = %id))]
+    pub async fn get_book_visibility_by_chapter(
+        &self,
+        id: Uuid,
+    ) -> Result<BookVisibility, DatabaseError> {
         sqlx::query_file_scalar!("queries/book_visibility_by_chapter.sql", id)
             .fetch_optional(&self.pool)
             .await
@@ -78,8 +81,8 @@ impl Database {
             .and_then(require_visibility::<Chapter>)
     }
 
-    #[instrument(name = "db.chapter_release.exists", skip_all, fields(release.id = %id))]
-    pub async fn ensure_chapter_release_exists(
+    #[instrument(name = "db.chapter_release.visibility", skip_all, fields(release.id = %id))]
+    pub async fn get_book_visibility_by_release(
         &self,
         id: Uuid,
     ) -> Result<BookVisibility, DatabaseError> {
@@ -91,8 +94,8 @@ impl Database {
             .and_then(require_visibility::<ChapterRelease>)
     }
 
-    #[instrument(name = "db.chapter_page.exists", skip_all, fields(release.id = %release_id, page.id = %id))]
-    pub async fn ensure_chapter_page_exists(
+    #[instrument(name = "db.chapter_page.visibility", skip_all, fields(release.id = %release_id, page.id = %id))]
+    pub async fn get_book_visibility_by_page(
         &self,
         release_id: Uuid,
         id: Uuid,

@@ -15,7 +15,10 @@ use crate::{
 
 impl Service {
     pub async fn store_chapter_release(&self, item: ChapterRelease) -> Result<(), ServiceError> {
-        let visibility = self.database.ensure_chapter_exists(item.chapter_id).await?;
+        let visibility = self
+            .database
+            .get_book_visibility_by_chapter(item.chapter_id)
+            .await?;
         ensure_content_writable(visibility)?;
 
         self.database
@@ -35,7 +38,9 @@ impl Service {
         &self,
         chapter_id: Uuid,
     ) -> Result<Vec<ChapterReleaseQuery>, ServiceError> {
-        self.database.ensure_chapter_exists(chapter_id).await?;
+        self.database
+            .get_book_visibility_by_chapter(chapter_id)
+            .await?;
 
         self.database
             .get_chapter_releases(chapter_id)
@@ -51,7 +56,7 @@ impl Service {
     }
 
     pub async fn ensure_chapter_release_writable(&self, id: Uuid) -> Result<(), ServiceError> {
-        let visibility = self.database.ensure_chapter_release_exists(id).await?;
+        let visibility = self.database.get_book_visibility_by_release(id).await?;
 
         ensure_content_writable(visibility)
     }
@@ -59,7 +64,7 @@ impl Service {
     pub async fn store_chapter_pages(&self, item: ChapterPages) -> Result<(), ServiceError> {
         let visibility = self
             .database
-            .ensure_chapter_release_exists(item.release_id)
+            .get_book_visibility_by_release(item.release_id)
             .await?;
         ensure_content_writable(visibility)?;
 
@@ -93,7 +98,7 @@ impl Service {
         id: Uuid,
         order: &PageOrder,
     ) -> Result<(), ServiceError> {
-        let visibility = self.database.ensure_chapter_release_exists(id).await?;
+        let visibility = self.database.get_book_visibility_by_release(id).await?;
         ensure_content_writable(visibility)?;
 
         let removed = self.database.commit_chapter_release(id, order).await?;
@@ -111,7 +116,7 @@ impl Service {
     ) -> Result<Vec<ChapterPageQuery>, ServiceError> {
         let visibility = self
             .database
-            .ensure_chapter_release_exists(release_id)
+            .get_book_visibility_by_release(release_id)
             .await?;
         ensure_readable::<ChapterRelease>(visibility, claims)?;
 
@@ -129,7 +134,7 @@ impl Service {
     ) -> Result<String, ServiceError> {
         let visibility = self
             .database
-            .ensure_chapter_page_exists(release_id, id)
+            .get_book_visibility_by_page(release_id, id)
             .await?;
         ensure_readable::<ChapterPage>(visibility, claims)?;
 
@@ -157,7 +162,7 @@ impl Service {
     }
 
     pub async fn delete_chapter_release(&self, id: Uuid) -> Result<(), ServiceError> {
-        let visibility = self.database.ensure_chapter_release_exists(id).await?;
+        let visibility = self.database.get_book_visibility_by_release(id).await?;
         ensure_content_writable(visibility)?;
 
         let page_ids = self.database.get_chapter_release_page_ids(id).await?;
