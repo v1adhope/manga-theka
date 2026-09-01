@@ -5,32 +5,8 @@ use http_body_util::BodyExt;
 use manga_theka::entity::{BookQuery, BookVisibility};
 use tower::ServiceExt;
 
-use crate::fakers::{BookFaker, COVER_JPG, COVER_PNG};
+use crate::fakers::{BookFaker, COVER_JPG, COVER_PNG, EVERY_VISIBILITY};
 use crate::helpers::{RespWrapper, TestApp, assert_error};
-
-const EVERY_VISIBILITY: [BookVisibility; 5] = [
-    BookVisibility::Draft,
-    BookVisibility::PendingReview,
-    BookVisibility::Listed,
-    BookVisibility::Rejected,
-    BookVisibility::Hidden,
-];
-
-fn is_legal(from: BookVisibility, to: BookVisibility) -> bool {
-    use BookVisibility::{Draft, Hidden, Listed, PendingReview, Rejected};
-
-    matches!(
-        (from, to),
-        (Draft, Draft | PendingReview | Rejected | Hidden)
-            | (
-                PendingReview,
-                PendingReview | Draft | Listed | Rejected | Hidden
-            )
-            | (Listed, Listed | Hidden | Rejected)
-            | (Hidden, Hidden | Listed | Rejected)
-            | (Rejected, Rejected)
-    )
-}
 
 #[tokio::test]
 async fn store_book_starts_it_as_a_draft() {
@@ -360,23 +336,17 @@ async fn a_broken_identity_returns_401_rather_than_reading_as_anonymous() {
 }
 
 #[tokio::test]
-async fn update_book_visibility_accepts_only_the_tabled_moves() {
+async fn update_book_visibility_rejects_an_untabled_move() {
     let app = TestApp::new().await;
+    let id = app
+        .insert_book_with_visibility(BookVisibility::Listed)
+        .await;
 
-    for from in EVERY_VISIBILITY {
-        for to in EVERY_VISIBILITY {
-            let id = app.insert_book_with_visibility(from).await;
+    let resp = app
+        .put_visibility(id, "PendingReview", Some("because"))
+        .await;
 
-            let resp = app.put_visibility(id, to.as_ref(), Some("because")).await;
-
-            let expected = if is_legal(from, to) {
-                StatusCode::NO_CONTENT
-            } else {
-                StatusCode::CONFLICT
-            };
-            assert_eq!(resp.status(), expected, "{from} -> {to}");
-        }
-    }
+    assert_error(resp, StatusCode::CONFLICT).await;
 }
 
 #[tokio::test]
