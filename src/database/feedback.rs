@@ -3,7 +3,7 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::{
-    database::Database,
+    database::{Database, Invariant},
     entity::{
         Email, Feedback, FeedbackFilter, FeedbackKind, FeedbackStatus, FeedbackStatusUpdate, Text,
     },
@@ -26,18 +26,10 @@ impl TryFrom<FeedbackRow> for Feedback {
     type Error = DatabaseError;
 
     fn try_from(row: FeedbackRow) -> Result<Self, Self::Error> {
-        let kind: FeedbackKind = row
-            .kind
-            .parse()
-            .map_err(|e| DatabaseError::invariant_corrupted("kind", e))?;
-        let status: FeedbackStatus = row
-            .status
-            .parse()
-            .map_err(|e| DatabaseError::invariant_corrupted("status", e))?;
-        let email = Email::try_from(row.email)
-            .map_err(|e| DatabaseError::invariant_corrupted("email", e))?;
-        let note =
-            Text::try_from(row.note).map_err(|e| DatabaseError::invariant_corrupted("note", e))?;
+        let kind: FeedbackKind = row.kind.parse().or_corrupted("kind")?;
+        let status: FeedbackStatus = row.status.parse().or_corrupted("status")?;
+        let email = Email::try_from(row.email).or_corrupted("email")?;
+        let note = Text::try_from(row.note).or_corrupted("note")?;
 
         Ok(Feedback {
             id: row.id,

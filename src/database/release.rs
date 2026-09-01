@@ -2,7 +2,7 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::{
-    database::Database,
+    database::{Database, Invariant},
     entity::{
         BookVisibility, ChapterPage, ChapterPageParams, ChapterPageQuery, ChapterPages,
         ChapterRelease, ChapterReleaseQuery, ImageExtension, Language, Ordinal, PageOrder,
@@ -25,8 +25,7 @@ impl TryFrom<ChapterReleaseRow> for ChapterReleaseQuery {
     type Error = DatabaseError;
 
     fn try_from(row: ChapterReleaseRow) -> Result<Self, Self::Error> {
-        let version = Ordinal::try_from(row.version)
-            .map_err(|e| DatabaseError::invariant_corrupted("version", e))?;
+        let version = Ordinal::try_from(row.version).or_corrupted("version")?;
 
         Ok(ChapterReleaseQuery {
             id: row.id,
@@ -53,17 +52,13 @@ impl TryFrom<ChapterPageRow> for ChapterPageQuery {
     type Error = DatabaseError;
 
     fn try_from(row: ChapterPageRow) -> Result<Self, Self::Error> {
-        let page_number = Ordinal::try_from(row.sort_order)
-            .map_err(|e| DatabaseError::invariant_corrupted("sort_order", e))?;
+        let page_number = Ordinal::try_from(row.sort_order).or_corrupted("sort_order")?;
         let url = PageUrl {
             release_id: row.release_id,
             page_number,
         }
         .into();
-        let extension: ImageExtension = row
-            .extension
-            .parse()
-            .map_err(|e| DatabaseError::invariant_corrupted("extension", e))?;
+        let extension: ImageExtension = row.extension.parse().or_corrupted("extension")?;
 
         Ok(ChapterPageQuery::Committed {
             id: row.id,
@@ -83,10 +78,7 @@ impl TryFrom<StagedChapterPageRow> for ChapterPageQuery {
     type Error = DatabaseError;
 
     fn try_from(row: StagedChapterPageRow) -> Result<Self, Self::Error> {
-        let extension: ImageExtension = row
-            .extension
-            .parse()
-            .map_err(|e| DatabaseError::invariant_corrupted("extension", e))?;
+        let extension: ImageExtension = row.extension.parse().or_corrupted("extension")?;
 
         Ok(ChapterPageQuery::Staged {
             id: row.id,
@@ -180,20 +172,12 @@ impl Database {
         &self,
         id: Uuid,
     ) -> Result<BookVisibility, DatabaseError> {
-        let visibility = sqlx::query_file_scalar!("queries/book_visibility_by_release.sql", id)
+        sqlx::query_file_scalar!("queries/book_visibility_by_release.sql", id)
             .fetch_optional(&self.pool)
             .await
             .map_err(DatabaseError::from)
-            .inspect_err(DatabaseError::log_internal)?;
-
-        let Some(visibility) = visibility else {
-            return Err(DatabaseError::not_found::<ChapterRelease>());
-        };
-
-        visibility
-            .parse()
-            .map_err(|e| DatabaseError::invariant_corrupted("visibility", e))
             .inspect_err(DatabaseError::log_internal)
+            .and_then(super::require_visibility::<ChapterRelease>)
     }
 
     #[instrument(name = "db.chapter_release.commit", skip_all, fields(release.id = %id, pages = order.len()))]
@@ -374,20 +358,11 @@ impl Database {
         release_id: Uuid,
         id: Uuid,
     ) -> Result<BookVisibility, DatabaseError> {
-        let visibility =
-            sqlx::query_file_scalar!("queries/book_visibility_by_page.sql", id, release_id)
-                .fetch_optional(&self.pool)
-                .await
-                .map_err(DatabaseError::from)
-                .inspect_err(DatabaseError::log_internal)?;
-
-        let Some(visibility) = visibility else {
-            return Err(DatabaseError::not_found::<ChapterPage>());
-        };
-
-        visibility
-            .parse()
-            .map_err(|e| DatabaseError::invariant_corrupted("visibility", e))
+        sqlx::query_file_scalar!("queries/book_visibility_by_page.sql", id, release_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(DatabaseError::from)
             .inspect_err(DatabaseError::log_internal)
+            .and_then(super::require_visibility::<ChapterPage>)
     }
 }

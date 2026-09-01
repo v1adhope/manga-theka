@@ -2,7 +2,7 @@ use sqlx::{Postgres, QueryBuilder};
 use uuid::Uuid;
 
 use crate::{
-    database::Database,
+    database::{Database, Invariant},
     entity::{Label, LabelKind},
     error::DatabaseError,
 };
@@ -18,10 +18,7 @@ impl TryFrom<LabelRow> for Label {
     type Error = DatabaseError;
 
     fn try_from(row: LabelRow) -> Result<Self, Self::Error> {
-        let kind: LabelKind = row
-            .kind
-            .parse()
-            .map_err(|e| DatabaseError::invariant_corrupted("kind", e))?;
+        let kind: LabelKind = row.kind.parse().or_corrupted("kind")?;
 
         Ok(Label {
             id: row.id,

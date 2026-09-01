@@ -5,7 +5,7 @@ use tracing::{Level, instrument};
 use uuid::Uuid;
 
 use crate::{
-    database::{Database, creator::CreatorQueryRow, label::LabelRow},
+    database::{Database, Invariant, creator::CreatorQueryRow, label::LabelRow},
     entity::{
         AlternativeTitle, Book, BookCover, BookCoverQuery, BookCreatorsQuery, BookFilter, BookKind,
         BookLabels, BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus, BookTitles,
@@ -66,12 +66,8 @@ impl TryFrom<BookLinkRow> for BookLink {
     type Error = DatabaseError;
 
     fn try_from(row: BookLinkRow) -> Result<Self, Self::Error> {
-        let kind: BookLinkKind = row
-            .kind
-            .parse()
-            .map_err(|e| DatabaseError::invariant_corrupted("kind", e))?;
-        let url =
-            LinkUrl::try_from(row.url).map_err(|e| DatabaseError::invariant_corrupted("url", e))?;
+        let kind: BookLinkKind = row.kind.parse().or_corrupted("kind")?;
+        let url = LinkUrl::try_from(row.url).or_corrupted("url")?;
 
         Ok(BookLink { kind, url })
     }
@@ -87,8 +83,7 @@ impl TryFrom<BookTitleRow> for AlternativeTitle {
     type Error = DatabaseError;
 
     fn try_from(row: BookTitleRow) -> Result<Self, Self::Error> {
-        let name = BookName::try_from(row.name)
-            .map_err(|e| DatabaseError::invariant_corrupted("name", e))?;
+        let name = BookName::try_from(row.name).or_corrupted("name")?;
 
         Ok(AlternativeTitle {
             language_id: row.language_id,
@@ -109,10 +104,7 @@ impl TryFrom<BookCoverRow> for BookCoverQuery {
 
     fn try_from(row: BookCoverRow) -> Result<Self, Self::Error> {
         let url = CoverUrl { cover_id: row.id }.into();
-        let extension: ImageExtension = row
-            .extension
-            .parse()
-            .map_err(|e| DatabaseError::invariant_corrupted("extension", e))?;
+        let extension: ImageExtension = row.extension.parse().or_corrupted("extension")?;
 
         Ok(BookCoverQuery {
             url,
@@ -170,35 +162,20 @@ impl TryFrom<BookWithRelations> for BookQuery {
             creators,
         } = item;
 
-        let name = BookName::try_from(row.name)
-            .map_err(|e| DatabaseError::invariant_corrupted("name", e))?;
-        let description = Text::try_from(row.description)
-            .map_err(|e| DatabaseError::invariant_corrupted("description", e))?;
-        let status: BookStatus = row
-            .status
-            .parse()
-            .map_err(|e| DatabaseError::invariant_corrupted("status", e))?;
-        let kind: BookKind = row
-            .kind
-            .parse()
-            .map_err(|e| DatabaseError::invariant_corrupted("kind", e))?;
-        let visibility: BookVisibility = row
-            .visibility
-            .parse()
-            .map_err(|e| DatabaseError::invariant_corrupted("visibility", e))?;
+        let name = BookName::try_from(row.name).or_corrupted("name")?;
+        let description = Text::try_from(row.description).or_corrupted("description")?;
+        let status: BookStatus = row.status.parse().or_corrupted("status")?;
+        let kind: BookKind = row.kind.parse().or_corrupted("kind")?;
+        let visibility: BookVisibility = row.visibility.parse().or_corrupted("visibility")?;
         let note = row
             .note
             .map(Text::try_from)
             .transpose()
-            .map_err(|e| DatabaseError::invariant_corrupted("note", e))?;
-        let labels = BookLabels::try_from(labels)
-            .map_err(|e| DatabaseError::invariant_corrupted("labels", e))?;
-        let links = BookLinks::try_from(links)
-            .map_err(|e| DatabaseError::invariant_corrupted("links", e))?;
-        let titles = BookTitles::try_from(titles)
-            .map_err(|e| DatabaseError::invariant_corrupted("titles", e))?;
-        let creators = BookCreatorsQuery::try_from(creators)
-            .map_err(|e| DatabaseError::invariant_corrupted("creators", e))?;
+            .or_corrupted("note")?;
+        let labels = BookLabels::try_from(labels).or_corrupted("labels")?;
+        let links = BookLinks::try_from(links).or_corrupted("links")?;
+        let titles = BookTitles::try_from(titles).or_corrupted("titles")?;
+        let creators = BookCreatorsQuery::try_from(creators).or_corrupted("creators")?;
 
         Ok(BookQuery {
             id: row.id,
@@ -456,20 +433,12 @@ impl Database {
 
     #[instrument(name = "db.book.exists", skip_all, fields(book.id = %id))]
     pub async fn ensure_book_exists(&self, id: Uuid) -> Result<BookVisibility, DatabaseError> {
-        let visibility = sqlx::query_file_scalar!("queries/book_visibility.sql", id)
+        sqlx::query_file_scalar!("queries/book_visibility.sql", id)
             .fetch_optional(&self.pool)
             .await
             .map_err(DatabaseError::from)
-            .inspect_err(DatabaseError::log_internal)?;
-
-        let Some(visibility) = visibility else {
-            return Err(DatabaseError::not_found::<Book>());
-        };
-
-        visibility
-            .parse()
-            .map_err(|e| DatabaseError::invariant_corrupted("visibility", e))
             .inspect_err(DatabaseError::log_internal)
+            .and_then(super::require_visibility::<Book>)
     }
 
     #[instrument(name = "db.book.labels", skip_all, level = Level::DEBUG, fields(books = book_ids.len()))]
@@ -711,20 +680,12 @@ impl Database {
         &self,
         id: Uuid,
     ) -> Result<BookVisibility, DatabaseError> {
-        let visibility = sqlx::query_file_scalar!("queries/book_visibility_by_cover.sql", id)
+        sqlx::query_file_scalar!("queries/book_visibility_by_cover.sql", id)
             .fetch_optional(&self.pool)
             .await
             .map_err(DatabaseError::from)
-            .inspect_err(DatabaseError::log_internal)?;
-
-        let Some(visibility) = visibility else {
-            return Err(DatabaseError::not_found::<BookCover>());
-        };
-
-        visibility
-            .parse()
-            .map_err(|e| DatabaseError::invariant_corrupted("visibility", e))
             .inspect_err(DatabaseError::log_internal)
+            .and_then(super::require_visibility::<BookCover>)
     }
 
     #[instrument(name = "db.book_cover.ids", skip_all, fields(book.id = %book_id))]
