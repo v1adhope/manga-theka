@@ -5,7 +5,10 @@ use axum::{
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::{entity::BookVisibility, error::error_response};
+use crate::{
+    entity::{BookVisibility, Entity},
+    error::error_response,
+};
 
 #[derive(Debug, Error)]
 #[non_exhaustive]
@@ -45,6 +48,9 @@ pub enum EntityError {
 
     #[error("A book and its contents can't be changed while {0}")]
     BookNotWritable(BookVisibility),
+
+    #[error("{entity} not found")]
+    NotReadable { entity: &'static str },
 
     #[error("'{0}' is not a valid book link kind")]
     InvalidBookLinkKind(String),
@@ -119,6 +125,12 @@ pub enum EntityError {
     FileNameMissing,
 }
 
+impl EntityError {
+    pub fn not_readable<T: Entity>() -> Self {
+        Self::NotReadable { entity: T::NAME }
+    }
+}
+
 impl IntoResponse for EntityError {
     fn into_response(self) -> Response {
         let status = match self {
@@ -127,6 +139,7 @@ impl IntoResponse for EntityError {
             Self::IllegalVisibilityTransition(_, _) | Self::BookNotWritable(_) => {
                 StatusCode::CONFLICT
             }
+            Self::NotReadable { .. } => StatusCode::NOT_FOUND,
             _ => StatusCode::UNPROCESSABLE_ENTITY,
         };
 
