@@ -8,8 +8,7 @@ use crate::{
 
 impl Service {
     pub async fn store_chapter(&self, item: Chapter) -> Result<(), ServiceError> {
-        let visibility = self.database.get_book_visibility(item.book_id).await?;
-        visibility.ensure_content_writable()?;
+        self.ensure_content_writable(item.book_id).await?;
 
         self.database.store_chapter(&item).await.map_err(Into::into)
     }
@@ -23,7 +22,7 @@ impl Service {
         book_id: Uuid,
         filter: Filter,
     ) -> Result<(Vec<Chapter>, Option<Uuid>), ServiceError> {
-        self.database.get_book_visibility(book_id).await?;
+        self.ensure_book_exists(book_id).await?;
 
         self.database
             .get_chapters(book_id, &filter)
@@ -32,11 +31,7 @@ impl Service {
     }
 
     pub async fn update_chapter(&self, item: Chapter) -> Result<(), ServiceError> {
-        let visibility = self
-            .database
-            .get_book_visibility_by_chapter(item.id)
-            .await?;
-        visibility.ensure_content_writable()?;
+        self.ensure_content_writable_by_chapter(item.id).await?;
 
         self.database
             .update_chapter(&item)
@@ -45,8 +40,7 @@ impl Service {
     }
 
     pub async fn delete_chapter(&self, id: Uuid) -> Result<(), ServiceError> {
-        let visibility = self.database.get_book_visibility_by_chapter(id).await?;
-        visibility.ensure_content_writable()?;
+        self.ensure_content_writable_by_chapter(id).await?;
 
         self.database.delete_chapter(id).await.map_err(Into::into)
     }
