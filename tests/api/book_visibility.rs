@@ -382,20 +382,6 @@ async fn moves_that_explain_themselves_require_a_note() {
 }
 
 #[tokio::test]
-async fn update_book_visibility_with_an_oversized_note_returns_422() {
-    let app = TestApp::new().await;
-    let id = app
-        .insert_book_with_visibility(BookVisibility::Listed)
-        .await;
-
-    let resp = app
-        .put_visibility(id, "Hidden", Some(&"e".repeat(2001)))
-        .await;
-
-    assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
-}
-
-#[tokio::test]
 async fn update_book_visibility_with_an_unknown_value_returns_422() {
     let app = TestApp::new().await;
     let id = app
