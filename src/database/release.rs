@@ -2,10 +2,11 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::{
-    database::Database,
+    database::{Database, Invariant},
     entity::{
         ChapterPage, ChapterPageParams, ChapterPageQuery, ChapterPages, ChapterRelease,
         ChapterReleaseQuery, ImageExtension, Language, Ordinal, PageOrder, PageStatus, PageUrl,
+        UserClaims,
     },
     error::DatabaseError,
 };
@@ -24,8 +25,7 @@ impl TryFrom<ChapterReleaseRow> for ChapterReleaseQuery {
     type Error = DatabaseError;
 
     fn try_from(row: ChapterReleaseRow) -> Result<Self, Self::Error> {
-        let version = Ordinal::try_from(row.version)
-            .map_err(|e| DatabaseError::invariant_corrupted("version", e))?;
+        let version = Ordinal::try_from(row.version).or_corrupted("version")?;
 
         Ok(ChapterReleaseQuery {
             id: row.id,
@@ -52,17 +52,13 @@ impl TryFrom<ChapterPageRow> for ChapterPageQuery {
     type Error = DatabaseError;
 
     fn try_from(row: ChapterPageRow) -> Result<Self, Self::Error> {
-        let page_number = Ordinal::try_from(row.sort_order)
-            .map_err(|e| DatabaseError::invariant_corrupted("sort_order", e))?;
+        let page_number = Ordinal::try_from(row.sort_order).or_corrupted("sort_order")?;
         let url = PageUrl {
             release_id: row.release_id,
             page_number,
         }
         .into();
-        let extension: ImageExtension = row
-            .extension
-            .parse()
-            .map_err(|e| DatabaseError::invariant_corrupted("extension", e))?;
+        let extension: ImageExtension = row.extension.parse().or_corrupted("extension")?;
 
         Ok(ChapterPageQuery::Committed {
             id: row.id,
@@ -82,10 +78,7 @@ impl TryFrom<StagedChapterPageRow> for ChapterPageQuery {
     type Error = DatabaseError;
 
     fn try_from(row: StagedChapterPageRow) -> Result<Self, Self::Error> {
-        let extension: ImageExtension = row
-            .extension
-            .parse()
-            .map_err(|e| DatabaseError::invariant_corrupted("extension", e))?;
+        let extension: ImageExtension = row.extension.parse().or_corrupted("extension")?;
 
         Ok(ChapterPageQuery::Staged {
             id: row.id,
@@ -172,21 +165,6 @@ impl Database {
         }
 
         Ok(releases)
-    }
-
-    #[instrument(name = "db.chapter_release.exists", skip_all, fields(release.id = %id))]
-    pub async fn ensure_chapter_release_exists(&self, id: Uuid) -> Result<(), DatabaseError> {
-        let row = sqlx::query_file!("queries/chapter_release_exists.sql", id)
-            .fetch_one(&self.pool)
-            .await
-            .map_err(DatabaseError::from)
-            .inspect_err(DatabaseError::log_internal)?;
-
-        if !row.exists {
-            return Err(DatabaseError::not_found::<ChapterRelease>());
-        }
-
-        Ok(())
     }
 
     #[instrument(name = "db.chapter_release.commit", skip_all, fields(release.id = %id, pages = order.len()))]
@@ -341,11 +319,13 @@ impl Database {
         &self,
         release_id: Uuid,
         number: Ordinal,
+        claims: Option<&UserClaims>,
     ) -> Result<Uuid, DatabaseError> {
         let id = sqlx::query_file_scalar!(
             "queries/get_chapter_page_id.sql",
             release_id,
-            number.as_i32()
+            number.as_i32(),
+            claims.is_some_and(UserClaims::can_moderate)
         )
         .fetch_optional(&self.pool)
         .await
@@ -357,24 +337,5 @@ impl Database {
         };
 
         Ok(id)
-    }
-
-    #[instrument(name = "db.chapter_page.exists", skip_all, fields(release.id = %release_id, page.id = %id))]
-    pub async fn ensure_chapter_page_exists(
-        &self,
-        release_id: Uuid,
-        id: Uuid,
-    ) -> Result<(), DatabaseError> {
-        let row = sqlx::query_file!("queries/chapter_page_exists.sql", id, release_id)
-            .fetch_one(&self.pool)
-            .await
-            .map_err(DatabaseError::from)
-            .inspect_err(DatabaseError::log_internal)?;
-
-        if !row.exists {
-            return Err(DatabaseError::not_found::<ChapterPage>());
-        }
-
-        Ok(())
     }
 }

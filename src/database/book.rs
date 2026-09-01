@@ -5,12 +5,12 @@ use tracing::{Level, instrument};
 use uuid::Uuid;
 
 use crate::{
-    database::{Database, creator::CreatorQueryRow, label::LabelRow},
+    database::{Database, Invariant, creator::CreatorQueryRow, label::LabelRow},
     entity::{
-        AlternativeTitle, Book, BookCover, BookCoverQuery, BookCreatorsQuery, BookKind, BookLabels,
-        BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus, BookTitles,
-        ContentRating, CoverUrl, CreatorQuery, Filter, ImageExtension, Label, Language, LinkUrl,
-        Text,
+        AlternativeTitle, Book, BookCover, BookCoverQuery, BookCreatorsQuery, BookFilter, BookKind,
+        BookLabels, BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus, BookTitles,
+        BookVisibility, ContentRating, CoverUrl, CreatorQuery, ImageExtension, Label, Language,
+        LinkUrl, Text,
     },
     error::DatabaseError,
 };
@@ -29,6 +29,9 @@ struct BookRow {
     publication_language_id: Uuid,
     publication_language_code: String,
     publication_language_name: String,
+    visibility: String,
+    note: Option<String>,
+    submitted_at: Option<time::OffsetDateTime>,
     updated_at: Option<time::OffsetDateTime>,
     created_at: time::OffsetDateTime,
 }
@@ -63,12 +66,8 @@ impl TryFrom<BookLinkRow> for BookLink {
     type Error = DatabaseError;
 
     fn try_from(row: BookLinkRow) -> Result<Self, Self::Error> {
-        let kind: BookLinkKind = row
-            .kind
-            .parse()
-            .map_err(|e| DatabaseError::invariant_corrupted("kind", e))?;
-        let url =
-            LinkUrl::try_from(row.url).map_err(|e| DatabaseError::invariant_corrupted("url", e))?;
+        let kind: BookLinkKind = row.kind.parse().or_corrupted("link.kind")?;
+        let url = LinkUrl::try_from(row.url).or_corrupted("url")?;
 
         Ok(BookLink { kind, url })
     }
@@ -84,8 +83,7 @@ impl TryFrom<BookTitleRow> for AlternativeTitle {
     type Error = DatabaseError;
 
     fn try_from(row: BookTitleRow) -> Result<Self, Self::Error> {
-        let name = BookName::try_from(row.name)
-            .map_err(|e| DatabaseError::invariant_corrupted("name", e))?;
+        let name = BookName::try_from(row.name).or_corrupted("title.name")?;
 
         Ok(AlternativeTitle {
             language_id: row.language_id,
@@ -106,10 +104,7 @@ impl TryFrom<BookCoverRow> for BookCoverQuery {
 
     fn try_from(row: BookCoverRow) -> Result<Self, Self::Error> {
         let url = CoverUrl { cover_id: row.id }.into();
-        let extension: ImageExtension = row
-            .extension
-            .parse()
-            .map_err(|e| DatabaseError::invariant_corrupted("extension", e))?;
+        let extension: ImageExtension = row.extension.parse().or_corrupted("extension")?;
 
         Ok(BookCoverQuery {
             url,
@@ -167,26 +162,20 @@ impl TryFrom<BookWithRelations> for BookQuery {
             creators,
         } = item;
 
-        let name = BookName::try_from(row.name)
-            .map_err(|e| DatabaseError::invariant_corrupted("name", e))?;
-        let description = Text::try_from(row.description)
-            .map_err(|e| DatabaseError::invariant_corrupted("description", e))?;
-        let status: BookStatus = row
-            .status
-            .parse()
-            .map_err(|e| DatabaseError::invariant_corrupted("status", e))?;
-        let kind: BookKind = row
-            .kind
-            .parse()
-            .map_err(|e| DatabaseError::invariant_corrupted("kind", e))?;
-        let labels = BookLabels::try_from(labels)
-            .map_err(|e| DatabaseError::invariant_corrupted("labels", e))?;
-        let links = BookLinks::try_from(links)
-            .map_err(|e| DatabaseError::invariant_corrupted("links", e))?;
-        let titles = BookTitles::try_from(titles)
-            .map_err(|e| DatabaseError::invariant_corrupted("titles", e))?;
-        let creators = BookCreatorsQuery::try_from(creators)
-            .map_err(|e| DatabaseError::invariant_corrupted("creators", e))?;
+        let name = BookName::try_from(row.name).or_corrupted("name")?;
+        let description = Text::try_from(row.description).or_corrupted("description")?;
+        let status: BookStatus = row.status.parse().or_corrupted("status")?;
+        let kind: BookKind = row.kind.parse().or_corrupted("kind")?;
+        let visibility: BookVisibility = row.visibility.parse().or_corrupted("visibility")?;
+        let note = row
+            .note
+            .map(Text::try_from)
+            .transpose()
+            .or_corrupted("note")?;
+        let labels = BookLabels::try_from(labels).or_corrupted("labels")?;
+        let links = BookLinks::try_from(links).or_corrupted("links")?;
+        let titles = BookTitles::try_from(titles).or_corrupted("titles")?;
+        let creators = BookCreatorsQuery::try_from(creators).or_corrupted("creators")?;
 
         Ok(BookQuery {
             id: row.id,
@@ -209,6 +198,9 @@ impl TryFrom<BookWithRelations> for BookQuery {
             links,
             titles,
             creators,
+            visibility,
+            note,
+            submitted_at: row.submitted_at,
             updated_at: row.updated_at,
             created_at: row.created_at,
         })
@@ -323,7 +315,7 @@ impl Database {
     )]
     pub async fn get_books(
         &self,
-        filter: &Filter,
+        filter: &BookFilter,
     ) -> Result<(Vec<BookQuery>, Option<Uuid>), DatabaseError> {
         self.get_books_inner(filter)
             .await
@@ -332,10 +324,10 @@ impl Database {
 
     async fn get_books_inner(
         &self,
-        filter: &Filter,
+        filter: &BookFilter,
     ) -> Result<(Vec<BookQuery>, Option<Uuid>), DatabaseError> {
-        let limit = filter.effective_limit();
-        let sort_order = filter.effective_sort_order();
+        let limit = filter.page.effective_limit();
+        let sort_order = filter.page.effective_sort_order();
         let fetch_limit = super::fetch_limit(limit);
         let (cursor_comparison, direction) = super::cursor_op(sort_order);
 
@@ -344,15 +336,21 @@ impl Database {
                      cr.id as content_rating_id, cr.name as content_rating_name,
                      cr.code as content_rating_code, b.status, b.kind,
                      l.id as publication_language_id, l.code as publication_language_code,
-                     l.name as publication_language_name, b.updated_at, b.created_at
+                     l.name as publication_language_name, b.visibility, b.note, b.submitted_at,
+                     b.updated_at, b.created_at
               from books b
               join content_ratings cr on cr.id = b.content_rating
-              join languages l on l.id = b.publication_language",
+              join languages l on l.id = b.publication_language
+              where true",
         );
 
-        if let Some(id) = filter.after {
+        builder
+            .push(" and b.visibility = ")
+            .push_bind(filter.effective_visibility().as_ref());
+
+        if let Some(id) = filter.page.after {
             builder
-                .push(" where b.id ")
+                .push(" and b.id ")
                 .push(cursor_comparison)
                 .push_bind(id);
         }
@@ -406,21 +404,6 @@ impl Database {
             .inspect_err(DatabaseError::log_internal)?;
 
         if row.is_none() {
-            return Err(DatabaseError::not_found::<Book>());
-        }
-
-        Ok(())
-    }
-
-    #[instrument(name = "db.book.exists", skip_all, fields(book.id = %id))]
-    pub async fn ensure_book_exists(&self, id: Uuid) -> Result<(), DatabaseError> {
-        let row = sqlx::query_file!("queries/book_exists.sql", id)
-            .fetch_one(&self.pool)
-            .await
-            .map_err(DatabaseError::from)
-            .inspect_err(DatabaseError::log_internal)?;
-
-        if !row.exists {
             return Err(DatabaseError::not_found::<Book>());
         }
 
@@ -659,21 +642,6 @@ impl Database {
         }
 
         Ok(covers)
-    }
-
-    #[instrument(name = "db.book_cover.exists", skip_all, fields(cover.id = %id))]
-    pub async fn ensure_book_cover_exists(&self, id: Uuid) -> Result<(), DatabaseError> {
-        let row = sqlx::query_file!("queries/book_cover_exists.sql", id)
-            .fetch_one(&self.pool)
-            .await
-            .map_err(DatabaseError::from)
-            .inspect_err(DatabaseError::log_internal)?;
-
-        if !row.exists {
-            return Err(DatabaseError::not_found::<BookCover>());
-        }
-
-        Ok(())
     }
 
     #[instrument(name = "db.book_cover.ids", skip_all, fields(book.id = %book_id))]

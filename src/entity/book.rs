@@ -6,8 +6,8 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        Bounded, BoundedVec, ContentRating, CreatorQuery, CreatorRole, Entity, Image,
-        ImageExtension, Label, Language, ResourceUrl, Text, validate_name,
+        BookVisibility, Bounded, BoundedVec, ContentRating, CreatorQuery, CreatorRole, Entity,
+        Filter, Image, ImageExtension, Label, Language, ResourceUrl, Text, validate_name,
     },
     error::EntityError,
 };
@@ -181,6 +181,18 @@ impl Entity for Book {
     const NAME: &'static str = "Book";
 }
 
+#[derive(Debug)]
+pub struct BookFilter {
+    pub page: Filter,
+    pub visibility: Option<BookVisibility>,
+}
+
+impl BookFilter {
+    pub fn effective_visibility(&self) -> BookVisibility {
+        self.visibility.unwrap_or(BookVisibility::Listed)
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BookQuery {
@@ -196,6 +208,10 @@ pub struct BookQuery {
     pub links: BookLinks,
     pub titles: BookTitles,
     pub creators: BookCreatorsQuery,
+    pub visibility: BookVisibility,
+    pub note: Option<Text>,
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub submitted_at: Option<OffsetDateTime>,
     #[serde(with = "time::serde::rfc3339::option")]
     pub updated_at: Option<OffsetDateTime>,
     #[serde(with = "time::serde::rfc3339")]

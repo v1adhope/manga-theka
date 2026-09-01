@@ -5,7 +5,7 @@ use tracing::{Level, instrument};
 use uuid::Uuid;
 
 use crate::{
-    database::Database,
+    database::{Database, Invariant},
     entity::{
         Chapter, ChapterLocalization, ChapterLocalizations, ChapterName, ChapterNumber,
         ChapterVolume, Filter,
@@ -34,8 +34,7 @@ impl TryFrom<ChapterLocalizationRow> for ChapterLocalization {
     type Error = DatabaseError;
 
     fn try_from(row: ChapterLocalizationRow) -> Result<Self, Self::Error> {
-        let name = ChapterName::try_from(row.name)
-            .map_err(|e| DatabaseError::invariant_corrupted("name", e))?;
+        let name = ChapterName::try_from(row.name).or_corrupted("localization.name")?;
 
         Ok(ChapterLocalization {
             language_id: row.language_id,
@@ -55,22 +54,21 @@ impl TryFrom<ChapterWithRelations> for Chapter {
     fn try_from(item: ChapterWithRelations) -> Result<Self, Self::Error> {
         let ChapterWithRelations { row, localizations } = item;
 
-        let number = ChapterNumber::try_from(row.number)
-            .map_err(|e| DatabaseError::invariant_corrupted("number", e))?;
+        let number = ChapterNumber::try_from(row.number).or_corrupted("number")?;
         let name = row
             .name
             .map(ChapterName::try_from)
             .transpose()
-            .map_err(|e| DatabaseError::invariant_corrupted("name", e))?;
+            .or_corrupted("name")?;
 
         let volume = row
             .volume
             .map(ChapterVolume::try_from)
             .transpose()
-            .map_err(|e| DatabaseError::invariant_corrupted("volume", e))?;
+            .or_corrupted("volume")?;
 
-        let localizations = ChapterLocalizations::try_from(localizations)
-            .map_err(|e| DatabaseError::invariant_corrupted("localizations", e))?;
+        let localizations =
+            ChapterLocalizations::try_from(localizations).or_corrupted("localizations")?;
 
         Ok(Chapter {
             id: row.id,
@@ -249,21 +247,6 @@ impl Database {
         }
 
         Ok((chapters, next_cursor))
-    }
-
-    #[instrument(name = "db.chapter.exists", skip_all, fields(chapter.id = %id))]
-    pub async fn ensure_chapter_exists(&self, id: Uuid) -> Result<(), DatabaseError> {
-        let row = sqlx::query_file!("queries/chapter_exists.sql", id)
-            .fetch_one(&self.pool)
-            .await
-            .map_err(DatabaseError::from)
-            .inspect_err(DatabaseError::log_internal)?;
-
-        if !row.exists {
-            return Err(DatabaseError::not_found::<Chapter>());
-        }
-
-        Ok(())
     }
 
     #[instrument(name = "db.chapter.delete", skip_all, fields(chapter.id = %id))]

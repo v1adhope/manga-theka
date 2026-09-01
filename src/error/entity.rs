@@ -5,7 +5,10 @@ use axum::{
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::error::error_response;
+use crate::{
+    entity::{BookVisibility, Entity},
+    error::error_response,
+};
 
 #[derive(Debug, Error)]
 #[non_exhaustive]
@@ -30,6 +33,24 @@ pub enum EntityError {
 
     #[error("'{0}' is not a valid book kind")]
     InvalidBookKind(String),
+
+    #[error("'{0}' is not a valid book visibility")]
+    InvalidBookVisibility(String),
+
+    #[error("'{0}' is not a valid role")]
+    InvalidRole(String),
+
+    #[error("A note is required to move a book to {0}")]
+    BookNoteRequired(BookVisibility),
+
+    #[error("A book can't move from {0} to {1}")]
+    IllegalVisibilityTransition(BookVisibility, BookVisibility),
+
+    #[error("A book and its contents can't be changed while {0}")]
+    BookNotWritable(BookVisibility),
+
+    #[error("{entity} not found")]
+    NotReadable { entity: &'static str },
 
     #[error("'{0}' is not a valid book link kind")]
     InvalidBookLinkKind(String),
@@ -104,11 +125,21 @@ pub enum EntityError {
     FileNameMissing,
 }
 
+impl EntityError {
+    pub fn not_readable<T: Entity>() -> Self {
+        Self::NotReadable { entity: T::NAME }
+    }
+}
+
 impl IntoResponse for EntityError {
     fn into_response(self) -> Response {
         let status = match self {
             Self::UnsupportedImageFormat => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             Self::ImageExceedsByteLimit(_) => StatusCode::PAYLOAD_TOO_LARGE,
+            Self::IllegalVisibilityTransition(_, _) | Self::BookNotWritable(_) => {
+                StatusCode::CONFLICT
+            }
+            Self::NotReadable { .. } => StatusCode::NOT_FOUND,
             _ => StatusCode::UNPROCESSABLE_ENTITY,
         };
 

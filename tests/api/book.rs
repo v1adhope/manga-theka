@@ -326,6 +326,7 @@ async fn get_book_with_valid_id_passes() {
         links: 1..=5,
         titles: 1..=5,
         creators: 1..=5,
+        ..Default::default()
     }
     .fake();
 
@@ -413,6 +414,7 @@ async fn get_books_embeds_each_books_own_arrays() {
         links: 0..=0,
         titles: 0..=0,
         creators: 0..=0,
+        ..Default::default()
     }
     .fake();
 
@@ -421,6 +423,7 @@ async fn get_books_embeds_each_books_own_arrays() {
         links: 1..=5,
         titles: 1..=5,
         creators: 1..=5,
+        ..Default::default()
     }
     .fake();
 

@@ -190,9 +190,10 @@ async fn upload_chapter_pages_over_the_release_row_budget_returns_422() {
 
     sqlx::query!(
         r#"
-insert into chapter_pages(id, release_id, sort_order, extension)
-select gen_random_uuid(), $1, null, 'png'
-from generate_series(1, 400);
+insert into chapter_pages(id, release_id, book_id, sort_order, extension)
+select gen_random_uuid(), cr.id, cr.book_id, null, 'png'
+from chapter_releases cr, generate_series(1, 400)
+where cr.id = $1;
         "#,
         release_id
     )
@@ -838,9 +839,10 @@ async fn commit_chapter_release_over_the_committed_page_ceiling_returns_422() {
 
     let staged: Vec<Uuid> = sqlx::query_scalar!(
         r#"
-insert into chapter_pages(id, release_id, sort_order, extension)
-select gen_random_uuid(), $1, null, 'png'
-from generate_series(1, 201)
+insert into chapter_pages(id, release_id, book_id, sort_order, extension)
+select gen_random_uuid(), cr.id, cr.book_id, null, 'png'
+from chapter_releases cr, generate_series(1, 201)
+where cr.id = $1
 returning id;
         "#,
         release_id

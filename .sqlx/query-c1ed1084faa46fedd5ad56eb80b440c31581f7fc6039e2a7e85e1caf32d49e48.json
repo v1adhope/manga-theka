@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select id\nfrom chapter_pages\nwhere release_id = $1 and sort_order = $2;\n",
+  "query": "select cp.id\nfrom chapter_pages cp\njoin books b on b.id = cp.book_id\nwhere cp.release_id = $1 and cp.sort_order = $2 and (b.visibility = 'Listed' or $3);\n",
   "describe": {
     "columns": [
       {
@@ -18,12 +18,13 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Int4"
+        "Int4",
+        "Bool"
       ]
     },
     "nullable": [
       false
     ]
   },
-  "hash": "666162e3aa37e22ac88ece8740bb55d8f6a2f8b42cb93f47ab3579b623954bda"
+  "hash": "c1ed1084faa46fedd5ad56eb80b440c31581f7fc6039e2a7e85e1caf32d49e48"
 }

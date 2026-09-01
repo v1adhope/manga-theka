@@ -10,12 +10,13 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        AlternativeTitle, Book, BookCover, BookCreator, BookCreators, BookKind, BookLabelIds,
-        BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus, BookTitles,
-        CreatorRole, Filter, LinkUrl, Text,
+        AlternativeTitle, Book, BookCover, BookCreator, BookCreators, BookFilter, BookKind,
+        BookLabelIds, BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus,
+        BookTitles, BookVisibility, CreatorRole, Filter, LinkUrl, Text, UserClaims,
+        VisibilityTransition,
     },
     error::{AppError, EntityError, RouteError},
-    route::{PaginationQuery, StoreResp, collect_image_part, json_data_response, json_response},
+    route::{StoreResp, collect_image_part, json_data_response, json_response},
     service::Service,
 };
 
@@ -182,11 +183,33 @@ pub struct GetBooksResp {
     pub next_cursor: Option<Uuid>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BookListQuery {
+    pub visibility: Option<BookVisibility>,
+    pub after: Option<Uuid>,
+    pub limit: Option<u32>,
+}
+
+impl TryFrom<BookListQuery> for BookFilter {
+    type Error = EntityError;
+
+    fn try_from(q: BookListQuery) -> Result<Self, Self::Error> {
+        let page = Filter::builder().after(q.after).limit(q.limit).build()?;
+
+        Ok(Self {
+            page,
+            visibility: q.visibility,
+        })
+    }
+}
+
 pub async fn get_books(
     State(service): State<Service>,
-    Query(query): Query<PaginationQuery>,
+    Query(query): Query<BookListQuery>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    let filter: Filter = query.try_into()?;
+    // deferred: gate the ?visibility= override to Moderator/Admin
+    let filter: BookFilter = query.try_into()?;
 
     let (data, next_cursor) = service.get_books(filter).await?;
 
@@ -196,12 +219,60 @@ pub async fn get_books(
     ))
 }
 
+// deferred: scope non-Listed reads to the submitter or a Moderator
 pub async fn get_book(
     State(service): State<Service>,
     Path(id): Path<Uuid>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let book = service.get_book(id).await?;
     Ok(json_data_response(StatusCode::OK, book))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BookVisibilityReq {
+    pub visibility: BookVisibility,
+    pub note: Option<String>,
+}
+
+struct BookVisibilityWithContext {
+    req: BookVisibilityReq,
+    id: Uuid,
+    now: OffsetDateTime,
+}
+
+impl TryFrom<BookVisibilityWithContext> for VisibilityTransition {
+    type Error = EntityError;
+
+    fn try_from(item: BookVisibilityWithContext) -> Result<Self, Self::Error> {
+        let BookVisibilityWithContext { req, id, now } = item;
+        let BookVisibilityReq { visibility, note } = req;
+
+        Ok(Self {
+            id,
+            visibility,
+            note: note.map(Text::try_from).transpose()?,
+            now,
+        })
+    }
+}
+
+// deferred: gate to the submitter for Draft -> PendingReview, Moderator/Admin otherwise
+pub async fn update_book_visibility(
+    State(service): State<Service>,
+    Path(id): Path<Uuid>,
+    Json(req): Json<BookVisibilityReq>,
+) -> Result<StatusCode, AppError> {
+    let transition: VisibilityTransition = BookVisibilityWithContext {
+        req,
+        id,
+        now: OffsetDateTime::now_utc(),
+    }
+    .try_into()?;
+
+    service.set_book_visibility(transition).await?;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // deferred: gate to Moderator/Admin
@@ -244,11 +315,15 @@ pub async fn get_book_covers(
     Ok(json_data_response(StatusCode::OK, covers))
 }
 
+// deferred: also admit the book's submitter once `books` records one
 pub async fn get_book_cover_image(
     State(service): State<Service>,
     Path(cover_id): Path<Uuid>,
+    claims: Option<UserClaims>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    let url = service.presign_book_cover(cover_id).await?;
+    let url = service
+        .presign_book_cover(cover_id, claims.as_ref())
+        .await?;
 
     Ok((StatusCode::FOUND, [(header::LOCATION, url)]))
 }

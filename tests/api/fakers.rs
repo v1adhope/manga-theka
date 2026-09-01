@@ -8,10 +8,10 @@ use fake::faker::lorem::en::{Sentence, Word};
 use fake::faker::name::en::FirstName;
 use fake::rand::RngExt;
 use manga_theka::entity::{
-    AlternativeTitle, BookKind, BookLink, BookLinkKind, BookName, BookQuery, BookStatus, Chapter,
-    ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume, ContentRating, Creator,
-    CreatorQuery, CreatorRole, Email, Feedback, FeedbackKind, FeedbackStatus, Label, LabelKind,
-    Language, LinkUrl, Name, Text,
+    AlternativeTitle, BookKind, BookLink, BookLinkKind, BookName, BookQuery, BookStatus,
+    BookVisibility, Chapter, ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume,
+    ContentRating, Creator, CreatorQuery, CreatorRole, Email, Feedback, FeedbackKind,
+    FeedbackStatus, Label, LabelKind, Language, LinkUrl, Name, Text,
 };
 use time::OffsetDateTime;
 use uuid::{Uuid, uuid};
@@ -19,6 +19,14 @@ use uuid::{Uuid, uuid};
 pub const COVER_JPG: &[u8] = include_bytes!("fixtures/cover.jpg");
 pub const COVER_PNG: &[u8] = include_bytes!("fixtures/cover.png");
 pub const COVER_WEBP: &[u8] = include_bytes!("fixtures/cover.webp");
+
+pub const EVERY_VISIBILITY: [BookVisibility; 5] = [
+    BookVisibility::Draft,
+    BookVisibility::PendingReview,
+    BookVisibility::Listed,
+    BookVisibility::Rejected,
+    BookVisibility::Hidden,
+];
 
 pub static CONTENT_RATINGS: LazyLock<[ContentRating; 4]> = LazyLock::new(|| {
     [
@@ -336,6 +344,7 @@ pub struct BookFaker {
     pub links: RangeInclusive<usize>,
     pub titles: RangeInclusive<usize>,
     pub creators: RangeInclusive<usize>,
+    pub visibility: BookVisibility,
 }
 
 impl Default for BookFaker {
@@ -345,6 +354,7 @@ impl Default for BookFaker {
             links: 0..=5,
             titles: 0..=5,
             creators: 0..=5,
+            visibility: BookVisibility::Listed,
         }
     }
 }
@@ -380,6 +390,9 @@ impl Dummy<BookFaker> for BookQuery {
             links: links.try_into().expect("too many links in faker"),
             titles: titles.try_into().expect("too many titles in faker"),
             creators: creators.try_into().expect("too many creators in faker"),
+            visibility: config.visibility,
+            note: None,
+            submitted_at: None,
             updated_at: None,
             created_at: OffsetDateTime::UNIX_EPOCH,
         }

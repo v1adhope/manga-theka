@@ -1,3 +1,4 @@
+mod authz;
 mod book;
 mod chapter;
 mod content_rating;

@@ -3,7 +3,7 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::{
-    database::Database,
+    database::{Database, Invariant},
     entity::{Creator, CreatorQuery, CreatorRole, Filter, Name},
     error::DatabaseError,
 };
@@ -21,16 +21,12 @@ impl TryFrom<CreatorQueryRow> for CreatorQuery {
     type Error = DatabaseError;
 
     fn try_from(row: CreatorQueryRow) -> Result<Self, Self::Error> {
-        let first_name = Name::try_from(row.first_name)
-            .map_err(|e| DatabaseError::invariant_corrupted("first_name", e))?;
-        let last_name = Name::try_from(row.last_name)
-            .map_err(|e| DatabaseError::invariant_corrupted("last_name", e))?;
+        let first_name = Name::try_from(row.first_name).or_corrupted("first_name")?;
+        let last_name = Name::try_from(row.last_name).or_corrupted("last_name")?;
 
         let mut roles = Vec::with_capacity(row.roles.len());
         for role in row.roles {
-            let role: CreatorRole = role
-                .parse()
-                .map_err(|e| DatabaseError::invariant_corrupted("role", e))?;
+            let role: CreatorRole = role.parse().or_corrupted("role")?;
             roles.push(role);
         }
 

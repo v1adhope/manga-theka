@@ -6,11 +6,22 @@ mod feedback;
 mod label;
 mod language;
 mod release;
+mod visibility;
 
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::{config, entity::SortOrder};
+use crate::{config, entity::SortOrder, error::DatabaseError};
+
+trait Invariant<T> {
+    fn or_corrupted(self, field: &'static str) -> Result<T, DatabaseError>;
+}
+
+impl<T, E: std::error::Error> Invariant<T> for Result<T, E> {
+    fn or_corrupted(self, field: &'static str) -> Result<T, DatabaseError> {
+        self.map_err(|e| DatabaseError::invariant_corrupted(field, e))
+    }
+}
 
 fn cursor_op(order: SortOrder) -> (&'static str, &'static str) {
     match order {
