@@ -5,7 +5,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::EntityError;
 
+#[path = "book/book.rs"]
 mod book;
+#[path = "book/cover.rs"]
+mod book_cover;
+#[path = "book/filter.rs"]
+mod book_filter;
 mod bounded_vec;
 mod chapter;
 mod content_rating;
@@ -23,6 +28,8 @@ mod user;
 mod visibility;
 
 pub use book::*;
+pub use book_cover::*;
+pub use book_filter::*;
 pub use bounded_vec::*;
 pub use chapter::*;
 pub use content_rating::*;
