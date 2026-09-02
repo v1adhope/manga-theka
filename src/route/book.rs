@@ -239,16 +239,16 @@ impl TryFrom<BookListQuery> for BookFilter {
             sort: q.sort,
             cursor: q.cursor.as_deref().map(BookCursor::decode).transpose()?,
             labels: LabelFilter {
-                included: BookLabelIds::deduped(q.labels)?,
+                included: BookLabelIds::set_from(q.labels)?,
                 mode: q.labels_mode.unwrap_or_default(),
-                excluded: BookLabelIds::deduped(q.excluded_labels)?,
+                excluded: BookLabelIds::set_from(q.excluded_labels)?,
             },
-            kinds: BookKinds::deduped(q.kind)?,
-            statuses: BookStatuses::deduped(q.status)?,
-            content_rating_ids: FilterLookupIds::deduped(q.content_rating)?,
-            publication_language_ids: FilterLookupIds::deduped(q.publication_language)?,
-            publication_demographics: PublicationDemographics::deduped(q.publication_demographic)?,
-            available_translated_language_ids: FilterLookupIds::deduped(
+            kinds: BookKinds::set_from(q.kind)?,
+            statuses: BookStatuses::set_from(q.status)?,
+            content_rating_ids: FilterLookupIds::set_from(q.content_rating)?,
+            publication_language_ids: FilterLookupIds::set_from(q.publication_language)?,
+            publication_demographics: PublicationDemographics::set_from(q.publication_demographic)?,
+            available_translated_language_ids: FilterLookupIds::set_from(
                 q.available_translated_language,
             )?,
             publication_year: PublicationYearRange::try_new(
