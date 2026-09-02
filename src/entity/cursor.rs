@@ -95,12 +95,13 @@ impl FilterHash {
 }
 
 #[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct CursorPayload {
-    v: u8,
-    f: BookSortField,
-    s: Value,
-    i: Uuid,
-    h: String,
+    version: u8,
+    field: BookSortField,
+    value: Value,
+    id: Uuid,
+    filter_hash: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -121,11 +122,11 @@ impl BookCursor {
 
     pub fn encode(&self) -> Result<String, EntityError> {
         let payload = CursorPayload {
-            v: CURSOR_VERSION,
-            f: self.value.field(),
-            s: self.value.encode()?,
-            i: self.id,
-            h: self.filter_hash.0.clone(),
+            version: CURSOR_VERSION,
+            field: self.value.field(),
+            value: self.value.encode()?,
+            id: self.id,
+            filter_hash: self.filter_hash.0.clone(),
         };
         let json = serde_json::to_vec(&payload).map_err(|_| EntityError::CursorIsMalformed)?;
 
@@ -139,14 +140,14 @@ impl BookCursor {
         let payload: CursorPayload =
             serde_json::from_slice(&json).map_err(|_| EntityError::CursorIsMalformed)?;
 
-        if payload.v != CURSOR_VERSION {
+        if payload.version != CURSOR_VERSION {
             return Err(EntityError::CursorIsMalformed);
         }
 
         Ok(Self {
-            value: BookSortValue::decode(payload.f, &payload.s)?,
-            id: payload.i,
-            filter_hash: FilterHash(payload.h),
+            value: BookSortValue::decode(payload.field, &payload.value)?,
+            id: payload.id,
+            filter_hash: FilterHash(payload.filter_hash),
         })
     }
 
@@ -264,11 +265,11 @@ mod tests {
     #[test]
     fn a_cursor_from_another_version_is_rejected() {
         let raw = serde_json::json!({
-            "v": 2,
-            "f": "createdAt",
-            "s": "2023-11-14T22:13:20Z",
-            "i": Uuid::now_v7(),
-            "h": "0123456789abcdef",
+            "version": 2,
+            "field": "createdAt",
+            "value": "2023-11-14T22:13:20Z",
+            "id": Uuid::now_v7(),
+            "filterHash": "0123456789abcdef",
         })
         .to_string();
         let encoded =
@@ -280,11 +281,11 @@ mod tests {
     #[test]
     fn a_sort_value_of_the_wrong_shape_is_rejected() {
         let raw = serde_json::json!({
-            "v": 1,
-            "f": "publicationYear",
-            "s": "not a year",
-            "i": Uuid::now_v7(),
-            "h": "0123456789abcdef",
+            "version": 1,
+            "field": "publicationYear",
+            "value": "not a year",
+            "id": Uuid::now_v7(),
+            "filterHash": "0123456789abcdef",
         })
         .to_string();
         let encoded =
