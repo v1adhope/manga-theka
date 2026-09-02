@@ -4,8 +4,6 @@ use axum::{
     http::{StatusCode, header},
     response::IntoResponse,
 };
-// `axum::extract::Query` deserializes with a backend that has no sequence support at all, so a
-// repeated parameter fails to parse before the handler runs.
 use axum_extra::extract::Query;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -240,7 +238,7 @@ impl TryFrom<BookListQuery> for BookFilter {
             cursor: q.cursor.as_deref().map(BookCursor::decode).transpose()?,
             labels: LabelFilter {
                 included: BookLabelIds::set_from(q.labels)?,
-                mode: q.labels_mode.unwrap_or_default(),
+                mode: q.labels_mode.unwrap_or(LabelsMode::And),
                 excluded: BookLabelIds::set_from(q.excluded_labels)?,
             },
             kinds: BookKinds::set_from(q.kind)?,

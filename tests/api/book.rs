@@ -621,8 +621,8 @@ async fn get_books_invalid_cursor_returns_400() {
 const LABEL_CASES: &[(&str, &[usize])] = &[
     ("?labels={A}", &[0, 1, 3, 9]),
     ("?labels={A}&labels={R}", &[0, 3]),
-    ("?labels={A}&labels={R}&labelsMode=AND", &[0, 3]),
-    ("?labels={A}&labels={R}&labelsMode=OR", &[0, 1, 3, 5, 9]),
+    ("?labels={A}&labels={R}&labelsMode=And", &[0, 3]),
+    ("?labels={A}&labels={R}&labelsMode=Or", &[0, 1, 3, 5, 9]),
     ("?labels={F}&labels={L}", &[4]),
     ("?labels={A}&labels={A}", &[0, 1, 3, 9]),
     ("?excludedLabels={R}", &[1, 2, 4, 6, 7, 8, 9, 10, 11]),
@@ -632,7 +632,7 @@ const LABEL_CASES: &[(&str, &[usize])] = &[
     ),
     ("?labels={F}&excludedLabels={I}", &[3, 4, 9]),
     (
-        "?labels={M}&labels={Z}&labelsMode=OR&excludedLabels={S}",
+        "?labels={M}&labels={Z}&labelsMode=Or&excludedLabels={S}",
         &[7, 11],
     ),
 ];
@@ -857,12 +857,12 @@ async fn range_facets_respect_their_boundaries() {
 // Order is the assertion here, so these compare the exact sequence rather than a set.
 const SORT_CASES: &[(&str, &[usize])] = &[
     ("", &[0, 2, 3, 1]),
-    ("?sort=createdAt&order=Asc", &[1, 3, 2, 0]),
-    ("?sort=createdAt&order=Desc", &[0, 2, 3, 1]),
-    ("?sort=name&order=Asc", &[0, 1, 2, 3]),
-    ("?sort=name&order=Desc", &[3, 2, 1, 0]),
-    ("?sort=publicationYear&order=Asc", &[3, 1, 2, 0]),
-    ("?sort=publicationYear&order=Desc", &[0, 2, 1, 3]),
+    ("?sort=CreatedAt&order=Asc", &[1, 3, 2, 0]),
+    ("?sort=CreatedAt&order=Desc", &[0, 2, 3, 1]),
+    ("?sort=Name&order=Asc", &[0, 1, 2, 3]),
+    ("?sort=Name&order=Desc", &[3, 2, 1, 0]),
+    ("?sort=PublicationYear&order=Asc", &[3, 1, 2, 0]),
+    ("?sort=PublicationYear&order=Desc", &[0, 2, 1, 3]),
 ];
 
 #[tokio::test]
@@ -884,7 +884,7 @@ async fn paging_a_non_unique_sort_key_neither_skips_nor_repeats() {
     let ascending = ids(&books);
     let descending: Vec<uuid::Uuid> = ascending.iter().rev().copied().collect();
 
-    for sort in ["createdAt", "name", "publicationYear"] {
+    for sort in ["CreatedAt", "Name", "PublicationYear"] {
         for (order, expected) in [("Asc", &ascending), ("Desc", &descending)] {
             let base = format!("/books?sort={sort}&order={order}&limit=2");
             let mut seen: Vec<uuid::Uuid> = Vec::new();
@@ -967,7 +967,7 @@ async fn a_cursor_minted_under_another_filter_returns_400() {
 
     for changed in [
         format!("/books?labels={ROMANCE}&limit=2&cursor={cursor}"),
-        format!("/books?labels={ACTION}&limit=2&sort=name&cursor={cursor}"),
+        format!("/books?labels={ACTION}&limit=2&sort=Name&cursor={cursor}"),
         format!("/books?labels={ACTION}&limit=2&order=Asc&cursor={cursor}"),
         format!("/books?labels={ACTION}&kind=Manga&limit=2&cursor={cursor}"),
         format!("/books?limit=2&cursor={cursor}"),
@@ -1028,10 +1028,10 @@ async fn filtering_stays_inside_the_default_visibility() {
 
     for query in [
         format!("?labels={ACTION}"),
-        format!("?labels={ACTION}&labelsMode=OR"),
+        format!("?labels={ACTION}&labelsMode=Or"),
         format!("?excludedLabels={}", uuid::Uuid::now_v7()),
         "?publicationYearFrom=2020&publicationYearTo=2020".to_owned(),
-        "?sort=name&order=Asc".to_owned(),
+        "?sort=Name&order=Asc".to_owned(),
         format!("?kind={}", hidden.kind.as_ref()),
     ] {
         let got = app.get_books_page(&format!("/books{query}")).await;

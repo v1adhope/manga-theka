@@ -121,11 +121,7 @@ pub struct ChapterPages {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(
-    tag = "status",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase"
-)]
+#[serde(tag = "status", rename_all_fields = "camelCase")]
 pub enum ChapterPageQuery {
     Committed {
         id: Uuid,
@@ -140,7 +136,6 @@ pub enum ChapterPageQuery {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub enum PageStatus {
     Staged,
 }

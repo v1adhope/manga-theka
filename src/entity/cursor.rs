@@ -9,10 +9,8 @@ use crate::error::EntityError;
 const CURSOR_VERSION: u8 = 1;
 const FILTER_HASH_HEX_LEN: usize = 16;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 pub enum BookSortField {
-    #[default]
     CreatedAt,
     Name,
     PublicationYear,
@@ -29,9 +27,9 @@ impl BookSortField {
 
     fn wire(self) -> &'static str {
         match self {
-            Self::CreatedAt => "createdAt",
-            Self::Name => "name",
-            Self::PublicationYear => "publicationYear",
+            Self::CreatedAt => "CreatedAt",
+            Self::Name => "Name",
+            Self::PublicationYear => "PublicationYear",
         }
     }
 }
@@ -207,7 +205,7 @@ mod tests {
     use crate::entity::{BookCursor, BookSortField, BookSortValue, CanonicalFilter, FilterHash};
 
     fn hash() -> FilterHash {
-        FilterHash::of("sort=createdAt\norder=Desc\n")
+        FilterHash::of("sort=CreatedAt\norder=Desc\n")
     }
 
     fn every_sort_value() -> [BookSortValue; 3] {
@@ -266,7 +264,7 @@ mod tests {
     fn a_cursor_from_another_version_is_rejected() {
         let raw = serde_json::json!({
             "version": 2,
-            "field": "createdAt",
+            "field": "CreatedAt",
             "value": "2023-11-14T22:13:20Z",
             "id": Uuid::now_v7(),
             "filterHash": "0123456789abcdef",
@@ -282,7 +280,7 @@ mod tests {
     fn a_sort_value_of_the_wrong_shape_is_rejected() {
         let raw = serde_json::json!({
             "version": 1,
-            "field": "publicationYear",
+            "field": "PublicationYear",
             "value": "not a year",
             "id": Uuid::now_v7(),
             "filterHash": "0123456789abcdef",
@@ -359,8 +357,8 @@ mod tests {
     #[test]
     fn a_filter_hash_is_stable_across_runs() {
         assert_eq!(
-            FilterHash::of("sort=createdAt\norder=Desc\n"),
-            FilterHash::of("sort=createdAt\norder=Desc\n"),
+            FilterHash::of("sort=CreatedAt\norder=Desc\n"),
+            FilterHash::of("sort=CreatedAt\norder=Desc\n"),
         );
     }
 }

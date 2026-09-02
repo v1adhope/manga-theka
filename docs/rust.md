@@ -3,12 +3,13 @@
 ## Conventions
 
 - Don't write unsafe code.
-- Use `camelCase` for JSON keys and `PascalCase` for enum JSON values in router contracts.
+- Use `camelCase` for JSON keys and `PascalCase` for enum JSON values in router contracts. Variants serialize verbatim, so an enum takes no `rename_all`.
 - Follow Guard Clause / Early Return Pattern.
 - Log internal errors immediately at the point of failure.
 - Time format is `RFC3339`.
 - Don't pass external invalid data to the application layer, use `NewType Pattern`.
 - Derive what you use now — add macros when a real need arises, not in advance for possible future use. Exception is `Debug`.
+- Don't derive `Default` on an enum. Name the fallback variant at the use site, like `unwrap_or(LabelsMode::And)`.
 - Avoid chained conversions like `value.as_ref().to_string()` — implement the target conversion directly on value's type instead of composing it from intermediate ones.
 - Traits such as `From`, `TryFrom`, `Display`, and `Debug` represent structural behavior and syntax guarantees, not execution side-effects.
 - Flag if expected to use raw identifier syntax like `r#type`.

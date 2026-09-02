@@ -19,17 +19,21 @@ pub const MAX_BOOK_KINDS: usize = 3;
 pub const MAX_BOOK_STATUSES: usize = 4;
 pub const MAX_PUBLICATION_DEMOGRAPHICS: usize = 5;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Deserialize)]
-#[serde(rename_all = "UPPERCASE")]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 pub enum LabelsMode {
-    #[default]
     And,
     Or,
 }
 
-/// The label facet, whole. The mode says nothing without the set it applies to, and exclusion
-/// is a blocklist that deliberately takes no mode of its own, so the three travel together and
-/// the rule is read off one value rather than reassembled from scattered fields.
+impl AsRef<str> for LabelsMode {
+    fn as_ref(&self) -> &str {
+        match self {
+            Self::And => "And",
+            Self::Or => "Or",
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct LabelFilter {
     pub included: BookLabelIds,
@@ -110,7 +114,7 @@ impl BookFilter {
     }
 
     pub fn effective_sort(&self) -> BookSortField {
-        self.sort.unwrap_or_default()
+        self.sort.unwrap_or(BookSortField::CreatedAt)
     }
 
     /// Every parameter that changes which rows match, and in what order, rendered in one fixed
@@ -203,15 +207,6 @@ fn bound(v: Option<&i16>) -> String {
 fn instant(v: Option<&OffsetDateTime>) -> String {
     v.map(|at| at.unix_timestamp_nanos().to_string())
         .unwrap_or_default()
-}
-
-impl AsRef<str> for LabelsMode {
-    fn as_ref(&self) -> &str {
-        match self {
-            Self::And => "AND",
-            Self::Or => "OR",
-        }
-    }
 }
 
 #[cfg(test)]
@@ -417,10 +412,5 @@ mod tests {
             or.canonical().hash(),
             "AND and OR select different books, so a cursor must not cross between them"
         );
-    }
-
-    #[test]
-    fn labels_mode_defaults_to_and() {
-        assert_eq!(LabelsMode::default(), LabelsMode::And);
     }
 }
