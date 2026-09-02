@@ -5,8 +5,7 @@ use uuid::Uuid;
 use crate::{
     entity::{
         BookCursor, BookKind, BookLabelIds, BookSortField, BookStatus, BookVisibility, Bounded,
-        BoundedVec, CanonicalFilter, EVERY_BOOK_KIND, EVERY_BOOK_STATUS,
-        EVERY_PUBLICATION_DEMOGRAPHIC, Filter, PublicationDemographic, Range, RangeBound,
+        BoundedVec, CanonicalFilter, Filter, PublicationDemographic, Range, RangeBound,
     },
     error::EntityError,
 };
@@ -15,6 +14,12 @@ use crate::{
 // clear the ISO 639-1 alpha-2 code space and any plausible rating vocabulary, so that a
 // repeated parameter cannot be turned into an amplification vector.
 pub const MAX_FILTER_LOOKUP_VALUES: usize = 200;
+
+// Closed vocabularies: one value per enum variant. Adding or removing a variant of `BookKind`,
+// `BookStatus`, or `PublicationDemographic` means updating the matching constant here.
+pub const MAX_BOOK_KINDS: usize = 3;
+pub const MAX_BOOK_STATUSES: usize = 4;
+pub const MAX_PUBLICATION_DEMOGRAPHICS: usize = 5;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
@@ -57,21 +62,21 @@ pub type CreatedAtRange = Range<OffsetDateTime, CreatedAtBound>;
 pub struct BookKindsBound;
 
 impl Bounded for BookKindsBound {
-    const MAX: usize = EVERY_BOOK_KIND.len();
+    const MAX: usize = MAX_BOOK_KINDS;
     const NAME: &'static str = "book kinds";
 }
 
 pub struct BookStatusesBound;
 
 impl Bounded for BookStatusesBound {
-    const MAX: usize = EVERY_BOOK_STATUS.len();
+    const MAX: usize = MAX_BOOK_STATUSES;
     const NAME: &'static str = "book statuses";
 }
 
 pub struct PublicationDemographicsBound;
 
 impl Bounded for PublicationDemographicsBound {
-    const MAX: usize = EVERY_PUBLICATION_DEMOGRAPHIC.len();
+    const MAX: usize = MAX_PUBLICATION_DEMOGRAPHICS;
     const NAME: &'static str = "publication demographics";
 }
 

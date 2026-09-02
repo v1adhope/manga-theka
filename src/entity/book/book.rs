@@ -18,23 +18,6 @@ pub const MAX_BOOK_TITLES: usize = 12;
 pub const MAX_BOOK_LABELS: usize = 70;
 pub const MAX_BOOK_CREATORS: usize = 20;
 
-pub const EVERY_BOOK_STATUS: [BookStatus; 4] = [
-    BookStatus::Ongoing,
-    BookStatus::Completed,
-    BookStatus::Hiatus,
-    BookStatus::Cancelled,
-];
-
-pub const EVERY_BOOK_KIND: [BookKind; 3] = [BookKind::Manga, BookKind::Manhwa, BookKind::Manhua];
-
-pub const EVERY_PUBLICATION_DEMOGRAPHIC: [PublicationDemographic; 5] = [
-    PublicationDemographic::Shounen,
-    PublicationDemographic::Shoujo,
-    PublicationDemographic::Seinen,
-    PublicationDemographic::Josei,
-    PublicationDemographic::Kids,
-];
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub enum BookStatus {
     Ongoing,
