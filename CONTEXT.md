@@ -70,6 +70,10 @@ _Avoid_: State, Availability, Progress
 The audience-suitability rating a `Book` carries, exactly one per Book. Unlike `Book Kind` and `Book Status`, an open set -- currently `Everyone` (E), `Teen` (T), `Teen Plus` (T+), and `Mature` (M), extensible because rating systems vary by country.
 _Avoid_: Age rating, Maturity, Audience
 
+**Publication Demographic**:
+The readership the original publisher marketed a `Book` to -- `Shounen`, `Shoujo`, `Seinen`, `Josei`, or `Kids`. A closed, fixed set; exactly one per `Book`. Independent of `Content Rating`.
+_Avoid_: Demographic (alone), Audience, Target audience, Age rating (see `Content Rating`)
+
 **Publication Language**:
 The language a `Book` was originally published in, exactly one per Book, drawn from the shared language catalog (ISO 639-1) that `Alternative Title` and `Chapter Release` also draw from. No `Chapter Release` may use its Book's Publication Language -- releases are always translations.
 _Avoid_: Original language, Source language, Locale
@@ -95,8 +99,24 @@ The volume a `Chapter` belongs to within its `Book`, as a whole number 0-1000. O
 _Avoid_: Tankobon, Part, Book (in the print sense)
 
 **Label**:
-A Genre or Tag applied to a `Book`, drawn from one shared catalog distinguished only by its type.
-_Avoid_: Genre, Tag (as separate concepts), Category
+A curated descriptor applied to a `Book`, drawn from one shared catalog and distinguished only by its `Label Kind`. A `Genre`, a `Theme`, and a `Presentation` are all Labels, never separate entities. Read-only to every `Role` -- the catalog is seeded, never authored through the API -- so a `Book` attaches existing Labels and never invents one.
+_Avoid_: Tag, Category, Keyword
+
+**Label Kind**:
+The axis a `Label` belongs to -- `Genre`, `Theme`, or `Presentation`. A closed, fixed set; exactly one per `Label`.
+_Avoid_: Type, Group, Tag
+
+**Genre**:
+A `Label Kind` naming the tradition a `Book` belongs to -- what shelf it sits on. Broad and few.
+_Avoid_: Category
+
+**Theme**:
+A `Label Kind` naming a subject, setting, or trope appearing in a `Book` -- what is in it, rather than what it is. Narrow and many.
+_Avoid_: Tag, Topic, Keyword
+
+**Presentation**:
+A `Label Kind` naming how a `Book` is packaged or where it came from -- its shape (`Long Strip`, `Full Color`, `Oneshot`) or its provenance (`Adaptation`, `Self-Published`). Deliberately broader than shape alone. Describes the work, never one `Chapter Release` of it.
+_Avoid_: Format (see `Book Kind`), Layout, Origin
 
 **Book Link**:
 An external URL attached to a `Book`, categorized as "Where to read", "Where to buy", or "Track".
