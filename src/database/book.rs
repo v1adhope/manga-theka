@@ -10,7 +10,7 @@ use crate::{
         AlternativeTitle, Book, BookCover, BookCoverQuery, BookCreatorsQuery, BookFilter, BookKind,
         BookLabels, BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus, BookTitles,
         BookVisibility, ContentRating, CoverUrl, CreatorQuery, ImageExtension, Label, Language,
-        LinkUrl, Text,
+        LinkUrl, PublicationDemographic, Text,
     },
     error::DatabaseError,
 };
@@ -29,6 +29,7 @@ struct BookRow {
     publication_language_id: Uuid,
     publication_language_code: String,
     publication_language_name: String,
+    publication_demographic: String,
     visibility: String,
     note: Option<String>,
     submitted_at: Option<time::OffsetDateTime>,
@@ -166,6 +167,10 @@ impl TryFrom<BookWithRelations> for BookQuery {
         let description = Text::try_from(row.description).or_corrupted("description")?;
         let status: BookStatus = row.status.parse().or_corrupted("status")?;
         let kind: BookKind = row.kind.parse().or_corrupted("kind")?;
+        let publication_demographic: PublicationDemographic =
+            row.publication_demographic
+                .parse()
+                .or_corrupted("publication_demographic")?;
         let visibility: BookVisibility = row.visibility.parse().or_corrupted("visibility")?;
         let note = row
             .note
@@ -194,6 +199,7 @@ impl TryFrom<BookWithRelations> for BookQuery {
                 code: row.publication_language_code,
                 name: row.publication_language_name,
             },
+            publication_demographic,
             labels,
             links,
             titles,
@@ -228,6 +234,7 @@ impl Database {
             item.status.as_ref(),
             item.kind.as_ref(),
             item.publication_language_id,
+            item.publication_demographic.as_ref(),
             item.updated_at,
             item.created_at,
         )
@@ -260,6 +267,7 @@ impl Database {
             item.status.as_ref(),
             item.kind.as_ref(),
             item.publication_language_id,
+            item.publication_demographic.as_ref(),
             item.updated_at,
         )
         .fetch_optional(&mut *tx)
@@ -336,8 +344,8 @@ impl Database {
                      cr.id as content_rating_id, cr.name as content_rating_name,
                      cr.code as content_rating_code, b.status, b.kind,
                      l.id as publication_language_id, l.code as publication_language_code,
-                     l.name as publication_language_name, b.visibility, b.note, b.submitted_at,
-                     b.updated_at, b.created_at
+                     l.name as publication_language_name, b.publication_demographic,
+                     b.visibility, b.note, b.submitted_at, b.updated_at, b.created_at
               from books b
               join content_ratings cr on cr.id = b.content_rating
               join languages l on l.id = b.publication_language

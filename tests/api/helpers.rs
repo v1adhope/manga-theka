@@ -328,8 +328,9 @@ where b.id = $1;
         sqlx::query!(
             r#"
 insert into books(id, name, description, publication_year, content_rating, status, kind,
-                  publication_language, visibility, note, submitted_at, updated_at, created_at)
-values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
+                  publication_language, publication_demographic, visibility, note, submitted_at,
+                  updated_at, created_at)
+values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14);
         "#,
             b.id,
             b.name.as_ref(),
@@ -339,6 +340,7 @@ values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
             b.status.as_ref() as _,
             b.kind.as_ref() as _,
             b.publication_language.id,
+            b.publication_demographic.as_ref() as _,
             b.visibility.as_ref() as _,
             b.note.as_ref().map(AsRef::as_ref) as Option<&str>,
             b.submitted_at,
@@ -483,8 +485,9 @@ select (select b.name from books b where b.id = $1) as "name?",
     pub async fn fetch_book(&self, id: Uuid) -> BookQuery {
         let row = sqlx::query!(
             r#"
-select b.name, b.description, b.publication_year, b.status, b.kind, b.visibility, b.note,
-       b.submitted_at, b.updated_at, b.created_at,
+select b.name, b.description, b.publication_year, b.status, b.kind,
+       b.publication_demographic, b.visibility, b.note, b.submitted_at, b.updated_at,
+       b.created_at,
        cr.id as content_rating_id, cr.name as content_rating_name, cr.code as content_rating_code,
        l.id as language_id, l.code as language_code, l.name as language_name
 from books b
@@ -603,6 +606,10 @@ order by c.id;
                 code: row.language_code,
                 name: row.language_name,
             },
+            publication_demographic: row
+                .publication_demographic
+                .parse()
+                .expect("stored publication demographic must be valid"),
             labels: labels.try_into().expect("too many labels in test fixture"),
             links: links.try_into().expect("too many links in test fixture"),
             titles: titles.try_into().expect("too many titles in test fixture"),

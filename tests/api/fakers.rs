@@ -11,7 +11,7 @@ use manga_theka::entity::{
     AlternativeTitle, BookKind, BookLink, BookLinkKind, BookName, BookQuery, BookStatus,
     BookVisibility, Chapter, ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume,
     ContentRating, Creator, CreatorQuery, CreatorRole, Email, Feedback, FeedbackKind,
-    FeedbackStatus, Label, LabelKind, Language, LinkUrl, Name, Text,
+    FeedbackStatus, Label, LabelKind, Language, LinkUrl, Name, PublicationDemographic, Text,
 };
 use time::OffsetDateTime;
 use uuid::{Uuid, uuid};
@@ -103,17 +103,17 @@ pub static LABELS: LazyLock<[Label; 6]> = LazyLock::new(|| {
         Label {
             id: uuid!("019febba-36fa-701d-97ed-e65d87fe8ddd"),
             name: "Mafia".to_owned(),
-            kind: LabelKind::Tag,
+            kind: LabelKind::Theme,
         },
         Label {
             id: uuid!("019febba-36fa-701d-97ed-eb6f2148a897"),
             name: "Zombies".to_owned(),
-            kind: LabelKind::Tag,
+            kind: LabelKind::Theme,
         },
         Label {
             id: uuid!("019febbf-0532-70e9-85dc-7929be8cafc9"),
             name: "School Life".to_owned(),
-            kind: LabelKind::Tag,
+            kind: LabelKind::Theme,
         },
     ]
 });
@@ -196,6 +196,23 @@ impl Dummy<BookKindFaker> for BookKind {
             0 => BookKind::Manga,
             1 => BookKind::Manhwa,
             _ => BookKind::Manhua,
+        }
+    }
+}
+
+pub struct PublicationDemographicFaker;
+
+impl Dummy<PublicationDemographicFaker> for PublicationDemographic {
+    fn dummy_with_rng<R: RngExt + ?Sized>(
+        _config: &PublicationDemographicFaker,
+        rng: &mut R,
+    ) -> Self {
+        match rng.random_range(0..5) {
+            0 => PublicationDemographic::Shounen,
+            1 => PublicationDemographic::Shoujo,
+            2 => PublicationDemographic::Seinen,
+            3 => PublicationDemographic::Josei,
+            _ => PublicationDemographic::Kids,
         }
     }
 }
@@ -386,6 +403,7 @@ impl Dummy<BookFaker> for BookQuery {
             status: BookStatusFaker.fake_with_rng(rng),
             kind: BookKindFaker.fake_with_rng(rng),
             publication_language: LanguageFaker.fake_with_rng(rng),
+            publication_demographic: PublicationDemographicFaker.fake_with_rng(rng),
             labels: labels.try_into().expect("too many labels in faker"),
             links: links.try_into().expect("too many links in faker"),
             titles: titles.try_into().expect("too many titles in faker"),

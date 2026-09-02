@@ -15,7 +15,7 @@ use crate::{
 pub const MAX_BOOK_LINKS: usize = 12;
 pub const MAX_BOOK_TITLES: usize = 12;
 // Matches the total number of rows seeded in the `labels` table.
-pub const MAX_BOOK_LABELS: usize = 31;
+pub const MAX_BOOK_LABELS: usize = 70;
 pub const MAX_BOOK_CREATORS: usize = 20;
 
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
@@ -77,6 +77,42 @@ impl AsRef<str> for BookKind {
             Self::Manga => "Manga",
             Self::Manhwa => "Manhwa",
             Self::Manhua => "Manhua",
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Deserialize, Serialize)]
+pub enum PublicationDemographic {
+    Shounen,
+    Shoujo,
+    Seinen,
+    Josei,
+    Kids,
+}
+
+impl FromStr for PublicationDemographic {
+    type Err = EntityError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Shounen" => Ok(Self::Shounen),
+            "Shoujo" => Ok(Self::Shoujo),
+            "Seinen" => Ok(Self::Seinen),
+            "Josei" => Ok(Self::Josei),
+            "Kids" => Ok(Self::Kids),
+            other => Err(EntityError::InvalidPublicationDemographic(other.to_owned())),
+        }
+    }
+}
+
+impl AsRef<str> for PublicationDemographic {
+    fn as_ref(&self) -> &str {
+        match self {
+            Self::Shounen => "Shounen",
+            Self::Shoujo => "Shoujo",
+            Self::Seinen => "Seinen",
+            Self::Josei => "Josei",
+            Self::Kids => "Kids",
         }
     }
 }
@@ -169,6 +205,7 @@ pub struct Book {
     pub status: BookStatus,
     pub kind: BookKind,
     pub publication_language_id: Uuid,
+    pub publication_demographic: PublicationDemographic,
     pub label_ids: BookLabelIds,
     pub links: BookLinks,
     pub titles: BookTitles,
@@ -204,6 +241,7 @@ pub struct BookQuery {
     pub status: BookStatus,
     pub kind: BookKind,
     pub publication_language: Language,
+    pub publication_demographic: PublicationDemographic,
     pub labels: BookLabels,
     pub links: BookLinks,
     pub titles: BookTitles,
@@ -310,7 +348,7 @@ mod tests {
     use crate::entity::{
         AlternativeTitle, BookCreatorsQuery, BookLabelIds, BookLink, BookLinkKind, BookLinks,
         BookName, BookTitles, CreatorQuery, CreatorRole, LinkUrl, MAX_BOOK_CREATORS,
-        MAX_BOOK_LABELS, MAX_BOOK_LINKS, MAX_BOOK_TITLES, Name,
+        MAX_BOOK_LABELS, MAX_BOOK_LINKS, MAX_BOOK_TITLES, Name, PublicationDemographic,
     };
 
     fn sample_link() -> BookLink {
@@ -335,6 +373,20 @@ mod tests {
             roles: vec![CreatorRole::Author],
             created_at: OffsetDateTime::now_utc(),
         }
+    }
+
+    #[test]
+    fn every_publication_demographic_round_trips() {
+        for s in ["Shounen", "Shoujo", "Seinen", "Josei", "Kids"] {
+            let demographic: PublicationDemographic = s.parse().unwrap();
+            assert_eq!(demographic.as_ref(), s);
+        }
+    }
+
+    #[test]
+    fn unknown_publication_demographic_is_rejected() {
+        let res = "Unknown".parse::<PublicationDemographic>();
+        assert!(res.is_err());
     }
 
     #[test]

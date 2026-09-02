@@ -34,6 +34,7 @@ async fn store_book_with_valid_body_passes() {
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": book.publication_demographic.as_ref(),
         "labelIds": book.labels.as_slice().iter().map(|l| l.id).collect::<Vec<_>>(),
         "links": &book.links,
         "titles": &book.titles,
@@ -58,6 +59,7 @@ async fn store_book_with_valid_body_passes() {
     assert_eq!(got.status, book.status);
     assert_eq!(got.kind, book.kind);
     assert_eq!(got.publication_language.id, book.publication_language.id);
+    assert_eq!(got.publication_demographic, book.publication_demographic);
     assert_eq!(
         label_keys(got.labels.as_slice()),
         label_keys(book.labels.as_slice())
@@ -96,6 +98,7 @@ async fn store_book_without_relations_passes() {
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": book.publication_demographic.as_ref(),
     })
     .to_string();
 
@@ -140,6 +143,7 @@ async fn store_book_with_missing_name_returns_422() {
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": book.publication_demographic.as_ref(),
     })
     .to_string();
 
@@ -163,6 +167,58 @@ async fn store_book_with_unknown_status_returns_422() {
         "publicationYear": book.publication_year,
         "contentRatingId": book.content_rating.id,
         "status": "abandoned",
+        "kind": book.kind.as_ref(),
+        "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": book.publication_demographic.as_ref(),
+    })
+    .to_string();
+
+    let req = Request::post("/books")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body))
+        .unwrap();
+
+    let resp = app.router.oneshot(req).await.unwrap();
+    assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
+}
+
+#[tokio::test]
+async fn store_book_with_unknown_publication_demographic_returns_422() {
+    let app = TestApp::new().await;
+    let book: BookQuery = BookFaker::default().fake();
+
+    let body = serde_json::json!({
+        "name": book.name.as_ref(),
+        "description": book.description.as_ref(),
+        "publicationYear": book.publication_year,
+        "contentRatingId": book.content_rating.id,
+        "status": book.status.as_ref(),
+        "kind": book.kind.as_ref(),
+        "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": "Unknown",
+    })
+    .to_string();
+
+    let req = Request::post("/books")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body))
+        .unwrap();
+
+    let resp = app.router.oneshot(req).await.unwrap();
+    assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
+}
+
+#[tokio::test]
+async fn store_book_without_publication_demographic_returns_422() {
+    let app = TestApp::new().await;
+    let book: BookQuery = BookFaker::default().fake();
+
+    let body = serde_json::json!({
+        "name": book.name.as_ref(),
+        "description": book.description.as_ref(),
+        "publicationYear": book.publication_year,
+        "contentRatingId": book.content_rating.id,
+        "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
     })
@@ -190,6 +246,7 @@ async fn store_book_with_unknown_label_id_returns_422() {
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": book.publication_demographic.as_ref(),
         "labelIds": [uuid::Uuid::now_v7()],
     })
     .to_string();
@@ -223,6 +280,7 @@ async fn store_book_with_unknown_creator_id_returns_422() {
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": book.publication_demographic.as_ref(),
         "creators": [{ "creatorId": uuid::Uuid::now_v7(), "role": "Author" }],
     })
     .to_string();
@@ -258,6 +316,7 @@ async fn store_book_with_dual_role_creator_merges_into_one_credit() {
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": book.publication_demographic.as_ref(),
         "creators": [
             { "creatorId": creator.id, "role": "Author" },
             { "creatorId": creator.id, "role": "Artist" },
@@ -302,6 +361,7 @@ async fn store_book_with_duplicate_creator_role_returns_422() {
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": book.publication_demographic.as_ref(),
         "creators": [
             { "creatorId": creator.id, "role": "Author" },
             { "creatorId": creator.id, "role": "Author" },
@@ -358,6 +418,7 @@ async fn get_book_with_valid_id_passes() {
         got.publication_language.name,
         book.publication_language.name
     );
+    assert_eq!(got.publication_demographic, book.publication_demographic);
     assert_eq!(
         label_keys(got.labels.as_slice()),
         label_keys(book.labels.as_slice())
@@ -592,6 +653,7 @@ async fn update_book_with_valid_body_passes() {
         "status": updated.status.as_ref(),
         "kind": updated.kind.as_ref(),
         "publicationLanguageId": updated.publication_language.id,
+        "publicationDemographic": updated.publication_demographic.as_ref(),
         "labelIds": updated.labels.as_slice().iter().map(|l| l.id).collect::<Vec<_>>(),
         "links": &updated.links,
         "titles": &updated.titles,
@@ -614,6 +676,7 @@ async fn update_book_with_valid_body_passes() {
     assert_eq!(got.status, updated.status);
     assert_eq!(got.kind, updated.kind);
     assert_eq!(got.publication_language.id, updated.publication_language.id);
+    assert_eq!(got.publication_demographic, updated.publication_demographic);
 
     assert_eq!(
         label_keys(got.labels.as_slice()),
@@ -662,6 +725,7 @@ async fn update_book_swaps_the_content_rating() {
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": book.publication_demographic.as_ref(),
     })
     .to_string();
 
@@ -698,6 +762,7 @@ async fn update_book_with_empty_arrays_detaches_everything() {
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": book.publication_demographic.as_ref(),
         "labelIds": [],
         "links": [],
         "titles": [],
@@ -736,6 +801,7 @@ async fn update_book_leaves_other_books_untouched() {
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": book.publication_demographic.as_ref(),
     })
     .to_string();
 
@@ -768,6 +834,7 @@ async fn update_book_with_unknown_id_returns_404() {
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": book.publication_demographic.as_ref(),
     })
     .to_string();
 

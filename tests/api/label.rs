@@ -8,87 +8,153 @@ use tower::ServiceExt;
 use crate::helpers::{RespWrapper, TestApp, assert_error};
 use manga_theka::entity::Label;
 
-const GENRE_NAMES: [&str; 5] = ["Action", "Adventure", "Comedy", "Crime", "Drama"];
+const SEEDED_LABELS: usize = 70;
 
-const TAG_NAMES: [&str; 5] = ["Mafia", "Music", "School Life", "Survival", "Time Travel"];
+const GENRE_NAMES: [&str; 5] = ["Action", "Murim", "Romance", "Wuxia", "Xianxia"];
 
-#[tokio::test]
-async fn get_labels_with_no_filter_returns_seeded_labels() {
-    let app = TestApp::new().await;
+const THEME_NAMES: [&str; 5] = ["Dungeons", "Mafia", "Regression", "School Life", "Zombies"];
 
-    let req = Request::get("/labels").body(Body::empty()).unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::OK);
+const PRESENTATION_NAMES: [&str; 5] = [
+    "Adaptation",
+    "Full Color",
+    "Long Strip",
+    "Oneshot",
+    "Self-Published",
+];
+
+const KIND_CASES: [(&str, [&str; 5], usize); 3] = [
+    ("Genre", GENRE_NAMES, 27),
+    ("Theme", THEME_NAMES, 38),
+    ("Presentation", PRESENTATION_NAMES, 5),
+];
+
+const REMOVED_NAMES: [&str; 9] = [
+    "Loli",
+    "Shota",
+    "Incest",
+    "Fan Colored",
+    "Official Colored",
+    "Award Winning",
+    "User Created",
+    "Gyaru",
+    "Traditional Games",
+];
+
+// The six rows that were seeded under the retired `Tag` kind, with the ids they must keep.
+const REKINDED_THEMES: [(&str, &str); 6] = [
+    ("Mafia", "019febba-36fa-701d-97ed-e65d87fe8ddd"),
+    ("Music", "019febbf-0532-70e9-85dc-77f4c9b5e45d"),
+    ("School Life", "019febbf-0532-70e9-85dc-7929be8cafc9"),
+    ("Survival", "019febbf-0532-70e9-85dc-7e32fdad9879"),
+    ("Time Travel", "019febba-36fa-701d-97ed-eec9e8b450c6"),
+    ("Zombies", "019febba-36fa-701d-97ed-eb6f2148a897"),
+];
+
+async fn get_labels(app: &TestApp, path: &str) -> Vec<Label> {
+    let req = Request::get(path).body(Body::empty()).unwrap();
+    let resp = app.router.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK, "{path}");
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
     let wrapper: RespWrapper<Vec<Label>> = serde_json::from_slice(&bytes).unwrap();
 
-    let names: Vec<String> = wrapper.data.iter().map(|l| l.name.clone()).collect();
+    wrapper.data
+}
 
-    for expected in GENRE_NAMES.iter().chain(TAG_NAMES.iter()) {
+#[tokio::test]
+async fn get_labels_with_no_filter_returns_the_whole_curated_catalog() {
+    let app = TestApp::new().await;
+
+    let labels = get_labels(&app, "/labels").await;
+    let names: Vec<&str> = labels.iter().map(|l| l.name.as_str()).collect();
+
+    assert_eq!(labels.len(), SEEDED_LABELS);
+
+    for (_, expected, _) in KIND_CASES {
+        for name in expected {
+            assert!(
+                names.contains(&name),
+                "expected label {name:?} to be present"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn get_labels_filtered_by_kind_returns_only_that_kind() {
+    let app = TestApp::new().await;
+
+    for (kind, expected, count) in KIND_CASES {
+        let labels = get_labels(&app, &format!("/labels?kind={kind}")).await;
+        let names: Vec<&str> = labels.iter().map(|l| l.name.as_str()).collect();
+
+        assert_eq!(labels.len(), count, "{kind}");
         assert!(
-            names.contains(&expected.to_string()),
-            "expected label {expected:?} to be present"
+            labels.iter().all(|l| l.kind.as_ref() == kind),
+            "{kind} results must all carry that kind"
+        );
+
+        for name in expected {
+            assert!(
+                names.contains(&name),
+                "expected {kind} {name:?} to be present"
+            );
+        }
+        for (other, unexpected, _) in KIND_CASES {
+            if other == kind {
+                continue;
+            }
+            for name in unexpected {
+                assert!(
+                    !names.contains(&name),
+                    "did not expect {other} {name:?} among {kind} results"
+                );
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn get_labels_keeps_the_ids_of_rekinded_themes() {
+    let app = TestApp::new().await;
+
+    let labels = get_labels(&app, "/labels?kind=Theme").await;
+
+    for (name, id) in REKINDED_THEMES {
+        let label = labels
+            .iter()
+            .find(|l| l.name == name)
+            .unwrap_or_else(|| panic!("{name} must be seeded as a theme"));
+
+        assert_eq!(
+            label.id.to_string(),
+            id,
+            "{name} must keep its id so existing attachments survive"
         );
     }
 }
 
 #[tokio::test]
-async fn get_labels_filtered_by_genre_returns_only_genre_labels() {
+async fn get_labels_omits_the_retired_vocabulary() {
     let app = TestApp::new().await;
 
-    let req = Request::get("/labels?kind=Genre")
-        .body(Body::empty())
-        .unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::OK);
+    let labels = get_labels(&app, "/labels").await;
+    let names: Vec<&str> = labels.iter().map(|l| l.name.as_str()).collect();
 
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<Label>> = serde_json::from_slice(&bytes).unwrap();
-
-    let names: Vec<String> = wrapper.data.iter().map(|l| l.name.clone()).collect();
-
-    for expected in GENRE_NAMES {
-        assert!(
-            names.contains(&expected.to_string()),
-            "expected genre {expected:?} to be present"
-        );
-    }
-    for unexpected in TAG_NAMES {
-        assert!(
-            !names.contains(&unexpected.to_string()),
-            "did not expect tag {unexpected:?} among genre results"
-        );
+    for name in REMOVED_NAMES {
+        assert!(!names.contains(&name), "{name:?} must not be seeded");
     }
 }
 
 #[tokio::test]
-async fn get_labels_filtered_by_tag_returns_only_tag_labels() {
+async fn get_labels_with_retired_tag_kind_returns_400() {
     let app = TestApp::new().await;
 
     let req = Request::get("/labels?kind=Tag")
         .body(Body::empty())
         .unwrap();
     let resp = app.router.oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::OK);
-
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<Label>> = serde_json::from_slice(&bytes).unwrap();
-
-    let names: Vec<String> = wrapper.data.iter().map(|l| l.name.clone()).collect();
-
-    for expected in TAG_NAMES {
-        assert!(
-            names.contains(&expected.to_string()),
-            "expected tag {expected:?} to be present"
-        );
-    }
-    for unexpected in GENRE_NAMES {
-        assert!(
-            !names.contains(&unexpected.to_string()),
-            "did not expect genre {unexpected:?} among tag results"
-        );
-    }
+    assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
 
 #[tokio::test]

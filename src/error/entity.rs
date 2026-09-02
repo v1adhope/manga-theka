@@ -34,6 +34,9 @@ pub enum EntityError {
     #[error("'{0}' is not a valid book kind")]
     InvalidBookKind(String),
 
+    #[error("'{0}' is not a valid publication demographic")]
+    InvalidPublicationDemographic(String),
+
     #[error("'{0}' is not a valid book visibility")]
     InvalidBookVisibility(String),
 

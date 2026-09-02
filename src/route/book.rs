@@ -12,8 +12,8 @@ use crate::{
     entity::{
         AlternativeTitle, Book, BookCover, BookCreator, BookCreators, BookFilter, BookKind,
         BookLabelIds, BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus,
-        BookTitles, BookVisibility, CreatorRole, Filter, LinkUrl, Text, UserClaims,
-        VisibilityTransition,
+        BookTitles, BookVisibility, CreatorRole, Filter, LinkUrl, PublicationDemographic, Text,
+        UserClaims, VisibilityTransition,
     },
     error::{AppError, EntityError, RouteError},
     route::{StoreResp, collect_image_part, json_data_response, json_response},
@@ -51,6 +51,7 @@ pub struct BookReq {
     pub status: BookStatus,
     pub kind: BookKind,
     pub publication_language_id: Uuid,
+    pub publication_demographic: PublicationDemographic,
     #[serde(default)]
     pub label_ids: Vec<Uuid>,
     #[serde(default)]
@@ -87,6 +88,7 @@ impl TryFrom<BookWithRelations> for Book {
             status,
             kind,
             publication_language_id,
+            publication_demographic,
             label_ids,
             links: link_reqs,
             titles: title_reqs,
@@ -126,6 +128,7 @@ impl TryFrom<BookWithRelations> for Book {
             status,
             kind,
             publication_language_id,
+            publication_demographic,
             label_ids: BookLabelIds::try_from(label_ids)?,
             links: BookLinks::try_from(links)?,
             titles: BookTitles::try_from(titles)?,
