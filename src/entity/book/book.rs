@@ -14,9 +14,11 @@ use crate::{
 
 pub const MAX_BOOK_LINKS: usize = 12;
 pub const MAX_BOOK_TITLES: usize = 12;
-// Matches the total number of rows seeded in the `labels` table.
-pub const MAX_BOOK_LABELS: usize = 70;
 pub const MAX_BOOK_CREATORS: usize = 20;
+
+// Closed vocabulary: one value per row seeded in the `labels` table. Seeding or retiring a
+// label means updating this constant.
+pub const MAX_BOOK_LABELS: usize = 70;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub enum BookStatus {

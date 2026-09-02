@@ -10,9 +10,7 @@ use crate::{
     error::EntityError,
 };
 
-// Open lookup sets with no fixed cardinality. Not a schema fact: 200 is a ceiling chosen to
-// clear the ISO 639-1 alpha-2 code space and any plausible rating vocabulary, so that a
-// repeated parameter cannot be turned into an amplification vector.
+// Open lookup sets: an anti-amplification ceiling clearing ISO 639-1, not a schema fact.
 pub const MAX_FILTER_LOOKUP_VALUES: usize = 200;
 
 // Closed vocabularies: one value per enum variant. Adding or removing a variant of `BookKind`,
@@ -42,7 +40,6 @@ pub struct LabelFilter {
 pub struct PublicationYearBound;
 
 impl RangeBound for PublicationYearBound {
-    // A year is a discrete ordinal, so 2010..2015 means what a reader thinks it means.
     const UPPER_INCLUSIVE: bool = true;
     const NAME: &'static str = "publication year";
 }
@@ -50,8 +47,6 @@ impl RangeBound for PublicationYearBound {
 pub struct CreatedAtBound;
 
 impl RangeBound for CreatedAtBound {
-    // A timestamp is continuous, so a half-open interval lets adjacent ranges tile without a
-    // book on the boundary landing in both.
     const UPPER_INCLUSIVE: bool = false;
     const NAME: &'static str = "created at";
 }
