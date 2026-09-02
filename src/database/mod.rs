@@ -9,9 +9,12 @@ mod release;
 mod visibility;
 
 use sqlx::PgPool;
-use uuid::Uuid;
 
-use crate::{config, entity::SortOrder, error::DatabaseError};
+use crate::{
+    config,
+    entity::{RangeBound, SortOrder},
+    error::DatabaseError,
+};
 
 trait Invariant<T> {
     fn or_corrupted(self, field: &'static str) -> Result<T, DatabaseError>;
@@ -34,13 +37,17 @@ fn fetch_limit(limit: u32) -> i64 {
     i64::from(limit) + 1
 }
 
-fn take_page<R>(rows: &mut Vec<R>, limit: u32, cursor_of: impl Fn(&R) -> Uuid) -> Option<Uuid> {
+fn take_page<R, C>(rows: &mut Vec<R>, limit: u32, cursor_of: impl Fn(&R) -> C) -> Option<C> {
     if rows.len() <= limit as usize {
         return None;
     }
 
     rows.pop();
     rows.last().map(cursor_of)
+}
+
+fn upper_bound_op<B: RangeBound>() -> &'static str {
+    if B::UPPER_INCLUSIVE { "<=" } else { "<" }
 }
 
 pub async fn pool(cfg: &config::Database) -> PgPool {
@@ -72,9 +79,23 @@ mod tests {
     use uuid::Uuid;
 
     use crate::{
-        database::{cursor_op, fetch_limit, take_page},
-        entity::SortOrder,
+        database::{cursor_op, fetch_limit, take_page, upper_bound_op},
+        entity::{RangeBound, SortOrder},
     };
+
+    struct InclusiveBound;
+
+    impl RangeBound for InclusiveBound {
+        const UPPER_INCLUSIVE: bool = true;
+        const NAME: &'static str = "inclusive";
+    }
+
+    struct ExclusiveBound;
+
+    impl RangeBound for ExclusiveBound {
+        const UPPER_INCLUSIVE: bool = false;
+        const NAME: &'static str = "exclusive";
+    }
 
     struct Row {
         id: Uuid,
@@ -96,6 +117,12 @@ mod tests {
     #[test]
     fn descending_order_compares_backward() {
         assert_eq!(cursor_op(SortOrder::Desc), ("<", "desc"));
+    }
+
+    #[test]
+    fn an_upper_bound_reads_its_inclusivity_off_the_type() {
+        assert_eq!(upper_bound_op::<InclusiveBound>(), "<=");
+        assert_eq!(upper_bound_op::<ExclusiveBound>(), "<");
     }
 
     #[test]

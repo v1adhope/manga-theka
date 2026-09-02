@@ -21,7 +21,7 @@ impl Service {
     pub async fn get_books(
         &self,
         filter: BookFilter,
-    ) -> Result<(Vec<BookQuery>, Option<Uuid>), ServiceError> {
+    ) -> Result<(Vec<BookQuery>, Option<String>), ServiceError> {
         self.database.get_books(&filter).await.map_err(Into::into)
     }
 

@@ -26,4 +26,8 @@ create table if not exists books (
 	constraint fk_books_languages_publication_language foreign key(publication_language) references languages(id) on delete restrict
 );
 
-create index if not exists idx_books_visibility_id on books(visibility, id);
+create index if not exists idx_books_visibility_created_at_id on books(visibility, created_at, id);
+
+create index if not exists idx_books_visibility_name_id on books(visibility, name, id);
+
+create index if not exists idx_books_visibility_publication_year_id on books(visibility, publication_year, id);

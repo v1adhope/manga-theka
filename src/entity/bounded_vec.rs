@@ -38,6 +38,18 @@ impl<T, B: Bounded> TryFrom<Vec<T>> for BoundedVec<T, B> {
     }
 }
 
+impl<T: Ord, B: Bounded> BoundedVec<T, B> {
+    /// Builds a set: a repeated query parameter ORs within itself, so a duplicate says nothing
+    /// the first occurrence did not. Deduplicating before the bound also keeps a caller from
+    /// spending the ceiling on repeats.
+    pub fn deduped(mut items: Vec<T>) -> Result<Self, EntityError> {
+        items.sort_unstable();
+        items.dedup();
+
+        Self::try_from(items)
+    }
+}
+
 impl<T, B> BoundedVec<T, B> {
     pub fn as_slice(&self) -> &[T] {
         &self.0
@@ -84,6 +96,30 @@ mod tests {
         assert!(err.contains("test items"));
         assert!(err.contains('3'));
         assert!(err.contains('2'));
+    }
+
+    #[test]
+    fn duplicates_collapse_before_the_ceiling_is_measured() {
+        let res = TestVec::deduped(vec![1, 1, 2, 2, 1]);
+
+        assert_eq!(res.unwrap().as_slice(), [1, 2]);
+    }
+
+    #[test]
+    fn deduping_orders_the_set() {
+        let res = TestVec::deduped(vec![2, 1]);
+
+        assert_eq!(
+            res.unwrap().as_slice(),
+            [1, 2],
+            "wire order must not reach the filter hash"
+        );
+    }
+
+    #[test]
+    fn distinct_values_over_the_ceiling_are_still_rejected() {
+        let res = TestVec::deduped(vec![1, 2, 3]);
+        assert!(res.is_err());
     }
 
     #[test]

@@ -7,10 +7,11 @@ use uuid::Uuid;
 use crate::{
     database::{Database, Invariant, creator::CreatorQueryRow, label::LabelRow},
     entity::{
-        AlternativeTitle, Book, BookCover, BookCoverQuery, BookCreatorsQuery, BookFilter, BookKind,
-        BookLabels, BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus, BookTitles,
-        BookVisibility, ContentRating, CoverUrl, CreatorQuery, ImageExtension, Label, Language,
-        LinkUrl, PublicationDemographic, Text,
+        AlternativeTitle, Book, BookCover, BookCoverQuery, BookCreatorsQuery, BookCursor,
+        BookFilter, BookKind, BookLabels, BookLink, BookLinkKind, BookLinks, BookName, BookQuery,
+        BookSortField, BookSortValue, BookStatus, BookTitles, BookVisibility, ContentRating,
+        CoverUrl, CreatedAtBound, CreatorQuery, ImageExtension, Label, LabelsMode, Language,
+        LinkUrl, PublicationDemographic, PublicationYearBound, Text,
     },
     error::DatabaseError,
 };
@@ -213,6 +214,84 @@ impl TryFrom<BookWithRelations> for BookQuery {
     }
 }
 
+fn sort_value(sort: BookSortField, row: &BookRow) -> BookSortValue {
+    match sort {
+        BookSortField::CreatedAt => BookSortValue::CreatedAt(row.created_at),
+        BookSortField::Name => BookSortValue::Name(row.name.clone()),
+        BookSortField::PublicationYear => BookSortValue::PublicationYear(row.publication_year),
+    }
+}
+
+fn push_id_facet(builder: &mut QueryBuilder<Postgres>, column: &'static str, ids: &[Uuid]) {
+    if ids.is_empty() {
+        return;
+    }
+
+    builder
+        .push(" and ")
+        .push(column)
+        .push(" = any(")
+        .push_bind(ids.to_vec())
+        .push(")");
+}
+
+fn push_enum_facet<T: AsRef<str>>(
+    builder: &mut QueryBuilder<Postgres>,
+    column: &'static str,
+    values: &[T],
+) {
+    if values.is_empty() {
+        return;
+    }
+
+    let values: Vec<String> = values.iter().map(|v| v.as_ref().to_owned()).collect();
+
+    builder
+        .push(" and ")
+        .push(column)
+        .push(" = any(")
+        .push_bind(values)
+        .push(")");
+}
+
+fn push_label_facet(builder: &mut QueryBuilder<Postgres>, filter: &BookFilter) {
+    let included = filter.labels.included.as_slice();
+
+    if !included.is_empty() {
+        match filter.labels.mode {
+            // Grouped semi-join: one index range per selected label, counted once per book,
+            // rather than one correlated subquery per label.
+            LabelsMode::And => {
+                builder
+                    .push(" and b.id in (select bl.book_id from book_labels bl")
+                    .push(" where bl.label_id = any(")
+                    .push_bind(included.to_vec())
+                    .push(") group by bl.book_id having count(*) = ")
+                    .push_bind(included.len() as i64)
+                    .push(")");
+            }
+            LabelsMode::Or => {
+                builder
+                    .push(" and exists (select 1 from book_labels bl")
+                    .push(" where bl.book_id = b.id and bl.label_id = any(")
+                    .push_bind(included.to_vec())
+                    .push("))");
+            }
+        }
+    }
+
+    let excluded = filter.labels.excluded.as_slice();
+
+    // A blocklist is inherently "any of these", so exclusion takes no mode.
+    if !excluded.is_empty() {
+        builder
+            .push(" and not exists (select 1 from book_labels bl")
+            .push(" where bl.book_id = b.id and bl.label_id = any(")
+            .push_bind(excluded.to_vec())
+            .push("))");
+    }
+}
+
 impl Database {
     #[instrument(name = "db.book.store", skip_all, fields(book.id = %item.id))]
     pub async fn store_book(&self, item: &Book) -> Result<(), DatabaseError> {
@@ -324,7 +403,7 @@ impl Database {
     pub async fn get_books(
         &self,
         filter: &BookFilter,
-    ) -> Result<(Vec<BookQuery>, Option<Uuid>), DatabaseError> {
+    ) -> Result<(Vec<BookQuery>, Option<String>), DatabaseError> {
         self.get_books_inner(filter)
             .await
             .inspect_err(DatabaseError::log_internal)
@@ -333,9 +412,10 @@ impl Database {
     async fn get_books_inner(
         &self,
         filter: &BookFilter,
-    ) -> Result<(Vec<BookQuery>, Option<Uuid>), DatabaseError> {
+    ) -> Result<(Vec<BookQuery>, Option<String>), DatabaseError> {
         let limit = filter.page.effective_limit();
         let sort_order = filter.page.effective_sort_order();
+        let sort = filter.effective_sort();
         let fetch_limit = super::fetch_limit(limit);
         let (cursor_comparison, direction) = super::cursor_op(sort_order);
 
@@ -356,15 +436,79 @@ impl Database {
             .push(" and b.visibility = ")
             .push_bind(filter.effective_visibility().as_ref());
 
-        if let Some(id) = filter.page.after {
+        push_label_facet(&mut builder, filter);
+        push_enum_facet(&mut builder, "b.kind", filter.kinds.as_slice());
+        push_enum_facet(&mut builder, "b.status", filter.statuses.as_slice());
+        push_enum_facet(
+            &mut builder,
+            "b.publication_demographic",
+            filter.publication_demographics.as_slice(),
+        );
+        push_id_facet(
+            &mut builder,
+            "b.content_rating",
+            filter.content_rating_ids.as_slice(),
+        );
+        push_id_facet(
+            &mut builder,
+            "b.publication_language",
+            filter.publication_language_ids.as_slice(),
+        );
+
+        // A flat probe on the denormalized book_id, and `exists` rather than a join so a book
+        // carrying two releases in one language still appears once.
+        if !filter.available_translated_language_ids.is_empty() {
             builder
-                .push(" and b.id ")
+                .push(" and exists (select 1 from chapter_releases cr")
+                .push(" where cr.book_id = b.id and cr.language_id = any(")
+                .push_bind(filter.available_translated_language_ids.as_slice().to_vec())
+                .push("))");
+        }
+
+        if let Some(from) = filter.publication_year.from() {
+            builder.push(" and b.publication_year >= ").push_bind(*from);
+        }
+        if let Some(to) = filter.publication_year.to() {
+            builder
+                .push(" and b.publication_year ")
+                .push(super::upper_bound_op::<PublicationYearBound>())
+                .push(" ")
+                .push_bind(*to);
+        }
+        if let Some(from) = filter.created_at.from() {
+            builder.push(" and b.created_at >= ").push_bind(*from);
+        }
+        if let Some(to) = filter.created_at.to() {
+            builder
+                .push(" and b.created_at ")
+                .push(super::upper_bound_op::<CreatedAtBound>())
+                .push(" ")
+                .push_bind(*to);
+        }
+
+        // Row-wise, so a tie on a non-unique sort key is broken by the id rather than skipped
+        // or repeated across the page boundary.
+        if let Some(cursor) = &filter.cursor {
+            builder
+                .push(" and (b.")
+                .push(sort.column())
+                .push(", b.id) ")
                 .push(cursor_comparison)
-                .push_bind(id);
+                .push(" (");
+            match &cursor.value {
+                BookSortValue::CreatedAt(at) => builder.push_bind(*at),
+                BookSortValue::Name(name) => builder.push_bind(name.clone()),
+                BookSortValue::PublicationYear(year) => builder.push_bind(*year),
+            };
+            builder.push(", ").push_bind(cursor.id).push(")");
         }
 
         builder
-            .push(" order by b.id ")
+            .push(" order by b.")
+            .push(sort.column())
+            .push(" ")
+            .push(direction)
+            .push(", b.id ")
             .push(direction)
             .push(" limit ")
             .push_bind(fetch_limit);
@@ -378,7 +522,12 @@ impl Database {
             return Ok((Vec::new(), None));
         }
 
-        let next_cursor = super::take_page(&mut rows, limit, |r| r.id);
+        let filter_hash = filter.canonical().hash();
+        let next_cursor = super::take_page(&mut rows, limit, |r| {
+            BookCursor::new(sort_value(sort, r), r.id, filter_hash.clone()).encode()
+        })
+        .transpose()
+        .or_corrupted("cursor")?;
 
         let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
         let mut labels = self.get_books_labels(&ids).await?;

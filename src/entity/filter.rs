@@ -79,10 +79,19 @@ impl FilterBuilder {
     }
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 pub enum SortOrder {
     Asc,
     Desc,
+}
+
+impl AsRef<str> for SortOrder {
+    fn as_ref(&self) -> &str {
+        match self {
+            Self::Asc => "Asc",
+            Self::Desc => "Desc",
+        }
+    }
 }
 
 #[cfg(test)]

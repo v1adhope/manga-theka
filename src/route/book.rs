@@ -1,18 +1,23 @@
 use axum::{
     Json,
-    extract::{Multipart, Path, Query, State},
+    extract::{Multipart, Path, State},
     http::{StatusCode, header},
     response::IntoResponse,
 };
+// `axum::extract::Query` deserializes with a backend that has no sequence support at all, so a
+// repeated parameter fails to parse before the handler runs.
+use axum_extra::extract::Query;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
     entity::{
-        AlternativeTitle, Book, BookCover, BookCreator, BookCreators, BookFilter, BookKind,
-        BookLabelIds, BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus,
-        BookTitles, BookVisibility, CreatorRole, Filter, LinkUrl, PublicationDemographic, Text,
+        AlternativeTitle, Book, BookCover, BookCreator, BookCreators, BookCursor, BookFilter,
+        BookKind, BookKinds, BookLabelIds, BookLink, BookLinkKind, BookLinks, BookName, BookQuery,
+        BookSortField, BookStatus, BookStatuses, BookTitles, BookVisibility, CreatedAtRange,
+        CreatorRole, Filter, FilterLookupIds, LabelFilter, LabelsMode, LinkUrl,
+        PublicationDemographic, PublicationDemographics, PublicationYearRange, SortOrder, Text,
         UserClaims, VisibilityTransition,
     },
     error::{AppError, EntityError, RouteError},
@@ -53,7 +58,7 @@ pub struct BookReq {
     pub publication_language_id: Uuid,
     pub publication_demographic: PublicationDemographic,
     #[serde(default)]
-    pub label_ids: Vec<Uuid>,
+    pub labels: Vec<Uuid>,
     #[serde(default)]
     pub links: Vec<BookLinkReq>,
     #[serde(default)]
@@ -89,7 +94,7 @@ impl TryFrom<BookWithRelations> for Book {
             kind,
             publication_language_id,
             publication_demographic,
-            label_ids,
+            labels,
             links: link_reqs,
             titles: title_reqs,
             creators: creator_reqs,
@@ -129,7 +134,7 @@ impl TryFrom<BookWithRelations> for Book {
             kind,
             publication_language_id,
             publication_demographic,
-            label_ids: BookLabelIds::try_from(label_ids)?,
+            label_ids: BookLabelIds::try_from(labels)?,
             links: BookLinks::try_from(links)?,
             titles: BookTitles::try_from(titles)?,
             creators: BookCreators::try_from(creators)?,
@@ -183,27 +188,79 @@ pub async fn update_book(
 #[serde(rename_all = "camelCase")]
 pub struct GetBooksResp {
     pub data: Vec<BookQuery>,
-    pub next_cursor: Option<Uuid>,
+    pub next_cursor: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BookListQuery {
     pub visibility: Option<BookVisibility>,
-    pub after: Option<Uuid>,
+    pub cursor: Option<String>,
     pub limit: Option<u32>,
+    pub sort: Option<BookSortField>,
+    pub order: Option<SortOrder>,
+    #[serde(default)]
+    pub labels: Vec<Uuid>,
+    pub labels_mode: Option<LabelsMode>,
+    #[serde(default)]
+    pub excluded_labels: Vec<Uuid>,
+    #[serde(default)]
+    pub kind: Vec<BookKind>,
+    #[serde(default)]
+    pub status: Vec<BookStatus>,
+    #[serde(default)]
+    pub content_rating: Vec<Uuid>,
+    #[serde(default)]
+    pub publication_language: Vec<Uuid>,
+    #[serde(default)]
+    pub publication_demographic: Vec<PublicationDemographic>,
+    #[serde(default)]
+    pub available_translated_language: Vec<Uuid>,
+    pub publication_year_from: Option<i16>,
+    pub publication_year_to: Option<i16>,
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    pub created_at_from: Option<OffsetDateTime>,
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    pub created_at_to: Option<OffsetDateTime>,
 }
 
 impl TryFrom<BookListQuery> for BookFilter {
     type Error = EntityError;
 
     fn try_from(q: BookListQuery) -> Result<Self, Self::Error> {
-        let page = Filter::builder().after(q.after).limit(q.limit).build()?;
+        let page = Filter::builder()
+            .limit(q.limit)
+            .sort_order(q.order)
+            .build()?;
 
-        Ok(Self {
+        let filter = Self {
             page,
             visibility: q.visibility,
-        })
+            sort: q.sort,
+            cursor: q.cursor.as_deref().map(BookCursor::decode).transpose()?,
+            labels: LabelFilter {
+                included: BookLabelIds::deduped(q.labels)?,
+                mode: q.labels_mode.unwrap_or_default(),
+                excluded: BookLabelIds::deduped(q.excluded_labels)?,
+            },
+            kinds: BookKinds::deduped(q.kind)?,
+            statuses: BookStatuses::deduped(q.status)?,
+            content_rating_ids: FilterLookupIds::deduped(q.content_rating)?,
+            publication_language_ids: FilterLookupIds::deduped(q.publication_language)?,
+            publication_demographics: PublicationDemographics::deduped(q.publication_demographic)?,
+            available_translated_language_ids: FilterLookupIds::deduped(
+                q.available_translated_language,
+            )?,
+            publication_year: PublicationYearRange::try_new(
+                q.publication_year_from,
+                q.publication_year_to,
+            )?,
+            created_at: CreatedAtRange::try_new(q.created_at_from, q.created_at_to)?,
+        };
+
+        filter.ensure_cursor_matches()?;
+
+        Ok(filter)
     }
 }
 
