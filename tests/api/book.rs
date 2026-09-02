@@ -38,7 +38,7 @@ async fn store_book_with_valid_body_passes() {
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
         "publicationDemographic": book.publication_demographic.as_ref(),
-        "labels": book.labels.as_slice().iter().map(|l| l.id).collect::<Vec<_>>(),
+        "labelIds": book.labels.as_slice().iter().map(|l| l.id).collect::<Vec<_>>(),
         "links": &book.links,
         "titles": &book.titles,
         "creators": [{ "creatorId": creator.id, "role": "Author" }],
@@ -250,7 +250,7 @@ async fn store_book_with_unknown_label_id_returns_422() {
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
         "publicationDemographic": book.publication_demographic.as_ref(),
-        "labels": [uuid::Uuid::now_v7()],
+        "labelIds": [uuid::Uuid::now_v7()],
     })
     .to_string();
 
@@ -1145,7 +1145,7 @@ async fn update_book_with_valid_body_passes() {
         "kind": updated.kind.as_ref(),
         "publicationLanguageId": updated.publication_language.id,
         "publicationDemographic": updated.publication_demographic.as_ref(),
-        "labels": updated.labels.as_slice().iter().map(|l| l.id).collect::<Vec<_>>(),
+        "labelIds": updated.labels.as_slice().iter().map(|l| l.id).collect::<Vec<_>>(),
         "links": &updated.links,
         "titles": &updated.titles,
     })
@@ -1254,7 +1254,7 @@ async fn update_book_with_empty_arrays_detaches_everything() {
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
         "publicationDemographic": book.publication_demographic.as_ref(),
-        "labels": [],
+        "labelIds": [],
         "links": [],
         "titles": [],
     })

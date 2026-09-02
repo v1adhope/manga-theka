@@ -58,7 +58,7 @@ pub struct BookReq {
     pub publication_language_id: Uuid,
     pub publication_demographic: PublicationDemographic,
     #[serde(default)]
-    pub labels: Vec<Uuid>,
+    pub label_ids: Vec<Uuid>,
     #[serde(default)]
     pub links: Vec<BookLinkReq>,
     #[serde(default)]
@@ -94,7 +94,7 @@ impl TryFrom<BookWithRelations> for Book {
             kind,
             publication_language_id,
             publication_demographic,
-            labels,
+            label_ids,
             links: link_reqs,
             titles: title_reqs,
             creators: creator_reqs,
@@ -134,7 +134,7 @@ impl TryFrom<BookWithRelations> for Book {
             kind,
             publication_language_id,
             publication_demographic,
-            label_ids: BookLabelIds::try_from(labels)?,
+            label_ids: BookLabelIds::try_from(label_ids)?,
             links: BookLinks::try_from(links)?,
             titles: BookTitles::try_from(titles)?,
             creators: BookCreators::try_from(creators)?,
