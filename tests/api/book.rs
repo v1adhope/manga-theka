@@ -881,29 +881,38 @@ async fn each_sort_orders_by_its_own_key() {
 async fn paging_a_non_unique_sort_key_neither_skips_nor_repeats() {
     let app = TestApp::new().await;
     let books = app.seed_tie_corpus(6).await;
-    let expected = ids(&books);
+    let ascending = ids(&books);
+    let descending: Vec<uuid::Uuid> = ascending.iter().rev().copied().collect();
 
-    let mut seen: Vec<uuid::Uuid> = Vec::new();
-    let mut path = "/books?sort=publicationYear&order=Asc&limit=2".to_owned();
+    for sort in ["createdAt", "name", "publicationYear"] {
+        for (order, expected) in [("Asc", &ascending), ("Desc", &descending)] {
+            let base = format!("/books?sort={sort}&order={order}&limit=2");
+            let mut seen: Vec<uuid::Uuid> = Vec::new();
+            let mut path = base.clone();
 
-    for page in 0..3 {
-        let got = app.get_books_page(&path).await;
-        assert_eq!(got.data.len(), 2, "page {page}");
-        seen.extend(ids(&got.data));
+            for page in 0..3 {
+                let got = app.get_books_page(&path).await;
+                assert_eq!(got.data.len(), 2, "{sort} {order} page {page}");
+                seen.extend(ids(&got.data));
 
-        match got.next_cursor {
-            Some(cursor) => {
-                assert!(page < 2, "the last page must not carry a cursor");
-                path = format!("/books?sort=publicationYear&order=Asc&limit=2&cursor={cursor}");
+                match got.next_cursor {
+                    Some(cursor) => {
+                        assert!(
+                            page < 2,
+                            "{sort} {order}: the last page must carry no cursor"
+                        );
+                        path = format!("{base}&cursor={cursor}");
+                    }
+                    None => assert_eq!(page, 2, "{sort} {order}: paging stopped early"),
+                }
             }
-            None => assert_eq!(page, 2, "paging stopped early"),
+
+            assert_eq!(
+                &seen, expected,
+                "{sort} {order}: books tied on the sort key must page in id order, each once"
+            );
         }
     }
-
-    assert_eq!(
-        seen, expected,
-        "six books tied on the sort key must page in id order, each exactly once"
-    );
 }
 
 #[tokio::test]

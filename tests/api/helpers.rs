@@ -1247,8 +1247,10 @@ where f.id = $1;
         books
     }
 
-    /// Six books sharing one publication year: the tie the id tiebreak exists to break, and the
-    /// only shape that catches a page boundary skipping or repeating a row.
+    /// Books tied on *every* sort key at once -- same name, same year, same creation time --
+    /// so the id tiebreak is the only thing ordering them. This is the shape that catches a page
+    /// boundary skipping or repeating a row, and it has to hold for all three sorts, not just
+    /// the one that happens to be tested.
     pub async fn seed_tie_corpus(&self, n: usize) -> Vec<BookQuery> {
         let mut books = Vec::with_capacity(n);
         for _ in 0..n {
@@ -1257,6 +1259,7 @@ where f.id = $1;
                 links: 0..=0,
                 titles: 0..=0,
                 creators: 0..=0,
+                name: Some("Tied".to_owned()),
                 publication_year: Some(2020),
                 created_at: Some(day(0)),
                 ..Default::default()
