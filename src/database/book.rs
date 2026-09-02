@@ -259,16 +259,21 @@ fn push_label_facet(builder: &mut QueryBuilder<Postgres>, filter: &BookFilter) {
 
     if !included.is_empty() {
         match filter.labels.mode {
-            // Grouped semi-join: one index range per selected label, counted once per book,
-            // rather than one correlated subquery per label.
+            // One `exists` per selected label rather than a grouped `having count(*) = n`.
+            // Measured at a million books: the grouped form hides each label's selectivity
+            // behind an aggregate, so it always materializes the whole matching set and costs
+            // 3.1s on the commonest query there is (one popular label). Separate `exists`
+            // clauses are estimated independently, so the planner drives from the sort index
+            // when the filter is dense and narrows first when it is selective. Bounded by
+            // MAX_BOOK_LABELS, so the clause count is capped.
             LabelsMode::And => {
-                builder
-                    .push(" and b.id in (select bl.book_id from book_labels bl")
-                    .push(" where bl.label_id = any(")
-                    .push_bind(included.to_vec())
-                    .push(") group by bl.book_id having count(*) = ")
-                    .push_bind(included.len() as i64)
-                    .push(")");
+                for id in included {
+                    builder
+                        .push(" and exists (select 1 from book_labels bl")
+                        .push(" where bl.book_id = b.id and bl.label_id = ")
+                        .push_bind(*id)
+                        .push(")");
+                }
             }
             LabelsMode::Or => {
                 builder
