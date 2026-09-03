@@ -11,7 +11,7 @@ use crate::{
         BookFilter, BookKind, BookLabels, BookLink, BookLinkKind, BookLinks, BookName, BookQuery,
         BookSelection, BookSort, BookSortField, BookStatus, BookTitles, BookVisibility,
         ContentRating, CoverUrl, CreatedAtBound, CreatorQuery, ImageExtension, Label, LabelsMode,
-        Language, Limit, LinkUrl, PublicationDemographic, PublicationYearBound, Text, Timestamp,
+        Language, LinkUrl, PublicationDemographic, PublicationYearBound, Text, Timestamp,
     },
     error::DatabaseError,
 };
@@ -267,13 +267,6 @@ fn push_label_facet(builder: &mut QueryBuilder<Postgres>, selection: &BookSelect
 
     if !included.is_empty() {
         match selection.labels.mode {
-            // One `exists` per selected label rather than a grouped `having count(*) = n`.
-            // Measured at a million books: the grouped form hides each label's selectivity
-            // behind an aggregate, so it always materializes the whole matching set and costs
-            // 3.1s on the commonest query there is (one popular label). Separate `exists`
-            // clauses are estimated independently, so the planner drives from the sort index
-            // when the filter is dense and narrows first when it is selective. Bounded by
-            // MAX_BOOK_LABELS, so the clause count is capped.
             LabelsMode::And => {
                 for id in included {
                     builder
@@ -295,7 +288,6 @@ fn push_label_facet(builder: &mut QueryBuilder<Postgres>, selection: &BookSelect
 
     let excluded = selection.labels.excluded.as_slice();
 
-    // A blocklist is inherently "any of these", so exclusion takes no mode.
     if !excluded.is_empty() {
         builder
             .push(" and not exists (select 1 from book_labels bl")
@@ -427,7 +419,7 @@ impl Database {
         filter: &BookFilter,
     ) -> Result<(Vec<BookQuery>, Option<BookCursor>), DatabaseError> {
         let selection = &filter.selection;
-        let limit = Limit::effective(filter.limit);
+        let limit = filter.limit.as_i64();
         let sort_order = selection.order;
         let sort = selection.sort;
         let fetch_limit = super::fetch_limit(limit);
@@ -469,6 +461,7 @@ impl Database {
             selection.publication_language_ids.as_slice(),
         );
 
+        // TODO: explain
         // A flat probe on the denormalized book_id, and `exists` rather than a join so a book
         // carrying two releases in one language still appears once.
         if !selection.available_translated_language_ids.is_empty() {
@@ -507,6 +500,7 @@ impl Database {
                 .push_bind(time::OffsetDateTime::from(*to));
         }
 
+        // TODO: explain
         // Row-wise, so a tie on a non-unique sort key is broken by the id rather than skipped
         // or repeated across the page boundary.
         if let Some(cursor) = &filter.cursor {

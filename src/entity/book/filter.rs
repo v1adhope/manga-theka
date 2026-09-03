@@ -100,7 +100,7 @@ pub struct BookSelection {
 
 #[derive(Debug)]
 pub struct BookFilter {
-    pub limit: Option<Limit>,
+    pub limit: Limit,
     pub cursor: Option<BookCursor>,
     pub selection: BookSelection,
     pub selection_hash: HexHash,
@@ -138,7 +138,7 @@ mod tests {
 
     fn filter(selection: BookSelection) -> BookFilter {
         BookFilter {
-            limit: None,
+            limit: Limit::DEFAULT,
             cursor: None,
             selection_hash: hash(&selection),
             selection,
@@ -147,7 +147,7 @@ mod tests {
 
     fn filter_paged(selection: BookSelection, cursor: BookCursor) -> BookFilter {
         BookFilter {
-            limit: None,
+            limit: Limit::DEFAULT,
             cursor: Some(cursor),
             selection_hash: hash(&selection),
             selection,
@@ -248,7 +248,7 @@ mod tests {
         let minted_under = stub();
         let cursor = cursor_for(&minted_under);
         let resized = BookFilter {
-            limit: Some(Limit::try_from(50).unwrap()),
+            limit: Limit::try_from(50).unwrap(),
             ..filter_paged(stub(), cursor)
         };
 

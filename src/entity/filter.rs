@@ -3,98 +3,54 @@ use uuid::Uuid;
 
 use crate::error::EntityError;
 
-pub const DEFAULT_LIMIT: u32 = 20;
-pub const MAX_LIMIT: u32 = 100;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Limit(i64);
 
-#[derive(Debug, Clone, Copy)]
-pub struct Limit(u32);
+impl Limit {
+    pub const DEFAULT: Self = Self(20);
+    pub const MAX: Self = Self(100);
 
-impl TryFrom<u32> for Limit {
-    type Error = EntityError;
-
-    fn try_from(v: u32) -> Result<Self, Self::Error> {
-        if (1..=MAX_LIMIT).contains(&v) {
-            return Ok(Self(v));
-        }
-        Err(EntityError::LimitOutOfRange(v, MAX_LIMIT))
+    pub fn as_i64(self) -> i64 {
+        self.0
     }
 }
 
-impl Limit {
-    pub fn as_u32(self) -> u32 {
-        self.0
+impl Default for Limit {
+    fn default() -> Self {
+        Self::DEFAULT
     }
+}
 
-    pub fn effective(limit: Option<Self>) -> u32 {
-        limit.map_or(DEFAULT_LIMIT, Self::as_u32)
+impl TryFrom<i64> for Limit {
+    type Error = EntityError;
+
+    fn try_from(v: i64) -> Result<Self, Self::Error> {
+        let max = Self::MAX.as_i64();
+
+        if (1..=max).contains(&v) {
+            return Ok(Self(v));
+        }
+        Err(EntityError::LimitOutOfRange(v, max))
     }
 }
 
 #[derive(Debug)]
 pub struct Filter {
     pub after: Option<Uuid>,
-    pub limit: Option<Limit>,
-    pub sort_order: Option<SortOrder>,
+    pub limit: Limit,
+    pub sort_order: SortOrder,
 }
 
-impl Filter {
-    pub fn builder() -> FilterBuilder {
-        FilterBuilder::default()
-    }
-
-    pub fn effective_limit(&self) -> u32 {
-        Limit::effective(self.limit)
-    }
-
-    pub fn effective_sort_order(&self) -> SortOrder {
-        self.sort_order.unwrap_or(SortOrder::Desc)
-    }
-}
-
-// TODO: redundant. The three remaining callers each set every field at once, so `Filter`
-// can be built literally -- with `Limit::try_from` on the way in, as `BookFilter` does -- and
-// this builder dropped.
-#[derive(Debug, Default)]
-pub struct FilterBuilder {
-    after: Option<Uuid>,
-    limit: Option<u32>,
-    sort_order: Option<SortOrder>,
-}
-
-impl FilterBuilder {
-    pub fn after(mut self, v: Option<Uuid>) -> Self {
-        self.after = v;
-        self
-    }
-
-    pub fn limit(mut self, v: Option<u32>) -> Self {
-        self.limit = v;
-        self
-    }
-
-    pub fn sort_order(mut self, v: Option<SortOrder>) -> Self {
-        self.sort_order = v;
-        self
-    }
-
-    pub fn build(self) -> Result<Filter, EntityError> {
-        Ok(Filter {
-            after: self.after,
-            limit: self.limit.map(Limit::try_from).transpose()?,
-            sort_order: self.sort_order,
-        })
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize, Default)]
 pub enum SortOrder {
     Asc,
+    #[default]
     Desc,
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::entity::filter::{DEFAULT_LIMIT, Filter, Limit, MAX_LIMIT, SortOrder};
+    use crate::entity::filter::{Limit, SortOrder};
 
     #[test]
     fn limit_zero_is_rejected() {
@@ -110,44 +66,23 @@ mod tests {
 
     #[test]
     fn limit_max_is_valid() {
-        let res = Limit::try_from(MAX_LIMIT);
+        let res = Limit::try_from(Limit::MAX.as_i64());
         assert!(res.is_ok());
     }
 
     #[test]
     fn limit_above_max_is_rejected() {
-        let res = Limit::try_from(MAX_LIMIT + 1);
+        let res = Limit::try_from(Limit::MAX.as_i64() + 1);
         assert!(res.is_err());
     }
 
     #[test]
-    fn omitted_limit_falls_back_to_the_default() {
-        let filter = Filter::builder().build().unwrap();
-
-        assert_eq!(filter.effective_limit(), DEFAULT_LIMIT);
+    fn limit_defaults_to_the_default_ceiling() {
+        assert_eq!(Limit::default(), Limit::DEFAULT);
     }
 
     #[test]
-    fn provided_limit_wins_over_the_default() {
-        let filter = Filter::builder().limit(Some(1)).build().unwrap();
-
-        assert_eq!(filter.effective_limit(), 1);
-    }
-
-    #[test]
-    fn omitted_sort_order_falls_back_to_descending() {
-        let filter = Filter::builder().build().unwrap();
-
-        assert!(matches!(filter.effective_sort_order(), SortOrder::Desc));
-    }
-
-    #[test]
-    fn provided_sort_order_wins_over_the_default() {
-        let filter = Filter::builder()
-            .sort_order(Some(SortOrder::Asc))
-            .build()
-            .unwrap();
-
-        assert!(matches!(filter.effective_sort_order(), SortOrder::Asc));
+    fn sort_order_defaults_to_descending() {
+        assert!(matches!(SortOrder::default(), SortOrder::Desc));
     }
 }

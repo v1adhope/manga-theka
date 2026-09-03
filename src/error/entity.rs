@@ -92,7 +92,7 @@ pub enum EntityError {
     LinkUrlSchemeNotAllowed(String),
 
     #[error("Limit {0} is out of range [1, {1}]")]
-    LimitOutOfRange(u32, u32),
+    LimitOutOfRange(i64, i64),
 
     #[error("The {0} range starts after it ends")]
     RangeIsInverted(&'static str),

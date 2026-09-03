@@ -33,11 +33,11 @@ fn cursor_op(order: SortOrder) -> (&'static str, &'static str) {
     }
 }
 
-fn fetch_limit(limit: u32) -> i64 {
-    i64::from(limit) + 1
+fn fetch_limit(limit: i64) -> i64 {
+    limit + 1
 }
 
-fn take_page<R, C>(rows: &mut Vec<R>, limit: u32, cursor_of: impl Fn(&R) -> C) -> Option<C> {
+fn take_page<R, C>(rows: &mut Vec<R>, limit: i64, cursor_of: impl Fn(&R) -> C) -> Option<C> {
     if rows.len() <= limit as usize {
         return None;
     }
@@ -129,7 +129,7 @@ mod tests {
     fn fetch_limit_asks_for_one_extra_row() {
         assert_eq!(fetch_limit(0), 1);
         assert_eq!(fetch_limit(1), 2);
-        assert_eq!(fetch_limit(u32::MAX), i64::from(u32::MAX) + 1);
+        assert_eq!(fetch_limit(i64::from(u32::MAX)), i64::from(u32::MAX) + 1);
     }
 
     #[test]

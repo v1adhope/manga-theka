@@ -196,7 +196,7 @@ pub struct GetBooksResp {
 pub struct BookListQuery {
     pub visibility: Option<BookVisibility>,
     pub cursor: Option<String>,
-    pub limit: Option<u32>,
+    pub limit: Option<i64>,
     pub sort: Option<BookSortField>,
     pub order: Option<SortOrder>,
     #[serde(default)]
@@ -229,12 +229,16 @@ impl TryFrom<(BookListQuery, Option<BookCursor>)> for BookFilter {
 
     fn try_from(ctx: (BookListQuery, Option<BookCursor>)) -> Result<Self, Self::Error> {
         let (q, cursor) = ctx;
-        let limit = q.limit.map(Limit::try_from).transpose()?;
+        let limit = q
+            .limit
+            .map(Limit::try_from)
+            .transpose()?
+            .unwrap_or_default();
 
         let selection = BookSelection {
             visibility: q.visibility.unwrap_or(BookVisibility::Listed),
             sort: q.sort.unwrap_or(BookSortField::CreatedAt),
-            order: q.order.unwrap_or(SortOrder::Desc),
+            order: q.order.unwrap_or_default(),
             labels: LabelFilter {
                 included: BookLabelIds::set_from(q.labels)?,
                 mode: q.labels_mode.unwrap_or(LabelsMode::And),

@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::{
     entity::{
         Chapter, ChapterLocalization, ChapterLocalizations, ChapterName, ChapterNumber,
-        ChapterVolume, Filter, SortOrder,
+        ChapterVolume, Filter, Limit, SortOrder,
     },
     error::{AppError, EntityError},
     route::{StoreResp, json_data_response, json_response},
@@ -129,18 +129,22 @@ pub async fn update_chapter(
 pub struct ChapterListQuery {
     pub order: Option<SortOrder>,
     pub after: Option<Uuid>,
-    pub limit: Option<u32>,
+    pub limit: Option<i64>,
 }
 
 impl TryFrom<ChapterListQuery> for Filter {
     type Error = EntityError;
 
     fn try_from(q: ChapterListQuery) -> Result<Self, Self::Error> {
-        Self::builder()
-            .after(q.after)
-            .limit(q.limit)
-            .sort_order(q.order)
-            .build()
+        Ok(Self {
+            after: q.after,
+            limit: q
+                .limit
+                .map(Limit::try_from)
+                .transpose()?
+                .unwrap_or_default(),
+            sort_order: q.order.unwrap_or_default(),
+        })
     }
 }
 

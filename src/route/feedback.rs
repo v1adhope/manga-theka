@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::{
     entity::{
         Email, Feedback, FeedbackFilter, FeedbackKind, FeedbackStatus, FeedbackStatusUpdate,
-        Filter, SortOrder, Text,
+        Filter, Limit, SortOrder, Text,
     },
     error::{AppError, EntityError},
     route::{StoreResp, json_data_response, json_response},
@@ -90,18 +90,22 @@ pub struct FeedbackListQuery {
     pub status: Option<FeedbackStatus>,
     pub order: Option<SortOrder>,
     pub after: Option<Uuid>,
-    pub limit: Option<u32>,
+    pub limit: Option<i64>,
 }
 
 impl TryFrom<FeedbackListQuery> for FeedbackFilter {
     type Error = EntityError;
 
     fn try_from(q: FeedbackListQuery) -> Result<Self, Self::Error> {
-        let page = Filter::builder()
-            .after(q.after)
-            .limit(q.limit)
-            .sort_order(q.order)
-            .build()?;
+        let page = Filter {
+            after: q.after,
+            limit: q
+                .limit
+                .map(Limit::try_from)
+                .transpose()?
+                .unwrap_or_default(),
+            sort_order: q.order.unwrap_or_default(),
+        };
 
         Ok(Self {
             page,

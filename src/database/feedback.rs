@@ -97,8 +97,8 @@ impl Database {
         &self,
         filter: &FeedbackFilter,
     ) -> Result<(Vec<Feedback>, Option<Uuid>), DatabaseError> {
-        let limit = filter.page.effective_limit();
-        let sort_order = filter.page.effective_sort_order();
+        let limit = filter.page.limit.as_i64();
+        let sort_order = filter.page.sort_order;
         let fetch_limit = super::fetch_limit(limit);
         let (cursor_comparison, direction) = super::cursor_op(sort_order);
 
