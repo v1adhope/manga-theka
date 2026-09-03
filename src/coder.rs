@@ -112,7 +112,7 @@ mod tests {
         let raw = serde_json::json!({
             "id": Uuid::now_v7(),
             "sort": { "field": "PublicationYear", "value": "not a year" },
-            "filterHash": "0123456789abcdef",
+            "selectionHash": "0123456789abcdef",
         })
         .to_string();
         let encoded =
@@ -126,7 +126,7 @@ mod tests {
         let raw = serde_json::json!({
             "id": Uuid::now_v7(),
             "sort": { "field": "PublicationYear", "value": 2016 },
-            "filterHash": "nope",
+            "selectionHash": "nope",
         })
         .to_string();
         let encoded =
