@@ -41,6 +41,7 @@ pub struct StoreResp {
 pub struct PaginationQuery {
     pub after: Option<Uuid>,
     pub limit: Option<i64>,
+    pub order: Option<SortOrder>,
 }
 
 impl TryFrom<PaginationQuery> for Filter {
@@ -54,7 +55,7 @@ impl TryFrom<PaginationQuery> for Filter {
                 .map(Limit::try_from)
                 .transpose()?
                 .unwrap_or_default(),
-            sort_order: SortOrder::default(),
+            sort_order: q.order.unwrap_or_default(),
         })
     }
 }

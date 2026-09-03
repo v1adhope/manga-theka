@@ -11,10 +11,10 @@ use uuid::Uuid;
 use crate::{
     entity::{
         Chapter, ChapterLocalization, ChapterLocalizations, ChapterName, ChapterNumber,
-        ChapterVolume, Filter, Limit, SortOrder,
+        ChapterVolume, Filter,
     },
     error::{AppError, EntityError},
-    route::{StoreResp, json_data_response, json_response},
+    route::{PaginationQuery, StoreResp, json_data_response, json_response},
     service::Service,
 };
 
@@ -124,30 +124,6 @@ pub async fn update_chapter(
     Ok(StatusCode::NO_CONTENT)
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChapterListQuery {
-    pub order: Option<SortOrder>,
-    pub after: Option<Uuid>,
-    pub limit: Option<i64>,
-}
-
-impl TryFrom<ChapterListQuery> for Filter {
-    type Error = EntityError;
-
-    fn try_from(q: ChapterListQuery) -> Result<Self, Self::Error> {
-        Ok(Self {
-            after: q.after,
-            limit: q
-                .limit
-                .map(Limit::try_from)
-                .transpose()?
-                .unwrap_or_default(),
-            sort_order: q.order.unwrap_or_default(),
-        })
-    }
-}
-
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetChaptersResp {
@@ -158,7 +134,7 @@ pub struct GetChaptersResp {
 pub async fn get_chapters(
     State(service): State<Service>,
     Path(book_id): Path<Uuid>,
-    Query(query): Query<ChapterListQuery>,
+    Query(query): Query<PaginationQuery>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let filter: Filter = query.try_into()?;
 
