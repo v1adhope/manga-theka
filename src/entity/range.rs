@@ -1,5 +1,7 @@
 use std::{fmt, marker::PhantomData};
 
+use serde::Serialize;
+
 use crate::error::EntityError;
 
 pub trait RangeBound {
@@ -7,7 +9,9 @@ pub trait RangeBound {
     const NAME: &'static str;
 }
 
-pub struct Range<T, B>(Option<T>, Option<T>, PhantomData<B>);
+#[derive(Serialize)]
+#[serde(bound(serialize = "T: Serialize"))]
+pub struct Range<T, B>(Option<T>, Option<T>, #[serde(skip)] PhantomData<B>);
 
 impl<T: fmt::Debug, B> fmt::Debug for Range<T, B> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

@@ -1,11 +1,15 @@
+mod coder;
 mod database;
 mod entity;
+mod hasher;
 mod object_storage;
 mod route;
 mod service;
 
+pub use coder::*;
 pub use database::*;
 pub use entity::*;
+pub use hasher::*;
 pub use object_storage::*;
 pub use route::*;
 pub use service::*;
@@ -37,6 +41,12 @@ pub enum AppError {
 
     #[error(transparent)]
     RouteError(#[from] RouteError),
+
+    #[error(transparent)]
+    CoderError(#[from] CoderError),
+
+    #[error(transparent)]
+    HasherError(#[from] HasherError),
 }
 
 impl IntoResponse for AppError {
@@ -45,6 +55,8 @@ impl IntoResponse for AppError {
             Self::EntityError(e) => e.into_response(),
             Self::ServiceError(e) => e.into_response(),
             Self::RouteError(e) => e.into_response(),
+            Self::CoderError(e) => e.into_response(),
+            Self::HasherError(e) => e.into_response(),
         }
     }
 }

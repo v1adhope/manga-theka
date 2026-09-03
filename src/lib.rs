@@ -1,7 +1,9 @@
+pub mod coder;
 pub mod config;
 pub mod database;
 pub mod entity;
 pub mod error;
+pub mod hasher;
 pub mod object_storage;
 pub mod route;
 pub mod service;

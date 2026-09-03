@@ -2,8 +2,8 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        Book, BookCover, BookCoverQuery, BookFilter, BookQuery, BookVisibilityUpdate, UserClaims,
-        VisibilityTransition,
+        Book, BookCover, BookCoverQuery, BookCursor, BookFilter, BookQuery, BookVisibilityUpdate,
+        UserClaims, VisibilityTransition,
     },
     error::ServiceError,
     service::Service,
@@ -21,7 +21,7 @@ impl Service {
     pub async fn get_books(
         &self,
         filter: BookFilter,
-    ) -> Result<(Vec<BookQuery>, Option<String>), ServiceError> {
+    ) -> Result<(Vec<BookQuery>, Option<BookCursor>), ServiceError> {
         self.database.get_books(&filter).await.map_err(Into::into)
     }
 

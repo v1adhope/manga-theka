@@ -97,11 +97,11 @@ pub enum EntityError {
     #[error("The {0} range starts after it ends")]
     RangeIsInverted(&'static str),
 
-    #[error("Cursor is malformed")]
-    CursorIsMalformed,
+    #[error("Cursor was issued for a different selection")]
+    CursorSelectionMismatch,
 
-    #[error("Cursor was issued for a different filter")]
-    CursorFilterMismatch,
+    #[error("Hash must be exactly {0} lowercase hex characters")]
+    HexHashIsMalformed(usize),
 
     #[error("Chapter number {0} must be within [{1}, {2}] with at most {3} decimal places")]
     ChapterNumberOutOfRange(f32, f32, f32, i32),
@@ -152,7 +152,7 @@ impl IntoResponse for EntityError {
                 StatusCode::CONFLICT
             }
             Self::NotReadable { .. } => StatusCode::NOT_FOUND,
-            Self::CursorIsMalformed | Self::CursorFilterMismatch => StatusCode::BAD_REQUEST,
+            Self::CursorSelectionMismatch => StatusCode::BAD_REQUEST,
             _ => StatusCode::UNPROCESSABLE_ENTITY,
         };
 

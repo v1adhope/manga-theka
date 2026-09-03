@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::EntityError;
@@ -24,6 +24,10 @@ impl Limit {
     pub fn as_u32(self) -> u32 {
         self.0
     }
+
+    pub fn effective(limit: Option<Self>) -> u32 {
+        limit.map_or(DEFAULT_LIMIT, Self::as_u32)
+    }
 }
 
 #[derive(Debug)]
@@ -39,7 +43,7 @@ impl Filter {
     }
 
     pub fn effective_limit(&self) -> u32 {
-        self.limit.map_or(DEFAULT_LIMIT, Limit::as_u32)
+        Limit::effective(self.limit)
     }
 
     pub fn effective_sort_order(&self) -> SortOrder {
@@ -47,6 +51,9 @@ impl Filter {
     }
 }
 
+// TODO: redundant. The three remaining callers each set every field at once, so `Filter`
+// can be built literally -- with `Limit::try_from` on the way in, as `BookFilter` does -- and
+// this builder dropped.
 #[derive(Debug, Default)]
 pub struct FilterBuilder {
     after: Option<Uuid>,
@@ -79,19 +86,10 @@ impl FilterBuilder {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
 pub enum SortOrder {
     Asc,
     Desc,
-}
-
-impl AsRef<str> for SortOrder {
-    fn as_ref(&self) -> &str {
-        match self {
-            Self::Asc => "Asc",
-            Self::Desc => "Desc",
-        }
-    }
 }
 
 #[cfg(test)]

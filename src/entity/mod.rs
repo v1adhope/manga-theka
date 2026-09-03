@@ -2,6 +2,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use time::{OffsetDateTime, UtcOffset};
 
 use crate::error::EntityError;
 
@@ -9,13 +10,14 @@ use crate::error::EntityError;
 mod book;
 #[path = "book/cover.rs"]
 mod book_cover;
+#[path = "book/cursor.rs"]
+mod book_cursor;
 #[path = "book/filter.rs"]
 mod book_filter;
 mod bounded_vec;
 mod chapter;
 mod content_rating;
 mod creator;
-mod cursor;
 mod feedback;
 mod filter;
 mod image;
@@ -29,12 +31,12 @@ mod visibility;
 
 pub use book::*;
 pub use book_cover::*;
+pub use book_cursor::*;
 pub use book_filter::*;
 pub use bounded_vec::*;
 pub use chapter::*;
 pub use content_rating::*;
 pub use creator::*;
-pub use cursor::*;
 pub use feedback::*;
 pub use filter::*;
 pub use image::*;
@@ -48,6 +50,22 @@ pub use visibility::*;
 
 pub trait Entity {
     const NAME: &'static str;
+}
+
+// TODO: replace all OffsetDateTime to Timestamp
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Deserialize, Serialize)]
+pub struct Timestamp(#[serde(with = "time::serde::rfc3339")] OffsetDateTime);
+
+impl From<OffsetDateTime> for Timestamp {
+    fn from(at: OffsetDateTime) -> Self {
+        Self(at.to_offset(UtcOffset::UTC))
+    }
+}
+
+impl From<Timestamp> for OffsetDateTime {
+    fn from(at: Timestamp) -> Self {
+        at.0
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -107,6 +125,31 @@ fn validate_name(s: String) -> Result<String, EntityError> {
     Ok(s.to_owned())
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(transparent)]
+pub struct HexHash(String);
+
+impl From<HexHash> for String {
+    fn from(hash: HexHash) -> Self {
+        hash.0
+    }
+}
+
+impl TryFrom<String> for HexHash {
+    type Error = EntityError;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        const LEN: usize = 16;
+        static PATTERN: LazyLock<Regex> =
+            LazyLock::new(|| Regex::new(&format!("^[0-9a-f]{{{LEN}}}$")).unwrap());
+
+        if !PATTERN.is_match(&s) {
+            return Err(EntityError::HexHashIsMalformed(LEN));
+        }
+        Ok(Self(s))
+    }
+}
+
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Email(String);
@@ -162,7 +205,7 @@ impl AsRef<str> for Text {
 
 #[cfg(test)]
 mod tests {
-    use crate::entity::{Email, Name, Ordinal, Text};
+    use crate::entity::{Email, HexHash, Name, Ordinal, Text};
 
     #[test]
     fn ordinal_at_the_first_position_is_valid() {
@@ -307,5 +350,31 @@ mod tests {
 
         let res = Email::try_from(email);
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn a_lowercase_hex_hash_of_the_exact_length_is_valid() {
+        let res = HexHash::try_from("0123456789abcdef".to_owned());
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn a_hex_hash_of_another_length_is_rejected() {
+        for s in ["", "0123456789abcde", "0123456789abcdef0"] {
+            assert!(
+                HexHash::try_from(s.to_owned()).is_err(),
+                "{s} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn a_hex_hash_outside_the_lowercase_alphabet_is_rejected() {
+        for s in ["0123456789ABCDEF", "0123456789abcdeg", "0123456789abcde "] {
+            assert!(
+                HexHash::try_from(s.to_owned()).is_err(),
+                "{s} must be rejected"
+            );
+        }
     }
 }

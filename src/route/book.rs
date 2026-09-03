@@ -10,15 +10,17 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
+    coder::Coder,
     entity::{
         AlternativeTitle, Book, BookCover, BookCreator, BookCreators, BookCursor, BookFilter,
         BookKind, BookKinds, BookLabelIds, BookLink, BookLinkKind, BookLinks, BookName, BookQuery,
-        BookSortField, BookStatus, BookStatuses, BookTitles, BookVisibility, CreatedAtRange,
-        CreatorRole, Filter, FilterLookupIds, LabelFilter, LabelsMode, LinkUrl,
+        BookSelection, BookSortField, BookStatus, BookStatuses, BookTitles, BookVisibility,
+        CreatedAtRange, CreatorRole, FilterLookupIds, LabelFilter, LabelsMode, Limit, LinkUrl,
         PublicationDemographic, PublicationDemographics, PublicationYearRange, SortOrder, Text,
-        UserClaims, VisibilityTransition,
+        Timestamp, UserClaims, VisibilityTransition,
     },
     error::{AppError, EntityError, RouteError},
+    hasher::Hasher,
     route::{StoreResp, collect_image_part, json_data_response, json_response},
     service::Service,
 };
@@ -222,20 +224,17 @@ pub struct BookListQuery {
     pub created_at_to: Option<OffsetDateTime>,
 }
 
-impl TryFrom<BookListQuery> for BookFilter {
-    type Error = EntityError;
+impl TryFrom<(BookListQuery, Option<BookCursor>)> for BookFilter {
+    type Error = AppError;
 
-    fn try_from(q: BookListQuery) -> Result<Self, Self::Error> {
-        let page = Filter::builder()
-            .limit(q.limit)
-            .sort_order(q.order)
-            .build()?;
+    fn try_from(ctx: (BookListQuery, Option<BookCursor>)) -> Result<Self, Self::Error> {
+        let (q, cursor) = ctx;
+        let limit = q.limit.map(Limit::try_from).transpose()?;
 
-        let filter = Self {
-            page,
-            visibility: q.visibility,
-            sort: q.sort,
-            cursor: q.cursor.as_deref().map(BookCursor::decode).transpose()?,
+        let selection = BookSelection {
+            visibility: q.visibility.unwrap_or(BookVisibility::Listed),
+            sort: q.sort.unwrap_or(BookSortField::CreatedAt),
+            order: q.order.unwrap_or(SortOrder::Desc),
             labels: LabelFilter {
                 included: BookLabelIds::set_from(q.labels)?,
                 mode: q.labels_mode.unwrap_or(LabelsMode::And),
@@ -253,23 +252,36 @@ impl TryFrom<BookListQuery> for BookFilter {
                 q.publication_year_from,
                 q.publication_year_to,
             )?,
-            created_at: CreatedAtRange::try_new(q.created_at_from, q.created_at_to)?,
+            created_at: CreatedAtRange::try_new(
+                q.created_at_from.map(Timestamp::from),
+                q.created_at_to.map(Timestamp::from),
+            )?,
         };
 
-        filter.ensure_cursor_matches()?;
+        let selection_hash = Hasher::compute_hex_hash(&selection)?;
+        let filter = Self {
+            limit,
+            cursor,
+            selection,
+            selection_hash,
+        };
+
+        filter.ensure_cursor_fits()?;
 
         Ok(filter)
     }
 }
 
+// deferred: gate the ?visibility= override to Moderator/Admin
 pub async fn get_books(
     State(service): State<Service>,
     Query(query): Query<BookListQuery>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    // deferred: gate the ?visibility= override to Moderator/Admin
-    let filter: BookFilter = query.try_into()?;
+    let cursor = query.cursor.as_deref().map(Coder::decode).transpose()?;
+    let filter = BookFilter::try_from((query, cursor))?;
 
     let (data, next_cursor) = service.get_books(filter).await?;
+    let next_cursor = next_cursor.map(Coder::encode).transpose()?;
 
     Ok(json_response(
         StatusCode::OK,
@@ -409,4 +421,41 @@ pub async fn delete_book_cover(
 ) -> Result<StatusCode, AppError> {
     service.delete_book_cover(cover_id).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        entity::{BookFilter, BookSortField, BookVisibility, SortOrder},
+        route::BookListQuery,
+    };
+
+    fn filter(body: serde_json::Value) -> BookFilter {
+        let query: BookListQuery = serde_json::from_value(body).expect("query must parse");
+
+        BookFilter::try_from((query, None)).expect("filter must build")
+    }
+
+    #[test]
+    fn an_omitted_facet_falls_back_to_its_default() {
+        let selection = filter(serde_json::json!({})).selection;
+
+        assert_eq!(selection.visibility, BookVisibility::Listed);
+        assert_eq!(selection.sort, BookSortField::CreatedAt);
+        assert_eq!(selection.order, SortOrder::Desc);
+    }
+
+    #[test]
+    fn a_provided_facet_wins_over_the_default() {
+        let selection = filter(serde_json::json!({
+            "visibility": "Hidden",
+            "sort": "Name",
+            "order": "Asc",
+        }))
+        .selection;
+
+        assert_eq!(selection.visibility, BookVisibility::Hidden);
+        assert_eq!(selection.sort, BookSortField::Name);
+        assert_eq!(selection.order, SortOrder::Asc);
+    }
 }

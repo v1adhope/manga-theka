@@ -1,11 +1,11 @@
-use serde::Deserialize;
-use time::OffsetDateTime;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
     entity::{
         BookCursor, BookKind, BookLabelIds, BookSortField, BookStatus, BookVisibility, Bounded,
-        BoundedVec, CanonicalFilter, Filter, PublicationDemographic, Range, RangeBound,
+        BoundedVec, HexHash, Limit, PublicationDemographic, Range, RangeBound, SortOrder,
+        Timestamp,
     },
     error::EntityError,
 };
@@ -19,22 +19,13 @@ pub const MAX_BOOK_KINDS: usize = 3;
 pub const MAX_BOOK_STATUSES: usize = 4;
 pub const MAX_PUBLICATION_DEMOGRAPHICS: usize = 5;
 
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
 pub enum LabelsMode {
     And,
     Or,
 }
 
-impl AsRef<str> for LabelsMode {
-    fn as_ref(&self) -> &str {
-        match self {
-            Self::And => "And",
-            Self::Or => "Or",
-        }
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct LabelFilter {
     pub included: BookLabelIds,
     pub mode: LabelsMode,
@@ -56,7 +47,7 @@ impl RangeBound for CreatedAtBound {
 }
 
 pub type PublicationYearRange = Range<i16, PublicationYearBound>;
-pub type CreatedAtRange = Range<OffsetDateTime, CreatedAtBound>;
+pub type CreatedAtRange = Range<Timestamp, CreatedAtBound>;
 
 pub struct BookKindsBound;
 
@@ -91,12 +82,11 @@ pub type BookStatuses = BoundedVec<BookStatus, BookStatusesBound>;
 pub type PublicationDemographics = BoundedVec<PublicationDemographic, PublicationDemographicsBound>;
 pub type FilterLookupIds = BoundedVec<Uuid, FilterLookupBound>;
 
-#[derive(Debug)]
-pub struct BookFilter {
-    pub page: Filter,
-    pub visibility: Option<BookVisibility>,
-    pub sort: Option<BookSortField>,
-    pub cursor: Option<BookCursor>,
+#[derive(Debug, Serialize)]
+pub struct BookSelection {
+    pub visibility: BookVisibility,
+    pub sort: BookSortField,
+    pub order: SortOrder,
     pub labels: LabelFilter,
     pub kinds: BookKinds,
     pub statuses: BookStatuses,
@@ -108,225 +98,133 @@ pub struct BookFilter {
     pub created_at: CreatedAtRange,
 }
 
+#[derive(Debug)]
+pub struct BookFilter {
+    pub limit: Option<Limit>,
+    pub cursor: Option<BookCursor>,
+    pub selection: BookSelection,
+    pub selection_hash: HexHash,
+}
+
 impl BookFilter {
-    pub fn effective_visibility(&self) -> BookVisibility {
-        self.visibility.unwrap_or(BookVisibility::Listed)
-    }
-
-    pub fn effective_sort(&self) -> BookSortField {
-        self.sort.unwrap_or(BookSortField::CreatedAt)
-    }
-
-    /// Every parameter that changes which rows match, and in what order, rendered in one fixed
-    /// order. `limit` is deliberately absent: changing page size mid-paging is legitimate.
-    pub fn canonical(&self) -> CanonicalFilter {
-        fn uuids(ids: &FilterLookupIds) -> Vec<String> {
-            ids.as_slice().iter().map(Uuid::to_string).collect()
-        }
-
-        CanonicalFilter::new()
-            .sort("sort", self.effective_sort())
-            .field("order", self.page.effective_sort_order().as_ref())
-            .field("visibility", self.effective_visibility().as_ref())
-            .set(
-                "labels",
-                self.labels
-                    .included
-                    .as_slice()
-                    .iter()
-                    .map(Uuid::to_string)
-                    .collect::<Vec<_>>(),
-            )
-            .field("labelsMode", self.labels.mode.as_ref())
-            .set(
-                "excludedLabels",
-                self.labels
-                    .excluded
-                    .as_slice()
-                    .iter()
-                    .map(Uuid::to_string)
-                    .collect::<Vec<_>>(),
-            )
-            .set(
-                "kind",
-                self.kinds
-                    .as_slice()
-                    .iter()
-                    .map(|k| k.as_ref().to_owned())
-                    .collect::<Vec<_>>(),
-            )
-            .set(
-                "status",
-                self.statuses
-                    .as_slice()
-                    .iter()
-                    .map(|s| s.as_ref().to_owned())
-                    .collect::<Vec<_>>(),
-            )
-            .set("contentRating", uuids(&self.content_rating_ids))
-            .set("publicationLanguage", uuids(&self.publication_language_ids))
-            .set(
-                "publicationDemographic",
-                self.publication_demographics
-                    .as_slice()
-                    .iter()
-                    .map(|d| d.as_ref().to_owned())
-                    .collect::<Vec<_>>(),
-            )
-            .set(
-                "availableTranslatedLanguage",
-                uuids(&self.available_translated_language_ids),
-            )
-            .field("publicationYearFrom", &bound(self.publication_year.from()))
-            .field("publicationYearTo", &bound(self.publication_year.to()))
-            .field("createdAtFrom", &instant(self.created_at.from()))
-            .field("createdAtTo", &instant(self.created_at.to()))
-    }
-
-    /// A cursor is only correct for the filter and sort it was minted under. Without this the
-    /// caller pages through quietly wrong results rather than seeing an error.
-    pub fn ensure_cursor_matches(&self) -> Result<(), EntityError> {
+    pub fn ensure_cursor_fits(&self) -> Result<(), EntityError> {
         let Some(cursor) = &self.cursor else {
             return Ok(());
         };
 
-        if cursor.field() != self.effective_sort() || cursor.filter_hash != self.canonical().hash()
+        if cursor.sort.field() != self.selection.sort
+            || cursor.selection_hash != self.selection_hash
         {
-            return Err(EntityError::CursorFilterMismatch);
+            return Err(EntityError::CursorSelectionMismatch);
         }
 
         Ok(())
     }
 }
 
-fn bound(v: Option<&i16>) -> String {
-    v.map(i16::to_string).unwrap_or_default()
-}
-
-// Rendered as an instant rather than as text, so two spellings of one moment hash alike.
-fn instant(v: Option<&OffsetDateTime>) -> String {
-    v.map(|at| at.unix_timestamp_nanos().to_string())
-        .unwrap_or_default()
-}
-
 #[cfg(test)]
 mod tests {
-    use time::{Duration, OffsetDateTime};
+    use time::OffsetDateTime;
     use uuid::Uuid;
 
-    use crate::entity::{
-        BookCursor, BookFilter, BookKind, BookKinds, BookLabelIds, BookSortField, BookSortValue,
-        BookStatuses, BookVisibility, CreatedAtRange, Filter, FilterLookupIds, LabelFilter,
-        LabelsMode, PublicationDemographics, PublicationYearRange,
+    use crate::{
+        entity::{
+            BookCursor, BookFilter, BookKind, BookKinds, BookLabelIds, BookSelection, BookSort,
+            BookSortField, BookVisibility, CreatedAtRange, HexHash, LabelFilter, LabelsMode, Limit,
+            PublicationYearRange, SortOrder, Timestamp,
+        },
+        hasher::{Hasher, tests::stub},
     };
 
-    fn filter() -> BookFilter {
+    fn filter(selection: BookSelection) -> BookFilter {
         BookFilter {
-            page: Filter::builder().build().unwrap(),
-            visibility: None,
-            sort: None,
+            limit: None,
             cursor: None,
-            labels: LabelFilter {
-                included: BookLabelIds::try_from(vec![]).unwrap(),
-                mode: LabelsMode::And,
-                excluded: BookLabelIds::try_from(vec![]).unwrap(),
-            },
-            kinds: BookKinds::try_from(vec![]).unwrap(),
-            statuses: BookStatuses::try_from(vec![]).unwrap(),
-            content_rating_ids: FilterLookupIds::try_from(vec![]).unwrap(),
-            publication_language_ids: FilterLookupIds::try_from(vec![]).unwrap(),
-            publication_demographics: PublicationDemographics::try_from(vec![]).unwrap(),
-            available_translated_language_ids: FilterLookupIds::try_from(vec![]).unwrap(),
-            publication_year: PublicationYearRange::try_new(None, None).unwrap(),
-            created_at: CreatedAtRange::try_new(None, None).unwrap(),
+            selection_hash: hash(&selection),
+            selection,
         }
     }
 
-    fn cursor_for(filter: &BookFilter) -> BookCursor {
-        BookCursor::new(
-            BookSortValue::CreatedAt(OffsetDateTime::UNIX_EPOCH),
-            Uuid::now_v7(),
-            filter.canonical().hash(),
-        )
+    fn filter_paged(selection: BookSelection, cursor: BookCursor) -> BookFilter {
+        BookFilter {
+            limit: None,
+            cursor: Some(cursor),
+            selection_hash: hash(&selection),
+            selection,
+        }
     }
 
-    #[test]
-    fn omitted_sort_falls_back_to_creation_time() {
-        assert_eq!(filter().effective_sort(), BookSortField::CreatedAt);
+    fn cursor_for(selection: &BookSelection) -> BookCursor {
+        BookCursor {
+            id: Uuid::now_v7(),
+            sort: BookSort::CreatedAt(Timestamp::from(OffsetDateTime::UNIX_EPOCH)),
+            selection_hash: hash(selection),
+        }
     }
 
-    #[test]
-    fn provided_sort_wins_over_the_default() {
-        let filter = BookFilter {
-            sort: Some(BookSortField::Name),
-            ..filter()
-        };
-
-        assert_eq!(filter.effective_sort(), BookSortField::Name);
+    fn hash(selection: &BookSelection) -> HexHash {
+        Hasher::compute_hex_hash(selection).unwrap()
     }
 
     #[test]
     fn a_cursor_from_the_same_filter_is_accepted() {
-        let mut filter = filter();
-        filter.cursor = Some(cursor_for(&filter));
+        let selection = stub();
+        let filter = filter_paged(stub(), cursor_for(&selection));
 
-        assert!(filter.ensure_cursor_matches().is_ok());
+        assert!(filter.ensure_cursor_fits().is_ok());
     }
 
     #[test]
     fn no_cursor_is_always_accepted() {
-        assert!(filter().ensure_cursor_matches().is_ok());
+        let filter = filter(stub());
+
+        assert!(filter.ensure_cursor_fits().is_ok());
     }
 
     #[test]
     fn a_cursor_is_rejected_once_any_facet_moves() {
-        let base = filter();
-        let cursor = cursor_for(&base);
+        let cursor = cursor_for(&stub());
 
         let changed = [
-            BookFilter {
+            BookSelection {
                 labels: LabelFilter {
                     included: BookLabelIds::try_from(vec![Uuid::now_v7()]).unwrap(),
                     mode: LabelsMode::And,
                     excluded: BookLabelIds::try_from(vec![]).unwrap(),
                 },
-                cursor: Some(cursor.clone()),
-                ..filter()
+                ..stub()
             },
-            BookFilter {
+            BookSelection {
                 kinds: BookKinds::try_from(vec![BookKind::Manhwa]).unwrap(),
-                cursor: Some(cursor.clone()),
-                ..filter()
+                ..stub()
             },
-            BookFilter {
-                visibility: Some(BookVisibility::Hidden),
-                cursor: Some(cursor.clone()),
-                ..filter()
+            BookSelection {
+                visibility: BookVisibility::Hidden,
+                ..stub()
             },
-            BookFilter {
+            BookSelection {
                 publication_year: PublicationYearRange::try_new(Some(2010), None).unwrap(),
-                cursor: Some(cursor.clone()),
-                ..filter()
+                ..stub()
             },
-            BookFilter {
-                created_at: CreatedAtRange::try_new(Some(OffsetDateTime::UNIX_EPOCH), None)
-                    .unwrap(),
-                cursor: Some(cursor.clone()),
-                ..filter()
+            BookSelection {
+                created_at: CreatedAtRange::try_new(
+                    Some(Timestamp::from(OffsetDateTime::UNIX_EPOCH)),
+                    None,
+                )
+                .unwrap(),
+                ..stub()
             },
-            BookFilter {
-                page: Filter::builder()
-                    .sort_order(Some(crate::entity::SortOrder::Asc))
-                    .build()
-                    .unwrap(),
-                cursor: Some(cursor.clone()),
-                ..filter()
+            BookSelection {
+                order: SortOrder::Asc,
+                ..stub()
             },
         ];
 
-        for filter in changed {
+        for selection in changed {
+            let filter = filter_paged(selection, cursor.clone());
+
             assert!(
-                filter.ensure_cursor_matches().is_err(),
+                filter.ensure_cursor_fits().is_err(),
                 "{filter:?} must reject a cursor minted before the change"
             );
         }
@@ -334,83 +232,29 @@ mod tests {
 
     #[test]
     fn a_cursor_for_another_sort_field_is_rejected() {
-        let filter = BookFilter {
-            sort: Some(BookSortField::Name),
-            ..filter()
+        let selection = BookSelection {
+            sort: BookSortField::Name,
+            ..stub()
         };
         // Minted under this exact filter, so the hash agrees and only the field disagrees.
-        let cursor = BookCursor::new(
-            BookSortValue::CreatedAt(OffsetDateTime::UNIX_EPOCH),
-            Uuid::now_v7(),
-            filter.canonical().hash(),
-        );
+        let cursor = cursor_for(&selection);
+        let filter = filter_paged(selection, cursor);
 
-        let filter = BookFilter {
-            cursor: Some(cursor),
-            ..filter
-        };
-
-        assert!(filter.ensure_cursor_matches().is_err());
+        assert!(filter.ensure_cursor_fits().is_err());
     }
 
     #[test]
-    fn page_size_is_outside_the_filter_hash() {
-        let one = BookFilter {
-            page: Filter::builder().limit(Some(5)).build().unwrap(),
-            ..filter()
-        };
-        let other = BookFilter {
-            page: Filter::builder().limit(Some(50)).build().unwrap(),
-            ..filter()
+    fn page_size_is_outside_the_selection_hash() {
+        let minted_under = stub();
+        let cursor = cursor_for(&minted_under);
+        let resized = BookFilter {
+            limit: Some(Limit::try_from(50).unwrap()),
+            ..filter_paged(stub(), cursor)
         };
 
-        assert_eq!(
-            one.canonical().hash(),
-            other.canonical().hash(),
+        assert!(
+            resized.ensure_cursor_fits().is_ok(),
             "changing page size mid-paging is legitimate"
-        );
-    }
-
-    #[test]
-    fn two_spellings_of_one_instant_are_the_same_filter() {
-        let utc = OffsetDateTime::UNIX_EPOCH + Duration::hours(12);
-        let shifted = utc.to_offset(time::UtcOffset::from_hms(2, 0, 0).unwrap());
-
-        let one = BookFilter {
-            created_at: CreatedAtRange::try_new(Some(utc), None).unwrap(),
-            ..filter()
-        };
-        let other = BookFilter {
-            created_at: CreatedAtRange::try_new(Some(shifted), None).unwrap(),
-            ..filter()
-        };
-
-        assert_eq!(one.canonical().hash(), other.canonical().hash());
-    }
-
-    #[test]
-    fn label_mode_is_part_of_the_filter() {
-        let and = BookFilter {
-            labels: LabelFilter {
-                included: BookLabelIds::try_from(vec![Uuid::nil()]).unwrap(),
-                mode: LabelsMode::And,
-                excluded: BookLabelIds::try_from(vec![]).unwrap(),
-            },
-            ..filter()
-        };
-        let or = BookFilter {
-            labels: LabelFilter {
-                included: BookLabelIds::try_from(vec![Uuid::nil()]).unwrap(),
-                mode: LabelsMode::Or,
-                excluded: BookLabelIds::try_from(vec![]).unwrap(),
-            },
-            ..filter()
-        };
-
-        assert_ne!(
-            and.canonical().hash(),
-            or.canonical().hash(),
-            "AND and OR select different books, so a cursor must not cross between them"
         );
     }
 }
