@@ -461,9 +461,6 @@ impl Database {
             selection.publication_language_ids.as_slice(),
         );
 
-        // TODO: explain
-        // A flat probe on the denormalized book_id, and `exists` rather than a join so a book
-        // carrying two releases in one language still appears once.
         if !selection.available_translated_language_ids.is_empty() {
             builder
                 .push(" and exists (select 1 from chapter_releases cr")
@@ -500,9 +497,6 @@ impl Database {
                 .push_bind(time::OffsetDateTime::from(*to));
         }
 
-        // TODO: explain
-        // Row-wise, so a tie on a non-unique sort key is broken by the id rather than skipped
-        // or repeated across the page boundary.
         if let Some(cursor) = &filter.cursor {
             builder
                 .push(" and (b.")
