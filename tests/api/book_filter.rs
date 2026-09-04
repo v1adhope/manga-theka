@@ -2,13 +2,17 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
+use http_body_util::BodyExt;
 use tower::ServiceExt;
 
 use crate::fakers::{
     ACTION, BookFaker, CONTENT_RATINGS, FANTASY, ISEKAI, LABELS, LANGUAGES, LONG_STRIP, MAFIA,
     ROMANCE, SCHOOL_LIFE, ZOMBIES,
 };
-use crate::helpers::{TestApp, day, ids, pick, rfc3339, sorted};
+use crate::helpers::{
+    RespWrapper, TestApp, assert_error, creator_keys, day, ids, label_keys, link_keys, pick,
+    rfc3339, sorted, title_keys,
+};
 use fake::Fake;
 use manga_theka::entity::{BookQuery, BookVisibility};
 
@@ -248,6 +252,295 @@ async fn range_facets_respect_their_boundaries() {
             "{query:?}"
         );
     }
+}
+
+#[tokio::test]
+async fn get_books_embeds_each_books_own_arrays() {
+    let app = TestApp::new().await;
+    let bare: BookQuery = BookFaker {
+        labels: 0..=0,
+        links: 0..=0,
+        titles: 0..=0,
+        creators: 0..=0,
+        ..Default::default()
+    }
+    .fake();
+
+    let full: BookQuery = BookFaker {
+        labels: 1..=5,
+        links: 1..=5,
+        titles: 1..=5,
+        creators: 1..=5,
+        ..Default::default()
+    }
+    .fake();
+
+    app.insert_book(&bare).await;
+    app.insert_book(&full).await;
+
+    let req = Request::get("/books").body(Body::empty()).unwrap();
+    let resp = app.router.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let listed: RespWrapper<Vec<BookQuery>> = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(listed.data.len(), 2);
+
+    let got_full = listed.data.iter().find(|b| b.id == full.id).unwrap();
+    assert_eq!(
+        label_keys(got_full.labels.as_slice()),
+        label_keys(full.labels.as_slice())
+    );
+    assert_eq!(
+        link_keys(got_full.links.as_slice()),
+        link_keys(full.links.as_slice())
+    );
+    assert_eq!(
+        title_keys(got_full.titles.as_slice()),
+        title_keys(full.titles.as_slice())
+    );
+    assert_eq!(
+        creator_keys(got_full.creators.as_slice()),
+        creator_keys(full.creators.as_slice())
+    );
+
+    let got_bare = listed.data.iter().find(|b| b.id == bare.id).unwrap();
+    assert_eq!(got_bare.content_rating, bare.content_rating);
+    assert!(got_bare.labels.is_empty());
+    assert!(got_bare.links.is_empty());
+    assert!(got_bare.titles.is_empty());
+    assert!(got_bare.creators.is_empty());
+}
+
+#[tokio::test]
+async fn get_books_returns_default_limit_and_next_cursor() {
+    let app = TestApp::new().await;
+
+    for _ in 0..25 {
+        let book: BookQuery = BookFaker::default().fake();
+        app.insert_book(&book).await;
+    }
+
+    let req = Request::get("/books").body(Body::empty()).unwrap();
+    let resp = app.router.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let listed: RespWrapper<Vec<BookQuery>, String> = serde_json::from_slice(&bytes).unwrap();
+
+    assert_eq!(listed.data.len(), 20);
+    assert!(listed.next_cursor.is_some());
+}
+
+#[tokio::test]
+async fn get_books_with_cursor_and_limit_3_returns_next_page() {
+    let app = TestApp::new().await;
+
+    for _ in 0..6 {
+        let book: BookQuery = BookFaker::default().fake();
+        app.insert_book(&book).await;
+    }
+
+    let first = app.get_books_page("/books?limit=3").await;
+    let first_ids = ids(&first.data);
+    let cursor = first.next_cursor.expect("a full page must carry a cursor");
+
+    let second = app
+        .get_books_page(&format!("/books?limit=3&cursor={cursor}"))
+        .await;
+    let second_ids = ids(&second.data);
+
+    assert_eq!(second_ids.len(), 3);
+    assert!(second_ids.iter().all(|id| !first_ids.contains(id)));
+    assert!(second.next_cursor.is_none());
+}
+
+#[tokio::test]
+async fn get_books_desc_order_confirmed() {
+    let app = TestApp::new().await;
+
+    let mut ids = Vec::with_capacity(3);
+    for _ in 0..3 {
+        let book: BookQuery = BookFaker::default().fake();
+        app.insert_book(&book).await;
+        ids.push(book.id);
+    }
+    ids.sort_by(|a, b| b.cmp(a));
+
+    let req = Request::get("/books").body(Body::empty()).unwrap();
+    let resp = app.router.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let listed: RespWrapper<Vec<BookQuery>> = serde_json::from_slice(&bytes).unwrap();
+    let returned_ids: Vec<uuid::Uuid> = listed.data.iter().map(|b| b.id).collect();
+
+    assert_eq!(returned_ids, ids);
+}
+
+#[tokio::test]
+async fn get_books_zero_limit_returns_422() {
+    let app = TestApp::new().await;
+
+    let req = Request::get("/books?limit=0").body(Body::empty()).unwrap();
+    let resp = app.router.oneshot(req).await.unwrap();
+
+    assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
+}
+
+#[tokio::test]
+async fn get_books_invalid_cursor_returns_400() {
+    let app = TestApp::new().await;
+
+    let req = Request::get("/books?cursor=not-a-cursor!!")
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.router.oneshot(req).await.unwrap();
+
+    assert_error(resp, StatusCode::BAD_REQUEST).await;
+}
+
+const SORT_CASES: &[(&str, &[usize])] = &[
+    ("", &[0, 2, 3, 1]),
+    ("?sortField=CreatedAt&order=Asc", &[1, 3, 2, 0]),
+    ("?sortField=CreatedAt&order=Desc", &[0, 2, 3, 1]),
+    ("?sortField=Name&order=Asc", &[0, 1, 2, 3]),
+    ("?sortField=Name&order=Desc", &[3, 2, 1, 0]),
+    ("?sortField=PublicationYear&order=Asc", &[3, 1, 2, 0]),
+    ("?sortField=PublicationYear&order=Desc", &[0, 2, 1, 3]),
+];
+
+#[tokio::test]
+async fn each_sort_orders_by_its_own_key() {
+    let app = TestApp::new().await;
+    let books = app.seed_sort_corpus().await;
+
+    for (query, expected) in SORT_CASES {
+        let got = app.get_books_page(&format!("/books{query}")).await;
+
+        assert_eq!(ids(&got.data), pick(&books, expected), "{query:?}");
+    }
+}
+
+#[tokio::test]
+async fn paging_a_non_unique_sort_key_neither_skips_nor_repeats() {
+    let app = TestApp::new().await;
+    let books = app.seed_tie_corpus(6).await;
+    let ascending = ids(&books);
+    let descending: Vec<uuid::Uuid> = ascending.iter().rev().copied().collect();
+
+    for sort in ["CreatedAt", "Name", "PublicationYear"] {
+        for (order, expected) in [("Asc", &ascending), ("Desc", &descending)] {
+            let base = format!("/books?sortField={sort}&order={order}&limit=2");
+            let mut seen: Vec<uuid::Uuid> = Vec::new();
+            let mut path = base.clone();
+
+            for page in 0..3 {
+                let got = app.get_books_page(&path).await;
+                assert_eq!(got.data.len(), 2, "{sort} {order} page {page}");
+                seen.extend(ids(&got.data));
+
+                match got.next_cursor {
+                    Some(cursor) => {
+                        assert!(
+                            page < 2,
+                            "{sort} {order}: the last page must carry no cursor"
+                        );
+                        path = format!("{base}&cursor={cursor}");
+                    }
+                    None => assert_eq!(page, 2, "{sort} {order}: paging stopped early"),
+                }
+            }
+
+            assert_eq!(
+                &seen, expected,
+                "{sort} {order}: books tied on the sort key must page in id order, each once"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn get_books_on_the_last_page_returns_a_null_cursor() {
+    let app = TestApp::new().await;
+    app.seed_tie_corpus(2).await;
+
+    let (status, body) = app.get_body("/books?limit=5").await;
+    assert_eq!(status, StatusCode::OK);
+
+    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+
+    assert!(
+        v["nextCursor"].is_null(),
+        "the key must be present and null, not absent"
+    );
+}
+
+#[tokio::test]
+async fn a_cursor_carries_its_filter_across_pages() {
+    let app = TestApp::new().await;
+    let books = app.seed_facet_corpus().await;
+
+    let first = app
+        .get_books_page(&format!("/books?labels={ACTION}&limit=2"))
+        .await;
+    let cursor = first.next_cursor.clone().expect("a full page has a cursor");
+
+    let second = app
+        .get_books_page(&format!("/books?labels={ACTION}&limit=2&cursor={cursor}"))
+        .await;
+
+    let mut seen = ids(&first.data);
+    seen.extend(ids(&second.data));
+
+    assert_eq!(
+        sorted(seen),
+        sorted(pick(&books, &[0, 1, 3, 9])),
+        "page two of a filtered list must still be filtered"
+    );
+}
+
+#[tokio::test]
+async fn a_cursor_minted_under_another_filter_returns_400() {
+    let app = TestApp::new().await;
+    app.seed_facet_corpus().await;
+
+    let first = app
+        .get_books_page(&format!("/books?labels={ACTION}&limit=2"))
+        .await;
+    let cursor = first.next_cursor.expect("a full page has a cursor");
+
+    for changed in [
+        format!("/books?labels={ROMANCE}&limit=2&cursor={cursor}"),
+        format!("/books?labels={ACTION}&limit=2&sortField=Name&cursor={cursor}"),
+        format!("/books?labels={ACTION}&limit=2&order=Asc&cursor={cursor}"),
+        format!("/books?labels={ACTION}&kind=Manga&limit=2&cursor={cursor}"),
+        format!("/books?limit=2&cursor={cursor}"),
+    ] {
+        let req = Request::get(&changed).body(Body::empty()).unwrap();
+        let resp = app.router.clone().oneshot(req).await.unwrap();
+
+        assert_error(resp, StatusCode::BAD_REQUEST).await;
+    }
+}
+
+#[tokio::test]
+async fn a_cursor_survives_a_changed_page_size() {
+    let app = TestApp::new().await;
+    app.seed_facet_corpus().await;
+
+    let first = app.get_books_page("/books?limit=2").await;
+    let cursor = first.next_cursor.expect("a full page has a cursor");
+
+    let second = app
+        .get_books_page(&format!("/books?limit=5&cursor={cursor}"))
+        .await;
+
+    assert_eq!(
+        second.data.len(),
+        5,
+        "limit is deliberately outside the filter hash"
+    );
 }
 
 #[tokio::test]
