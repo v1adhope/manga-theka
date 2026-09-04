@@ -2,11 +2,9 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use http_body_util::BodyExt;
 use tower::ServiceExt;
 
-use crate::helpers::{RespWrapper, TestApp, assert_error};
-use manga_theka::entity::Label;
+use crate::helpers::{TestApp, assert_error};
 
 const SEEDED_LABELS: usize = 70;
 
@@ -28,22 +26,11 @@ const KIND_CASES: [(&str, [&str; 5], usize); 3] = [
     ("Presentation", PRESENTATION_NAMES, 5),
 ];
 
-async fn get_labels(app: &TestApp, path: &str) -> Vec<Label> {
-    let req = Request::get(path).body(Body::empty()).unwrap();
-    let resp = app.router.clone().oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::OK, "{path}");
-
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<Label>> = serde_json::from_slice(&bytes).unwrap();
-
-    wrapper.data
-}
-
 #[tokio::test]
 async fn get_labels_with_no_filter_returns_the_whole_curated_catalog() {
     let app = TestApp::new().await;
 
-    let labels = get_labels(&app, "/labels").await;
+    let labels = app.get_labels("/labels").await;
     let names: Vec<&str> = labels.iter().map(|l| l.name.as_str()).collect();
 
     assert_eq!(labels.len(), SEEDED_LABELS);
@@ -63,7 +50,7 @@ async fn get_labels_filtered_by_kind_returns_only_that_kind() {
     let app = TestApp::new().await;
 
     for (kind, expected, count) in KIND_CASES {
-        let labels = get_labels(&app, &format!("/labels?kind={kind}")).await;
+        let labels = app.get_labels(&format!("/labels?kind={kind}")).await;
         let names: Vec<&str> = labels.iter().map(|l| l.name.as_str()).collect();
 
         assert_eq!(labels.len(), count, "{kind}");

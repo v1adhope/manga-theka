@@ -1326,6 +1326,17 @@ where f.id = $1;
         books
     }
 
+    pub async fn get_labels(&self, path: &str) -> Vec<Label> {
+        let req = Request::get(path).body(Body::empty()).unwrap();
+        let resp = self.router.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK, "{path}");
+
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let wrapper: RespWrapper<Vec<Label>> = serde_json::from_slice(&bytes).unwrap();
+
+        wrapper.data
+    }
+
     pub async fn get_chapters(&self, path: String) -> RespWrapper<Vec<Chapter>> {
         let req = Request::get(path).body(Body::empty()).unwrap();
         let resp = self.router.clone().oneshot(req).await.unwrap();
