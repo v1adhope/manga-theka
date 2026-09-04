@@ -16,7 +16,7 @@ use crate::helpers::{
 use fake::Fake;
 use manga_theka::entity::{BookQuery, BookVisibility};
 
-const LABEL_CASES: &[(&str, &[usize])] = &[
+const FACET_CORPUS_LABEL_CASES: &[(&str, &[usize])] = &[
     ("?labels={A}", &[0, 1, 3, 9]),
     ("?labels={A}&labels={R}", &[0, 3]),
     ("?labels={A}&labels={R}&labelsMode=And", &[0, 3]),
@@ -35,7 +35,7 @@ const LABEL_CASES: &[(&str, &[usize])] = &[
     ),
 ];
 
-const SORT_CASES: &[(&str, &[usize])] = &[
+const SORT_CORPUS_CASES: &[(&str, &[usize])] = &[
     ("", &[0, 2, 3, 1]),
     ("?sortField=CreatedAt&order=Asc", &[1, 3, 2, 0]),
     ("?sortField=CreatedAt&order=Desc", &[0, 2, 3, 1]),
@@ -50,7 +50,7 @@ async fn label_facets_narrow_the_catalog() {
     let app = TestApp::new().await;
     let books = app.seed_facet_corpus().await;
 
-    for (template, expected) in LABEL_CASES {
+    for (template, expected) in FACET_CORPUS_LABEL_CASES {
         let query = template
             .replace("{A}", &ACTION.to_string())
             .replace("{R}", &ROMANCE.to_string())
@@ -411,7 +411,7 @@ async fn each_sort_orders_by_its_own_key() {
     let app = TestApp::new().await;
     let books = app.seed_sort_corpus().await;
 
-    for (query, expected) in SORT_CASES {
+    for (query, expected) in SORT_CORPUS_CASES {
         let got = app.get_books_page(&format!("/books{query}")).await;
 
         assert_eq!(ids(&got.data), pick(&books, expected), "{query:?}");
