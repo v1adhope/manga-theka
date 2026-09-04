@@ -29,8 +29,8 @@ use tracing_log::log::LevelFilter;
 use uuid::Uuid;
 
 use crate::fakers::{
-    ACTION, BookFaker, CONTENT_RATINGS, ChapterFaker, FANTASY, ISEKAI, LANGUAGES, LONG_STRIP,
-    MAFIA, ROMANCE, SCHOOL_LIFE, ZOMBIES, labels,
+    ACTION, BookFaker, CONTENT_RATINGS, ChapterFaker, FANTASY, ISEKAI, LABELS, LANGUAGES,
+    LONG_STRIP, MAFIA, ROMANCE, SCHOOL_LIFE, ZOMBIES,
 };
 
 static TRACING: LazyLock<()> = LazyLock::new(|| {
@@ -100,6 +100,18 @@ pub fn redirect_target(resp: &Response) -> &str {
         .expect("a redirect must carry a location")
         .to_str()
         .expect("a location must be printable")
+}
+
+pub fn labels(ids: &[Uuid]) -> Vec<Label> {
+    ids.iter()
+        .map(|id| {
+            LABELS
+                .iter()
+                .find(|l| l.id == *id)
+                .expect("fixture label must be seeded")
+                .clone()
+        })
+        .collect()
 }
 
 pub fn label_keys(labels: &[Label]) -> Vec<(Uuid, &str, &str)> {

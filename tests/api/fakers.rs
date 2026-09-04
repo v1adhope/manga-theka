@@ -83,7 +83,6 @@ pub static LANGUAGES: LazyLock<[Language; 5]> = LazyLock::new(|| {
     ]
 });
 
-// Seeded ids, so a fixture attaches a real label rather than inventing one the FK would refuse.
 pub const ACTION: Uuid = uuid!("019febc2-01af-7d7a-9468-ad2779d97503");
 pub const FANTASY: Uuid = uuid!("019febc2-01b3-75aa-9d15-98e0f3f847d6");
 pub const ROMANCE: Uuid = uuid!("019febc2-01b9-763d-822a-4c21c88b4f6d");
@@ -137,18 +136,6 @@ pub static LABELS: LazyLock<[Label; 8]> = LazyLock::new(|| {
         },
     ]
 });
-
-pub fn labels(ids: &[Uuid]) -> Vec<Label> {
-    ids.iter()
-        .map(|id| {
-            LABELS
-                .iter()
-                .find(|l| l.id == *id)
-                .expect("fixture label must be seeded")
-                .clone()
-        })
-        .collect()
-}
 
 pub struct CreatorRoleFaker;
 
@@ -388,9 +375,6 @@ impl Dummy<AlternativeTitleFaker> for AlternativeTitle {
     }
 }
 
-/// The `Option` overrides are what make a deterministic corpus expressible: every field a facet
-/// filters on is randomised by default, so nothing a table-driven case asserts on may be left
-/// to the rng.
 pub struct BookFaker {
     pub labels: RangeInclusive<usize>,
     pub links: RangeInclusive<usize>,
