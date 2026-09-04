@@ -4,7 +4,7 @@ use manga_theka::entity::{BookQuery, BookVisibility};
 use time::OffsetDateTime;
 
 use crate::fakers::{ACTION, BookFaker, COVER_JPG, COVER_PNG, EVERY_VISIBILITY, ROMANCE};
-use crate::helpers::{TestApp, days_ago, hours_ago, labels, sorted};
+use crate::helpers::{TestApp, days_ago, hours_ago, labels, sorted, sweep_stale_staged_pages};
 
 #[tokio::test]
 async fn a_release_idle_past_the_grace_window_loses_every_staged_page() {
@@ -57,6 +57,31 @@ async fn committed_pages_are_never_swept() {
         app.fetch_committed_page_ids(release_id).await,
         vec![committed]
     );
+}
+
+#[tokio::test]
+async fn a_page_committed_while_a_sweep_runs_survives_it() {
+    let app = TestApp::new().await;
+    let book_id = app.insert_random_book().await;
+    let chapter_id = app.insert_random_chapter(book_id).await;
+    let release_id = app.insert_random_release(book_id, chapter_id).await;
+    let staged = app
+        .insert_staged_pages_at(release_id, 1, hours_ago(3))
+        .await;
+
+    let tx = app.begin_page_commit(staged[0]).await;
+
+    let pool = app.pool.clone();
+    let sweep = tokio::spawn(async move { sweep_stale_staged_pages(&pool).await });
+
+    app.await_blocked_on_a_lock().await;
+    tx.commit().await.expect("the page commit must succeed");
+
+    let deleted = sweep.await.expect("the sweep must finish");
+
+    assert_eq!(deleted, 0);
+    assert_eq!(app.count_orphaned_objects().await, 0);
+    assert_eq!(app.fetch_committed_page_ids(release_id).await, staged);
 }
 
 #[tokio::test]

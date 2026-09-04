@@ -23,7 +23,10 @@ use manga_theka::{
     telemetry,
 };
 use serde::Deserialize;
-use sqlx::{AssertSqlSafe, ConnectOptions, Connection, Executor, PgConnection, PgPool};
+use sqlx::{
+    AssertSqlSafe, ConnectOptions, Connection, Executor, PgConnection, PgPool, Postgres,
+    Transaction,
+};
 use tower::ServiceExt;
 use tracing_log::log::LevelFilter;
 use uuid::Uuid;
@@ -214,6 +217,13 @@ pub fn localization_keys(localizations: &[ChapterLocalization]) -> Vec<(Uuid, &s
     keys.sort();
 
     keys
+}
+
+pub async fn sweep_stale_staged_pages(pool: &PgPool) -> i64 {
+    sqlx::query_scalar!(r#"select delete_stale_staged_chapter_pages() as "count!""#)
+        .fetch_one(pool)
+        .await
+        .expect("failed to sweep stale staged chapter pages")
 }
 
 // TODO: migrate this to axum_test::TestServer/TestResponse.
@@ -1679,10 +1689,52 @@ order by o.object_key;
     }
 
     pub async fn delete_stale_staged_chapter_pages(&self) -> i64 {
-        sqlx::query_scalar!(r#"select delete_stale_staged_chapter_pages() as "count!""#)
+        sweep_stale_staged_pages(&self.pool).await
+    }
+
+    pub async fn begin_page_commit(&self, page_id: Uuid) -> Transaction<'static, Postgres> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .expect("failed to begin a page commit");
+
+        sqlx::query!(
+            r#"
+update chapter_pages
+set sort_order = 1
+where id = $1;
+        "#,
+            page_id
+        )
+        .execute(&mut *tx)
+        .await
+        .expect("failed to order a factory chapter page");
+
+        tx
+    }
+
+    pub async fn await_blocked_on_a_lock(&self) {
+        for _ in 0..250 {
+            let blocked = sqlx::query_scalar!(
+                r#"
+select count(*) as "count!"
+from pg_stat_activity
+where datname = current_database() and wait_event_type = 'Lock';
+        "#
+            )
             .fetch_one(&self.pool)
             .await
-            .expect("failed to sweep stale staged chapter pages")
+            .expect("failed to look for a backend blocked on a lock");
+
+            if blocked > 0 {
+                return;
+            }
+
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+
+        panic!("no backend ever blocked on a lock");
     }
 
     pub async fn fetch_release_version(&self, release_id: Uuid) -> i32 {
