@@ -117,8 +117,8 @@ pub struct BookCursor {
 #[derive(Debug, Serialize)]
 pub struct BookSelection {
     pub visibility: BookVisibility,
-    pub sort: BookSortField,
-    pub order: SortOrder,
+    pub sort_field: BookSortField,
+    pub sort_order: SortOrder,
     pub labels: LabelFilter,
     pub kinds: BookKinds,
     pub statuses: BookStatuses,
@@ -144,7 +144,7 @@ impl BookFilter {
             return Ok(());
         };
 
-        if cursor.sort.field() != self.selection.sort
+        if cursor.sort.field() != self.selection.sort_field
             || cursor.selection_hash != self.selection_hash
         {
             return Err(EntityError::CursorSelectionMismatch);
@@ -247,7 +247,7 @@ mod tests {
                 ..stub()
             },
             BookSelection {
-                order: SortOrder::Asc,
+                sort_order: SortOrder::Asc,
                 ..stub()
             },
         ];
@@ -265,10 +265,9 @@ mod tests {
     #[test]
     fn a_cursor_for_another_sort_field_is_rejected() {
         let selection = BookSelection {
-            sort: BookSortField::Name,
+            sort_field: BookSortField::Name,
             ..stub()
         };
-        // Minted under this exact filter, so the hash agrees and only the field disagrees.
         let cursor = cursor_for(&selection);
         let filter = filter_paged(selection, cursor);
 

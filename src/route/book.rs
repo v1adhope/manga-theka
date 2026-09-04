@@ -237,8 +237,8 @@ impl TryFrom<(BookListQuery, Option<BookCursor>)> for BookFilter {
 
         let selection = BookSelection {
             visibility: q.visibility.unwrap_or(BookVisibility::Listed),
-            sort: q.sort.unwrap_or(BookSortField::CreatedAt),
-            order: q.order.unwrap_or_default(),
+            sort_field: q.sort.unwrap_or(BookSortField::CreatedAt),
+            sort_order: q.order.unwrap_or_default(),
             labels: LabelFilter {
                 included: BookLabelIds::set_from(q.labels)?,
                 mode: q.labels_mode.unwrap_or(LabelsMode::And),
@@ -445,8 +445,8 @@ mod tests {
         let selection = filter(serde_json::json!({})).selection;
 
         assert_eq!(selection.visibility, BookVisibility::Listed);
-        assert_eq!(selection.sort, BookSortField::CreatedAt);
-        assert_eq!(selection.order, SortOrder::Desc);
+        assert_eq!(selection.sort_field, BookSortField::CreatedAt);
+        assert_eq!(selection.sort_order, SortOrder::Desc);
     }
 
     #[test]
@@ -459,7 +459,7 @@ mod tests {
         .selection;
 
         assert_eq!(selection.visibility, BookVisibility::Hidden);
-        assert_eq!(selection.sort, BookSortField::Name);
-        assert_eq!(selection.order, SortOrder::Asc);
+        assert_eq!(selection.sort_field, BookSortField::Name);
+        assert_eq!(selection.sort_order, SortOrder::Asc);
     }
 }

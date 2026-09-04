@@ -420,8 +420,8 @@ impl Database {
     ) -> Result<(Vec<BookQuery>, Option<BookCursor>), DatabaseError> {
         let selection = &filter.selection;
         let limit = filter.limit.as_i64();
-        let sort_order = selection.order;
-        let sort = selection.sort;
+        let sort_order = selection.sort_order;
+        let sort_field = selection.sort_field;
         let fetch_limit = super::fetch_limit(limit);
         let (cursor_comparison, direction) = super::cursor_op(sort_order);
 
@@ -500,7 +500,7 @@ impl Database {
         if let Some(cursor) = &filter.cursor {
             builder
                 .push(" and (b.")
-                .push(sort_column(sort))
+                .push(sort_column(sort_field))
                 .push(", b.id) ")
                 .push(cursor_comparison)
                 .push(" (");
@@ -514,7 +514,7 @@ impl Database {
 
         builder
             .push(" order by b.")
-            .push(sort_column(sort))
+            .push(sort_column(sort_field))
             .push(" ")
             .push(direction)
             .push(", b.id ")
@@ -533,7 +533,7 @@ impl Database {
 
         let next_cursor = super::take_page(&mut rows, limit, |r| BookCursor {
             id: r.id,
-            sort: sort_value(sort, r),
+            sort: sort_value(sort_field, r),
             selection_hash: filter.selection_hash.clone(),
         });
 

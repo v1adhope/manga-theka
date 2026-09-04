@@ -37,8 +37,8 @@ pub mod tests {
     pub fn stub() -> BookSelection {
         BookSelection {
             visibility: BookVisibility::Listed,
-            sort: BookSortField::CreatedAt,
-            order: SortOrder::Desc,
+            sort_field: BookSortField::CreatedAt,
+            sort_order: SortOrder::Desc,
             labels: LabelFilter {
                 included: BookLabelIds::try_from(vec![]).unwrap(),
                 mode: LabelsMode::And,
