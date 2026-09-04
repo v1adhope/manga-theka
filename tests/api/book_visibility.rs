@@ -439,7 +439,6 @@ async fn book_writes_are_refused_unless_the_book_is_draft_or_listed() {
             "kind": book.kind.as_ref(),
             "publicationLanguageId": book.publication_language.id,
             "publicationDemographic": book.publication_demographic.as_ref(),
-        "publicationDemographic": book.publication_demographic.as_ref(),
         })
         .to_string();
         let req = Request::put(format!("/books/{}", book.id))
