@@ -1411,15 +1411,16 @@ where c.id = $2;
 
         sqlx::query!(
             r#"
-insert into chapter_pages(id, release_id, book_id, sort_order, extension)
-select $1, $2, cr.book_id, $3, $4
+insert into chapter_pages(id, release_id, book_id, sort_order, extension, created_at)
+select $1, $2, cr.book_id, $3, $4, $5
 from chapter_releases cr
 where cr.id = $2;
         "#,
             id,
             release_id,
             sort_order,
-            extension.as_ref()
+            extension.as_ref(),
+            time::OffsetDateTime::now_utc()
         )
         .execute(&self.pool)
         .await
@@ -1437,6 +1438,29 @@ where cr.id = $2;
             .expect("failed to upload factory chapter page");
 
         id
+    }
+
+    pub async fn insert_staged_pages_at(
+        &self,
+        release_id: Uuid,
+        count: i32,
+        created_at: time::OffsetDateTime,
+    ) -> Vec<Uuid> {
+        sqlx::query_scalar!(
+            r#"
+insert into chapter_pages(id, release_id, book_id, sort_order, extension, created_at)
+select uuidv7(), cr.id, cr.book_id, null, 'png', $3
+from chapter_releases cr, generate_series(1, $2)
+where cr.id = $1
+returning id;
+        "#,
+            release_id,
+            count,
+            created_at
+        )
+        .fetch_all(&self.pool)
+        .await
+        .expect("failed to insert factory staged chapter pages")
     }
 
     pub async fn insert_staged_pages(&self, release_id: Uuid, parts: &[&[u8]]) -> Vec<Uuid> {

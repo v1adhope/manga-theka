@@ -5,6 +5,7 @@ use axum::{
     response::IntoResponse,
 };
 use serde::Deserialize;
+use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
@@ -78,6 +79,7 @@ pub async fn upload_chapter_pages(
     let pages = ChapterPages {
         release_id,
         images: images.try_into()?,
+        created_at: OffsetDateTime::now_utc(),
     };
 
     let ids: Vec<Uuid> = pages

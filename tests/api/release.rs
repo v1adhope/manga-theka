@@ -4,6 +4,7 @@ use http_body_util::BodyExt;
 use manga_theka::entity::{
     BookQuery, ChapterPageQuery, ChapterReleaseQuery, ImageExtension, Ordinal, PageUrl, ResourceUrl,
 };
+use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::fakers::{BookFaker, COVER_JPG, COVER_PNG, COVER_WEBP};
@@ -188,18 +189,8 @@ async fn upload_chapter_pages_over_the_release_row_budget_returns_422() {
     let chapter_id = app.insert_random_chapter(book_id).await;
     let release_id = app.insert_random_release(book_id, chapter_id).await;
 
-    sqlx::query!(
-        r#"
-insert into chapter_pages(id, release_id, book_id, sort_order, extension)
-select gen_random_uuid(), cr.id, cr.book_id, null, 'png'
-from chapter_releases cr, generate_series(1, 400)
-where cr.id = $1;
-        "#,
-        release_id
-    )
-    .execute(&app.pool)
-    .await
-    .unwrap();
+    app.insert_staged_pages_at(release_id, 400, OffsetDateTime::now_utc())
+        .await;
 
     let resp = app.post_upload_pages(release_id, &[COVER_PNG]).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
@@ -837,19 +828,9 @@ async fn commit_chapter_release_over_the_committed_page_ceiling_returns_422() {
     let chapter_id = app.insert_random_chapter(book_id).await;
     let release_id = app.insert_random_release(book_id, chapter_id).await;
 
-    let staged: Vec<Uuid> = sqlx::query_scalar!(
-        r#"
-insert into chapter_pages(id, release_id, book_id, sort_order, extension)
-select gen_random_uuid(), cr.id, cr.book_id, null, 'png'
-from chapter_releases cr, generate_series(1, 201)
-where cr.id = $1
-returning id;
-        "#,
-        release_id
-    )
-    .fetch_all(&app.pool)
-    .await
-    .unwrap();
+    let staged = app
+        .insert_staged_pages_at(release_id, 201, OffsetDateTime::now_utc())
+        .await;
 
     let resp = app.post_commit(release_id, &staged).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;

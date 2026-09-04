@@ -254,6 +254,7 @@ impl Database {
             item.release_id,
             &ids,
             &extensions,
+            item.created_at,
         )
         .execute(&self.pool)
         .await

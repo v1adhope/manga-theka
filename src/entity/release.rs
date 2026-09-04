@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
@@ -118,6 +119,7 @@ impl Entity for ChapterPage {
 pub struct ChapterPages {
     pub release_id: Uuid,
     pub images: Images,
+    pub created_at: OffsetDateTime,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
