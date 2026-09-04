@@ -112,8 +112,6 @@ pub fn label_keys(labels: &[Label]) -> Vec<(Uuid, &str, &str)> {
     keys
 }
 
-/// One corpus book: its labels, the three closed enums, then indices into `CONTENT_RATINGS`
-/// and `LANGUAGES`.
 type FacetRow = (
     &'static [Uuid],
     BookKind,
@@ -140,8 +138,6 @@ pub fn pick(books: &[BookQuery], wanted: &[usize]) -> Vec<Uuid> {
     wanted.iter().map(|i| books[*i].id).collect()
 }
 
-/// A facet asserts *which* books came back, never in what order -- only the sorting and paging
-/// groups own the order.
 pub fn sorted(mut v: Vec<Uuid>) -> Vec<Uuid> {
     v.sort();
 
@@ -1061,9 +1057,6 @@ where f.id = $1;
         serde_json::from_slice(&bytes).expect("failed to parse book page")
     }
 
-    /// Twelve books varying every facet dimension independently, so one database serves a whole
-    /// table of cases. Nothing here is random: a case asserts on ids, and an rng-chosen `kind`
-    /// or label set would make the expected set unknowable.
     pub async fn seed_facet_corpus(&self) -> Vec<BookQuery> {
         const ROWS: [FacetRow; 12] = [
             (
@@ -1191,8 +1184,6 @@ where f.id = $1;
         books
     }
 
-    /// Five books stepping across the range boundaries, so an inclusive and a half-open bound
-    /// are distinguishable rather than both merely "roughly right".
     pub async fn seed_range_corpus(&self) -> Vec<BookQuery> {
         const YEARS: [i16; 5] = [2010, 2012, 2015, 2018, 2020];
 
@@ -1216,8 +1207,6 @@ where f.id = $1;
         books
     }
 
-    /// Four books whose name, publication year and creation time each order them differently,
-    /// so a sort that silently falls back to another key cannot pass.
     pub async fn seed_sort_corpus(&self) -> Vec<BookQuery> {
         const ROWS: [(&str, i16, i64); 4] = [
             ("Alpha", 2020, 4),
@@ -1247,10 +1236,6 @@ where f.id = $1;
         books
     }
 
-    /// Books tied on *every* sort key at once -- same name, same year, same creation time --
-    /// so the id tiebreak is the only thing ordering them. This is the shape that catches a page
-    /// boundary skipping or repeating a row, and it has to hold for all three sorts, not just
-    /// the one that happens to be tested.
     pub async fn seed_tie_corpus(&self, n: usize) -> Vec<BookQuery> {
         let mut books = Vec::with_capacity(n);
         for _ in 0..n {
@@ -1275,9 +1260,6 @@ where f.id = $1;
         books
     }
 
-    /// Books whose releases exercise the translated-language probe: one release, two releases in
-    /// one language, another language, a book whose *publication* language is the target, a book
-    /// with no releases, and one held outside `Listed`.
     pub async fn seed_translated_corpus(&self) -> Vec<BookQuery> {
         let japanese = LANGUAGES[0].clone();
         let english = LANGUAGES[3].clone();
