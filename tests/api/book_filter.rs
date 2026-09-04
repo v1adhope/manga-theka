@@ -16,8 +16,6 @@ use crate::helpers::{
 use fake::Fake;
 use manga_theka::entity::{BookQuery, BookVisibility};
 
-// A facet case is (query string, expected corpus indices). The query in the failure message is
-// what makes one row of a table name itself when it breaks.
 const LABEL_CASES: &[(&str, &[usize])] = &[
     ("?labels={A}", &[0, 1, 3, 9]),
     ("?labels={A}&labels={R}", &[0, 3]),
@@ -35,6 +33,16 @@ const LABEL_CASES: &[(&str, &[usize])] = &[
         "?labels={M}&labels={Z}&labelsMode=Or&excludedLabels={S}",
         &[7, 11],
     ),
+];
+
+const SORT_CASES: &[(&str, &[usize])] = &[
+    ("", &[0, 2, 3, 1]),
+    ("?sortField=CreatedAt&order=Asc", &[1, 3, 2, 0]),
+    ("?sortField=CreatedAt&order=Desc", &[0, 2, 3, 1]),
+    ("?sortField=Name&order=Asc", &[0, 1, 2, 3]),
+    ("?sortField=Name&order=Desc", &[3, 2, 1, 0]),
+    ("?sortField=PublicationYear&order=Asc", &[3, 1, 2, 0]),
+    ("?sortField=PublicationYear&order=Desc", &[0, 2, 1, 3]),
 ];
 
 #[tokio::test]
@@ -80,7 +88,7 @@ async fn get_books_with_an_unknown_label_id_returns_no_matches() {
 }
 
 #[tokio::test]
-async fn enum_facets_or_within_and_and_between() {
+async fn enum_facets_or_within_a_facet_and_between_facets() {
     let app = TestApp::new().await;
     let books = app.seed_facet_corpus().await;
 
@@ -152,6 +160,7 @@ async fn available_translated_language_answers_what_can_be_read() {
     let books = app.seed_translated_corpus().await;
     let english = LANGUAGES[3].id;
     let russian = LANGUAGES[4].id;
+    let japanese = LANGUAGES[0].id;
 
     let cases: Vec<(String, Vec<usize>)> = vec![
         (
@@ -164,10 +173,7 @@ async fn available_translated_language_answers_what_can_be_read() {
             vec![0, 1, 2],
         ),
         (
-            format!(
-                "?availableTranslatedLanguage={english}&publicationLanguage={}",
-                LANGUAGES[0].id
-            ),
+            format!("?availableTranslatedLanguage={english}&publicationLanguage={japanese}"),
             vec![0, 1],
         ),
     ];
@@ -400,16 +406,6 @@ async fn get_books_invalid_cursor_returns_400() {
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
 
-const SORT_CASES: &[(&str, &[usize])] = &[
-    ("", &[0, 2, 3, 1]),
-    ("?sortField=CreatedAt&order=Asc", &[1, 3, 2, 0]),
-    ("?sortField=CreatedAt&order=Desc", &[0, 2, 3, 1]),
-    ("?sortField=Name&order=Asc", &[0, 1, 2, 3]),
-    ("?sortField=Name&order=Desc", &[3, 2, 1, 0]),
-    ("?sortField=PublicationYear&order=Asc", &[3, 1, 2, 0]),
-    ("?sortField=PublicationYear&order=Desc", &[0, 2, 1, 3]),
-];
-
 #[tokio::test]
 async fn each_sort_orders_by_its_own_key() {
     let app = TestApp::new().await;
@@ -588,8 +584,6 @@ async fn filtering_stays_inside_the_default_visibility() {
     }
 }
 
-// 400 means the query string could not be deserialized; 422 means it parsed and then failed a
-// domain rule. The split is the contract, so these assert status and nothing else.
 #[tokio::test]
 async fn get_books_rejects_malformed_and_out_of_range_queries() {
     let app = TestApp::new().await;
