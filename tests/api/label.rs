@@ -53,11 +53,10 @@ async fn get_labels_filtered_by_kind_returns_only_that_kind() {
         let labels = app.get_labels(&format!("/labels?kind={kind}")).await;
         let names: Vec<&str> = labels.iter().map(|l| l.name.as_str()).collect();
 
+        let all_carry_kind = labels.iter().all(|l| l.kind.as_ref() == kind);
+
         assert_eq!(labels.len(), count, "{kind}");
-        assert!(
-            labels.iter().all(|l| l.kind.as_ref() == kind),
-            "{kind} results must all carry that kind"
-        );
+        assert!(all_carry_kind, "{kind} results must all carry that kind");
 
         for name in expected {
             assert!(
