@@ -11,4 +11,5 @@ mod healthz;
 mod helpers;
 mod label;
 mod language;
+mod reclamation;
 mod release;

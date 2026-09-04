@@ -61,6 +61,14 @@ pub struct ChapterSample {
     pub localizations: i64,
 }
 
+#[derive(Debug)]
+pub struct OrphanedObject {
+    pub kind: String,
+    pub object_key: Uuid,
+    pub source: String,
+    pub processed_at: Option<time::OffsetDateTime>,
+}
+
 #[derive(Deserialize, Debug)]
 pub struct RespWrapper<T, C = Uuid> {
     pub data: T,
@@ -135,6 +143,14 @@ type FacetRow = (
 
 pub fn day(n: i64) -> time::OffsetDateTime {
     time::OffsetDateTime::UNIX_EPOCH + time::Duration::days(n)
+}
+
+pub fn hours_ago(n: i64) -> time::OffsetDateTime {
+    time::OffsetDateTime::now_utc() - time::Duration::hours(n)
+}
+
+pub fn days_ago(n: i64) -> time::OffsetDateTime {
+    time::OffsetDateTime::now_utc() - time::Duration::days(n)
 }
 
 pub fn rfc3339(at: time::OffsetDateTime) -> String {
@@ -1463,6 +1479,69 @@ returning id;
         .expect("failed to insert factory staged chapter pages")
     }
 
+    pub async fn seed_staged_releases(
+        &self,
+        book_id: Uuid,
+        count: i32,
+        created_at: time::OffsetDateTime,
+    ) {
+        let language_id = self.non_publication_language(book_id).await;
+
+        sqlx::query!(
+            r#"
+with chapter as (
+	insert into chapters(id, book_id, number, created_at)
+	select uuidv7(), $1, n::real, now()
+	from generate_series(1, $2) as n
+	returning id
+),
+release as (
+	insert into chapter_releases(id, chapter_id, book_id, language_id, version)
+	select uuidv7(), c.id, $1, $3, 1
+	from chapter c
+	returning id
+)
+insert into chapter_pages(id, release_id, book_id, sort_order, extension, created_at)
+select uuidv7(), r.id, $1, null, 'png', $4
+from release r;
+        "#,
+            book_id,
+            count,
+            language_id,
+            created_at
+        )
+        .execute(&self.pool)
+        .await
+        .expect("failed to seed factory staged releases");
+    }
+
+    pub async fn insert_committed_page_at(
+        &self,
+        release_id: Uuid,
+        sort_order: i32,
+        created_at: time::OffsetDateTime,
+    ) -> Uuid {
+        let id = Uuid::now_v7();
+
+        sqlx::query!(
+            r#"
+insert into chapter_pages(id, release_id, book_id, sort_order, extension, created_at)
+select $1, cr.id, cr.book_id, $3, 'png', $4
+from chapter_releases cr
+where cr.id = $2;
+        "#,
+            id,
+            release_id,
+            sort_order,
+            created_at
+        )
+        .execute(&self.pool)
+        .await
+        .expect("failed to insert factory committed chapter page");
+
+        id
+    }
+
     pub async fn insert_staged_pages(&self, release_id: Uuid, parts: &[&[u8]]) -> Vec<Uuid> {
         let mut ids = Vec::with_capacity(parts.len());
         for part in parts {
@@ -1470,6 +1549,55 @@ returning id;
         }
 
         ids
+    }
+
+    pub async fn count_chapter_pages(&self, release_id: Uuid) -> i64 {
+        sqlx::query_scalar!(
+            r#"
+select count(*) as "count!"
+from chapter_pages
+where release_id = $1;
+        "#,
+            release_id
+        )
+        .fetch_one(&self.pool)
+        .await
+        .expect("failed to count chapter pages")
+    }
+
+    pub async fn fetch_orphaned_objects(&self) -> Vec<OrphanedObject> {
+        sqlx::query!(
+            r#"
+select o.kind, o.object_key, o.source, o.processed_at
+from orphaned_objects o
+order by o.object_key;
+        "#
+        )
+        .fetch_all(&self.pool)
+        .await
+        .expect("failed to read orphaned objects")
+        .into_iter()
+        .map(|r| OrphanedObject {
+            kind: r.kind,
+            object_key: r.object_key,
+            source: r.source,
+            processed_at: r.processed_at,
+        })
+        .collect()
+    }
+
+    pub async fn count_orphaned_objects(&self) -> i64 {
+        sqlx::query_scalar!(r#"select count(*) as "count!" from orphaned_objects"#)
+            .fetch_one(&self.pool)
+            .await
+            .expect("failed to count orphaned objects")
+    }
+
+    pub async fn delete_stale_staged_chapter_pages(&self) -> i64 {
+        sqlx::query_scalar!(r#"select delete_stale_staged_chapter_pages() as "count!""#)
+            .fetch_one(&self.pool)
+            .await
+            .expect("failed to sweep stale staged chapter pages")
     }
 
     pub async fn fetch_release_version(&self, release_id: Uuid) -> i32 {
