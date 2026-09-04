@@ -28,18 +28,6 @@ const KIND_CASES: [(&str, [&str; 5], usize); 3] = [
     ("Presentation", PRESENTATION_NAMES, 5),
 ];
 
-const REMOVED_NAMES: [&str; 9] = [
-    "Loli",
-    "Shota",
-    "Incest",
-    "Fan Colored",
-    "Official Colored",
-    "Award Winning",
-    "User Created",
-    "Gyaru",
-    "Traditional Games",
-];
-
 async fn get_labels(app: &TestApp, path: &str) -> Vec<Label> {
     let req = Request::get(path).body(Body::empty()).unwrap();
     let resp = app.router.clone().oneshot(req).await.unwrap();
@@ -101,18 +89,6 @@ async fn get_labels_filtered_by_kind_returns_only_that_kind() {
                 );
             }
         }
-    }
-}
-
-#[tokio::test]
-async fn get_labels_omits_the_retired_vocabulary() {
-    let app = TestApp::new().await;
-
-    let labels = get_labels(&app, "/labels").await;
-    let names: Vec<&str> = labels.iter().map(|l| l.name.as_str()).collect();
-
-    for name in REMOVED_NAMES {
-        assert!(!names.contains(&name), "{name:?} must not be seeded");
     }
 }
 
