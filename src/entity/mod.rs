@@ -10,8 +10,6 @@ use crate::error::EntityError;
 mod book;
 #[path = "book/cover.rs"]
 mod book_cover;
-#[path = "book/cursor.rs"]
-mod book_cursor;
 #[path = "book/filter.rs"]
 mod book_filter;
 mod bounded_vec;
@@ -31,7 +29,6 @@ mod visibility;
 
 pub use book::*;
 pub use book_cover::*;
-pub use book_cursor::*;
 pub use book_filter::*;
 pub use bounded_vec::*;
 pub use chapter::*;
