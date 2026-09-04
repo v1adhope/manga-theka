@@ -34,6 +34,7 @@ async fn store_book_with_valid_body_passes() {
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": book.publication_demographic.as_ref(),
         "labelIds": book.labels.as_slice().iter().map(|l| l.id).collect::<Vec<_>>(),
         "links": &book.links,
         "titles": &book.titles,
@@ -58,6 +59,7 @@ async fn store_book_with_valid_body_passes() {
     assert_eq!(got.status, book.status);
     assert_eq!(got.kind, book.kind);
     assert_eq!(got.publication_language.id, book.publication_language.id);
+    assert_eq!(got.publication_demographic, book.publication_demographic);
     assert_eq!(
         label_keys(got.labels.as_slice()),
         label_keys(book.labels.as_slice())
@@ -96,6 +98,7 @@ async fn store_book_without_relations_passes() {
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": book.publication_demographic.as_ref(),
     })
     .to_string();
 
@@ -140,6 +143,7 @@ async fn store_book_with_missing_name_returns_422() {
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": book.publication_demographic.as_ref(),
     })
     .to_string();
 
@@ -163,6 +167,58 @@ async fn store_book_with_unknown_status_returns_422() {
         "publicationYear": book.publication_year,
         "contentRatingId": book.content_rating.id,
         "status": "abandoned",
+        "kind": book.kind.as_ref(),
+        "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": book.publication_demographic.as_ref(),
+    })
+    .to_string();
+
+    let req = Request::post("/books")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body))
+        .unwrap();
+
+    let resp = app.router.oneshot(req).await.unwrap();
+    assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
+}
+
+#[tokio::test]
+async fn store_book_with_unknown_publication_demographic_returns_422() {
+    let app = TestApp::new().await;
+    let book: BookQuery = BookFaker::default().fake();
+
+    let body = serde_json::json!({
+        "name": book.name.as_ref(),
+        "description": book.description.as_ref(),
+        "publicationYear": book.publication_year,
+        "contentRatingId": book.content_rating.id,
+        "status": book.status.as_ref(),
+        "kind": book.kind.as_ref(),
+        "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": "Unknown",
+    })
+    .to_string();
+
+    let req = Request::post("/books")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body))
+        .unwrap();
+
+    let resp = app.router.oneshot(req).await.unwrap();
+    assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
+}
+
+#[tokio::test]
+async fn store_book_without_publication_demographic_returns_422() {
+    let app = TestApp::new().await;
+    let book: BookQuery = BookFaker::default().fake();
+
+    let body = serde_json::json!({
+        "name": book.name.as_ref(),
+        "description": book.description.as_ref(),
+        "publicationYear": book.publication_year,
+        "contentRatingId": book.content_rating.id,
+        "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
     })
@@ -190,6 +246,7 @@ async fn store_book_with_unknown_label_id_returns_422() {
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": book.publication_demographic.as_ref(),
         "labelIds": [uuid::Uuid::now_v7()],
     })
     .to_string();
@@ -223,6 +280,7 @@ async fn store_book_with_unknown_creator_id_returns_422() {
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": book.publication_demographic.as_ref(),
         "creators": [{ "creatorId": uuid::Uuid::now_v7(), "role": "Author" }],
     })
     .to_string();
@@ -258,6 +316,7 @@ async fn store_book_with_dual_role_creator_merges_into_one_credit() {
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": book.publication_demographic.as_ref(),
         "creators": [
             { "creatorId": creator.id, "role": "Author" },
             { "creatorId": creator.id, "role": "Artist" },
@@ -302,6 +361,7 @@ async fn store_book_with_duplicate_creator_role_returns_422() {
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": book.publication_demographic.as_ref(),
         "creators": [
             { "creatorId": creator.id, "role": "Author" },
             { "creatorId": creator.id, "role": "Author" },
@@ -358,6 +418,7 @@ async fn get_book_with_valid_id_passes() {
         got.publication_language.name,
         book.publication_language.name
     );
+    assert_eq!(got.publication_demographic, book.publication_demographic);
     assert_eq!(
         label_keys(got.labels.as_slice()),
         label_keys(book.labels.as_slice())
@@ -407,163 +468,6 @@ async fn get_book_with_malformed_id_returns_400() {
 }
 
 #[tokio::test]
-async fn get_books_embeds_each_books_own_arrays() {
-    let app = TestApp::new().await;
-    let bare: BookQuery = BookFaker {
-        labels: 0..=0,
-        links: 0..=0,
-        titles: 0..=0,
-        creators: 0..=0,
-        ..Default::default()
-    }
-    .fake();
-
-    let full: BookQuery = BookFaker {
-        labels: 1..=5,
-        links: 1..=5,
-        titles: 1..=5,
-        creators: 1..=5,
-        ..Default::default()
-    }
-    .fake();
-
-    app.insert_book(&bare).await;
-    app.insert_book(&full).await;
-
-    let req = Request::get("/books").body(Body::empty()).unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::OK);
-
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let listed: RespWrapper<Vec<BookQuery>> = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(listed.data.len(), 2);
-
-    let got_full = listed.data.iter().find(|b| b.id == full.id).unwrap();
-    assert_eq!(
-        label_keys(got_full.labels.as_slice()),
-        label_keys(full.labels.as_slice())
-    );
-    assert_eq!(
-        link_keys(got_full.links.as_slice()),
-        link_keys(full.links.as_slice())
-    );
-    assert_eq!(
-        title_keys(got_full.titles.as_slice()),
-        title_keys(full.titles.as_slice())
-    );
-    assert_eq!(
-        creator_keys(got_full.creators.as_slice()),
-        creator_keys(full.creators.as_slice())
-    );
-
-    let got_bare = listed.data.iter().find(|b| b.id == bare.id).unwrap();
-    assert_eq!(got_bare.content_rating, bare.content_rating);
-    assert!(got_bare.labels.is_empty());
-    assert!(got_bare.links.is_empty());
-    assert!(got_bare.titles.is_empty());
-    assert!(got_bare.creators.is_empty());
-}
-
-#[tokio::test]
-async fn get_books_returns_default_limit_and_next_cursor() {
-    let app = TestApp::new().await;
-
-    for _ in 0..25 {
-        let book: BookQuery = BookFaker::default().fake();
-        app.insert_book(&book).await;
-    }
-
-    let req = Request::get("/books").body(Body::empty()).unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::OK);
-
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let listed: RespWrapper<Vec<BookQuery>> = serde_json::from_slice(&bytes).unwrap();
-
-    assert_eq!(listed.data.len(), 20);
-    assert!(listed.next_cursor.is_some());
-}
-
-#[tokio::test]
-async fn get_books_with_after_and_limit_3_returns_next_page() {
-    let app = TestApp::new().await;
-
-    for _ in 0..6 {
-        let book: BookQuery = BookFaker::default().fake();
-        app.insert_book(&book).await;
-    }
-
-    let req = Request::get("/books?limit=3").body(Body::empty()).unwrap();
-    let resp = app.router.clone().oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::OK);
-
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let first: RespWrapper<Vec<BookQuery>> = serde_json::from_slice(&bytes).unwrap();
-
-    let ids: Vec<uuid::Uuid> = first.data.iter().map(|b| b.id).collect();
-    let cursor = first.next_cursor.unwrap();
-
-    let second_req = Request::get(format!("/books?limit=3&after={cursor}"))
-        .body(Body::empty())
-        .unwrap();
-    let second_resp = app.router.oneshot(second_req).await.unwrap();
-    assert_eq!(second_resp.status(), StatusCode::OK);
-
-    let second_bytes = second_resp.into_body().collect().await.unwrap().to_bytes();
-    let second: RespWrapper<Vec<BookQuery>> = serde_json::from_slice(&second_bytes).unwrap();
-    let second_ids: Vec<uuid::Uuid> = second.data.iter().map(|b| b.id).collect();
-
-    assert_eq!(second_ids.len(), 3);
-    assert!(second_ids.iter().all(|id| !ids.contains(id)));
-    assert!(second.next_cursor.is_none());
-}
-
-#[tokio::test]
-async fn get_books_desc_order_confirmed() {
-    let app = TestApp::new().await;
-
-    let mut ids = Vec::with_capacity(3);
-    for _ in 0..3 {
-        let book: BookQuery = BookFaker::default().fake();
-        app.insert_book(&book).await;
-        ids.push(book.id);
-    }
-    ids.sort_by(|a, b| b.cmp(a));
-
-    let req = Request::get("/books").body(Body::empty()).unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::OK);
-
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let listed: RespWrapper<Vec<BookQuery>> = serde_json::from_slice(&bytes).unwrap();
-    let returned_ids: Vec<uuid::Uuid> = listed.data.iter().map(|b| b.id).collect();
-
-    assert_eq!(returned_ids, ids);
-}
-
-#[tokio::test]
-async fn get_books_zero_limit_returns_422() {
-    let app = TestApp::new().await;
-
-    let req = Request::get("/books?limit=0").body(Body::empty()).unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
-
-    assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
-}
-
-#[tokio::test]
-async fn get_books_invalid_after_returns_400() {
-    let app = TestApp::new().await;
-
-    let req = Request::get("/books?after=not-a-uuid")
-        .body(Body::empty())
-        .unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
-
-    assert_error(resp, StatusCode::BAD_REQUEST).await;
-}
-
-#[tokio::test]
 async fn update_book_with_valid_body_passes() {
     let app = TestApp::new().await;
     let book: BookQuery = BookFaker {
@@ -592,6 +496,7 @@ async fn update_book_with_valid_body_passes() {
         "status": updated.status.as_ref(),
         "kind": updated.kind.as_ref(),
         "publicationLanguageId": updated.publication_language.id,
+        "publicationDemographic": updated.publication_demographic.as_ref(),
         "labelIds": updated.labels.as_slice().iter().map(|l| l.id).collect::<Vec<_>>(),
         "links": &updated.links,
         "titles": &updated.titles,
@@ -614,6 +519,7 @@ async fn update_book_with_valid_body_passes() {
     assert_eq!(got.status, updated.status);
     assert_eq!(got.kind, updated.kind);
     assert_eq!(got.publication_language.id, updated.publication_language.id);
+    assert_eq!(got.publication_demographic, updated.publication_demographic);
 
     assert_eq!(
         label_keys(got.labels.as_slice()),
@@ -662,6 +568,7 @@ async fn update_book_swaps_the_content_rating() {
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": book.publication_demographic.as_ref(),
     })
     .to_string();
 
@@ -698,6 +605,7 @@ async fn update_book_with_empty_arrays_detaches_everything() {
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": book.publication_demographic.as_ref(),
         "labelIds": [],
         "links": [],
         "titles": [],
@@ -736,6 +644,7 @@ async fn update_book_leaves_other_books_untouched() {
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": book.publication_demographic.as_ref(),
     })
     .to_string();
 
@@ -768,6 +677,7 @@ async fn update_book_with_unknown_id_returns_404() {
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": book.publication_demographic.as_ref(),
     })
     .to_string();
 

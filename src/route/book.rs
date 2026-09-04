@@ -1,21 +1,26 @@
 use axum::{
     Json,
-    extract::{Multipart, Path, Query, State},
+    extract::{Multipart, Path, State},
     http::{StatusCode, header},
     response::IntoResponse,
 };
+use axum_extra::extract::Query;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
+    coder::Coder,
     entity::{
-        AlternativeTitle, Book, BookCover, BookCreator, BookCreators, BookFilter, BookKind,
-        BookLabelIds, BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus,
-        BookTitles, BookVisibility, CreatorRole, Filter, LinkUrl, Text, UserClaims,
-        VisibilityTransition,
+        AlternativeTitle, Book, BookCover, BookCreator, BookCreators, BookCursor, BookFilter,
+        BookKind, BookKinds, BookLabelIds, BookLink, BookLinkKind, BookLinks, BookName, BookQuery,
+        BookSelection, BookSortField, BookStatus, BookStatuses, BookTitles, BookVisibility,
+        CreatedAtRange, CreatorRole, FilterLookupIds, LabelFilter, LabelsMode, Limit, LinkUrl,
+        PublicationDemographic, PublicationDemographics, PublicationYearRange, SortOrder, Text,
+        Timestamp, UserClaims, VisibilityTransition,
     },
     error::{AppError, EntityError, RouteError},
+    hasher::Hasher,
     route::{StoreResp, collect_image_part, json_data_response, json_response},
     service::Service,
 };
@@ -51,6 +56,7 @@ pub struct BookReq {
     pub status: BookStatus,
     pub kind: BookKind,
     pub publication_language_id: Uuid,
+    pub publication_demographic: PublicationDemographic,
     #[serde(default)]
     pub label_ids: Vec<Uuid>,
     #[serde(default)]
@@ -87,6 +93,7 @@ impl TryFrom<BookWithRelations> for Book {
             status,
             kind,
             publication_language_id,
+            publication_demographic,
             label_ids,
             links: link_reqs,
             titles: title_reqs,
@@ -126,6 +133,7 @@ impl TryFrom<BookWithRelations> for Book {
             status,
             kind,
             publication_language_id,
+            publication_demographic,
             label_ids: BookLabelIds::try_from(label_ids)?,
             links: BookLinks::try_from(links)?,
             titles: BookTitles::try_from(titles)?,
@@ -180,38 +188,104 @@ pub async fn update_book(
 #[serde(rename_all = "camelCase")]
 pub struct GetBooksResp {
     pub data: Vec<BookQuery>,
-    pub next_cursor: Option<Uuid>,
+    pub next_cursor: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BookListQuery {
     pub visibility: Option<BookVisibility>,
-    pub after: Option<Uuid>,
-    pub limit: Option<u32>,
+    pub cursor: Option<String>,
+    pub limit: Option<i64>,
+    pub sort_field: Option<BookSortField>,
+    pub order: Option<SortOrder>,
+    #[serde(default)]
+    pub labels: Vec<Uuid>,
+    pub labels_mode: Option<LabelsMode>,
+    #[serde(default)]
+    pub excluded_labels: Vec<Uuid>,
+    #[serde(default)]
+    pub kind: Vec<BookKind>,
+    #[serde(default)]
+    pub status: Vec<BookStatus>,
+    #[serde(default)]
+    pub content_rating: Vec<Uuid>,
+    #[serde(default)]
+    pub publication_language: Vec<Uuid>,
+    #[serde(default)]
+    pub publication_demographic: Vec<PublicationDemographic>,
+    #[serde(default)]
+    pub available_translated_language: Vec<Uuid>,
+    pub publication_year_from: Option<i16>,
+    pub publication_year_to: Option<i16>,
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    pub created_at_from: Option<OffsetDateTime>,
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    pub created_at_to: Option<OffsetDateTime>,
 }
 
-impl TryFrom<BookListQuery> for BookFilter {
-    type Error = EntityError;
+impl TryFrom<(BookListQuery, Option<BookCursor>)> for BookFilter {
+    type Error = AppError;
 
-    fn try_from(q: BookListQuery) -> Result<Self, Self::Error> {
-        let page = Filter::builder().after(q.after).limit(q.limit).build()?;
+    fn try_from(ctx: (BookListQuery, Option<BookCursor>)) -> Result<Self, Self::Error> {
+        let (q, cursor) = ctx;
+        let limit = q
+            .limit
+            .map(Limit::try_from)
+            .transpose()?
+            .unwrap_or_default();
 
-        Ok(Self {
-            page,
-            visibility: q.visibility,
-        })
+        let selection = BookSelection {
+            visibility: q.visibility.unwrap_or(BookVisibility::Listed),
+            sort_field: q.sort_field.unwrap_or(BookSortField::CreatedAt),
+            order: q.order.unwrap_or_default(),
+            labels: LabelFilter {
+                included: BookLabelIds::set_from(q.labels)?,
+                mode: q.labels_mode.unwrap_or(LabelsMode::And),
+                excluded: BookLabelIds::set_from(q.excluded_labels)?,
+            },
+            kinds: BookKinds::set_from(q.kind)?,
+            statuses: BookStatuses::set_from(q.status)?,
+            content_rating_ids: FilterLookupIds::set_from(q.content_rating)?,
+            publication_language_ids: FilterLookupIds::set_from(q.publication_language)?,
+            publication_demographics: PublicationDemographics::set_from(q.publication_demographic)?,
+            available_translated_language_ids: FilterLookupIds::set_from(
+                q.available_translated_language,
+            )?,
+            publication_year: PublicationYearRange::try_new(
+                q.publication_year_from,
+                q.publication_year_to,
+            )?,
+            created_at: CreatedAtRange::try_new(
+                q.created_at_from.map(Timestamp::from),
+                q.created_at_to.map(Timestamp::from),
+            )?,
+        };
+
+        let selection_hash = Hasher::compute_hex_hash(&selection)?;
+        let filter = Self {
+            limit,
+            cursor,
+            selection,
+            selection_hash,
+        };
+
+        filter.ensure_cursor_fits()?;
+
+        Ok(filter)
     }
 }
 
+// deferred: gate the ?visibility= override to Moderator/Admin
 pub async fn get_books(
     State(service): State<Service>,
     Query(query): Query<BookListQuery>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    // deferred: gate the ?visibility= override to Moderator/Admin
-    let filter: BookFilter = query.try_into()?;
+    let cursor = query.cursor.as_deref().map(Coder::decode).transpose()?;
+    let filter = BookFilter::try_from((query, cursor))?;
 
     let (data, next_cursor) = service.get_books(filter).await?;
+    let next_cursor = next_cursor.map(Coder::encode).transpose()?;
 
     Ok(json_response(
         StatusCode::OK,
@@ -351,4 +425,41 @@ pub async fn delete_book_cover(
 ) -> Result<StatusCode, AppError> {
     service.delete_book_cover(cover_id).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        entity::{BookFilter, BookSortField, BookVisibility, SortOrder},
+        route::BookListQuery,
+    };
+
+    fn filter(body: serde_json::Value) -> BookFilter {
+        let query: BookListQuery = serde_json::from_value(body).expect("query must parse");
+
+        BookFilter::try_from((query, None)).expect("filter must build")
+    }
+
+    #[test]
+    fn an_omitted_facet_falls_back_to_its_default() {
+        let selection = filter(serde_json::json!({})).selection;
+
+        assert_eq!(selection.visibility, BookVisibility::Listed);
+        assert_eq!(selection.sort_field, BookSortField::CreatedAt);
+        assert_eq!(selection.order, SortOrder::Desc);
+    }
+
+    #[test]
+    fn a_provided_facet_wins_over_the_default() {
+        let selection = filter(serde_json::json!({
+            "visibility": "Hidden",
+            "sortField": "Name",
+            "order": "Asc",
+        }))
+        .selection;
+
+        assert_eq!(selection.visibility, BookVisibility::Hidden);
+        assert_eq!(selection.sort_field, BookSortField::Name);
+        assert_eq!(selection.order, SortOrder::Asc);
+    }
 }

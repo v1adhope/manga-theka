@@ -10,7 +10,8 @@ use crate::{
     error::EntityError,
 };
 
-// Matches the total number of rows seeded in the `languages` table.
+// Closed vocabulary: one value per row seeded in the `languages` table. Seeding or retiring
+// a language means updating this constant.
 pub const MAX_CHAPTER_LOCALIZATIONS: usize = 5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

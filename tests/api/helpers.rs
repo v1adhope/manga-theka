@@ -13,10 +13,10 @@ use manga_theka::{
     config::{Config, Database},
     database,
     entity::{
-        AlternativeTitle, BookCoverQuery, BookLink, BookName, BookQuery, BookVisibility, Chapter,
-        ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume, ContentRating, CoverUrl,
-        Creator, CreatorQuery, CreatorRole, Email, Feedback, ImageExtension, Label, Language,
-        LinkUrl, Name, Text,
+        AlternativeTitle, BookCoverQuery, BookKind, BookLink, BookName, BookQuery, BookStatus,
+        BookVisibility, Chapter, ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume,
+        ContentRating, CoverUrl, Creator, CreatorQuery, CreatorRole, Email, Feedback,
+        ImageExtension, Label, Language, LinkUrl, Name, PublicationDemographic, Text,
     },
     object_storage,
     startup::App,
@@ -28,7 +28,10 @@ use tower::ServiceExt;
 use tracing_log::log::LevelFilter;
 use uuid::Uuid;
 
-use crate::fakers::{BookFaker, ChapterFaker, LANGUAGES};
+use crate::fakers::{
+    ACTION, BookFaker, CONTENT_RATINGS, ChapterFaker, FANTASY, ISEKAI, LABELS, LANGUAGES,
+    LONG_STRIP, MAFIA, ROMANCE, SCHOOL_LIFE, ZOMBIES,
+};
 
 static TRACING: LazyLock<()> = LazyLock::new(|| {
     telemetry::init_subscriber("info");
@@ -59,10 +62,10 @@ pub struct ChapterSample {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct RespWrapper<T> {
+pub struct RespWrapper<T, C = Uuid> {
     pub data: T,
     #[serde(rename = "nextCursor", default)]
-    pub next_cursor: Option<uuid::Uuid>,
+    pub next_cursor: Option<C>,
 }
 
 pub async fn assert_error(resp: Response, expected: StatusCode) {
@@ -99,6 +102,18 @@ pub fn redirect_target(resp: &Response) -> &str {
         .expect("a location must be printable")
 }
 
+pub fn labels(ids: &[Uuid]) -> Vec<Label> {
+    ids.iter()
+        .map(|id| {
+            LABELS
+                .iter()
+                .find(|l| l.id == *id)
+                .expect("fixture label must be seeded")
+                .clone()
+        })
+        .collect()
+}
+
 pub fn label_keys(labels: &[Label]) -> Vec<(Uuid, &str, &str)> {
     let mut keys: Vec<(Uuid, &str, &str)> = labels
         .iter()
@@ -107,6 +122,38 @@ pub fn label_keys(labels: &[Label]) -> Vec<(Uuid, &str, &str)> {
     keys.sort();
 
     keys
+}
+
+type FacetRow = (
+    &'static [Uuid],
+    BookKind,
+    BookStatus,
+    PublicationDemographic,
+    usize,
+    usize,
+);
+
+pub fn day(n: i64) -> time::OffsetDateTime {
+    time::OffsetDateTime::UNIX_EPOCH + time::Duration::days(n)
+}
+
+pub fn rfc3339(at: time::OffsetDateTime) -> String {
+    at.format(&time::format_description::well_known::Rfc3339)
+        .expect("a fixture timestamp must render")
+}
+
+pub fn ids(books: &[BookQuery]) -> Vec<Uuid> {
+    books.iter().map(|b| b.id).collect()
+}
+
+pub fn pick(books: &[BookQuery], wanted: &[usize]) -> Vec<Uuid> {
+    wanted.iter().map(|i| books[*i].id).collect()
+}
+
+pub fn sorted(mut v: Vec<Uuid>) -> Vec<Uuid> {
+    v.sort();
+
+    v
 }
 
 pub fn link_keys(links: &[BookLink]) -> Vec<(&str, &str)> {
@@ -328,8 +375,9 @@ where b.id = $1;
         sqlx::query!(
             r#"
 insert into books(id, name, description, publication_year, content_rating, status, kind,
-                  publication_language, visibility, note, submitted_at, updated_at, created_at)
-values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
+                  publication_language, publication_demographic, visibility, note, submitted_at,
+                  updated_at, created_at)
+values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14);
         "#,
             b.id,
             b.name.as_ref(),
@@ -339,6 +387,7 @@ values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
             b.status.as_ref() as _,
             b.kind.as_ref() as _,
             b.publication_language.id,
+            b.publication_demographic.as_ref() as _,
             b.visibility.as_ref() as _,
             b.note.as_ref().map(AsRef::as_ref) as Option<&str>,
             b.submitted_at,
@@ -483,8 +532,9 @@ select (select b.name from books b where b.id = $1) as "name?",
     pub async fn fetch_book(&self, id: Uuid) -> BookQuery {
         let row = sqlx::query!(
             r#"
-select b.name, b.description, b.publication_year, b.status, b.kind, b.visibility, b.note,
-       b.submitted_at, b.updated_at, b.created_at,
+select b.name, b.description, b.publication_year, b.status, b.kind,
+       b.publication_demographic, b.visibility, b.note, b.submitted_at, b.updated_at,
+       b.created_at,
        cr.id as content_rating_id, cr.name as content_rating_name, cr.code as content_rating_code,
        l.id as language_id, l.code as language_code, l.name as language_name
 from books b
@@ -603,6 +653,10 @@ order by c.id;
                 code: row.language_code,
                 name: row.language_name,
             },
+            publication_demographic: row
+                .publication_demographic
+                .parse()
+                .expect("stored publication demographic must be valid"),
             labels: labels.try_into().expect("too many labels in test fixture"),
             links: links.try_into().expect("too many links in test fixture"),
             titles: titles.try_into().expect("too many titles in test fixture"),
@@ -1006,6 +1060,277 @@ where f.id = $1;
         self.router.clone().oneshot(req).await.unwrap()
     }
 
+    pub async fn get_books_page(&self, path: &str) -> RespWrapper<Vec<BookQuery>, String> {
+        let req = Request::get(path).body(Body::empty()).unwrap();
+        let resp = self.router.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK, "{path}");
+
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        serde_json::from_slice(&bytes).expect("failed to parse book page")
+    }
+
+    pub async fn seed_facet_corpus(&self) -> Vec<BookQuery> {
+        const ROWS: [FacetRow; 12] = [
+            (
+                &[ACTION, ROMANCE],
+                BookKind::Manga,
+                BookStatus::Ongoing,
+                PublicationDemographic::Shounen,
+                0,
+                0,
+            ),
+            (
+                &[ACTION],
+                BookKind::Manga,
+                BookStatus::Completed,
+                PublicationDemographic::Shounen,
+                0,
+                0,
+            ),
+            (
+                &[FANTASY, ISEKAI],
+                BookKind::Manhwa,
+                BookStatus::Ongoing,
+                PublicationDemographic::Seinen,
+                1,
+                1,
+            ),
+            (
+                &[ACTION, ROMANCE, FANTASY],
+                BookKind::Manhwa,
+                BookStatus::Completed,
+                PublicationDemographic::Josei,
+                1,
+                1,
+            ),
+            (
+                &[FANTASY, LONG_STRIP],
+                BookKind::Manhua,
+                BookStatus::Hiatus,
+                PublicationDemographic::Shoujo,
+                2,
+                2,
+            ),
+            (
+                &[ROMANCE],
+                BookKind::Manhua,
+                BookStatus::Cancelled,
+                PublicationDemographic::Kids,
+                2,
+                2,
+            ),
+            (
+                &[],
+                BookKind::Manga,
+                BookStatus::Ongoing,
+                PublicationDemographic::Seinen,
+                3,
+                3,
+            ),
+            (
+                &[MAFIA, ZOMBIES],
+                BookKind::Manhwa,
+                BookStatus::Hiatus,
+                PublicationDemographic::Shoujo,
+                3,
+                3,
+            ),
+            (
+                &[SCHOOL_LIFE],
+                BookKind::Manhua,
+                BookStatus::Completed,
+                PublicationDemographic::Josei,
+                0,
+                4,
+            ),
+            (
+                &[ACTION, FANTASY],
+                BookKind::Manga,
+                BookStatus::Cancelled,
+                PublicationDemographic::Kids,
+                1,
+                4,
+            ),
+            (
+                &[ISEKAI],
+                BookKind::Manhwa,
+                BookStatus::Ongoing,
+                PublicationDemographic::Shounen,
+                2,
+                0,
+            ),
+            (
+                &[ZOMBIES],
+                BookKind::Manhua,
+                BookStatus::Completed,
+                PublicationDemographic::Seinen,
+                3,
+                1,
+            ),
+        ];
+
+        let mut books = Vec::with_capacity(ROWS.len());
+        for (i, (label_ids, kind, status, demographic, rating, language)) in
+            ROWS.into_iter().enumerate()
+        {
+            let book: BookQuery = BookFaker {
+                links: 0..=0,
+                titles: 0..=0,
+                creators: 0..=0,
+                exact_labels: Some(labels(label_ids)),
+                kind: Some(kind),
+                status: Some(status),
+                publication_demographic: Some(demographic),
+                content_rating: Some(CONTENT_RATINGS[rating].clone()),
+                publication_language: Some(LANGUAGES[language].clone()),
+                publication_year: Some(2000 + i as i16),
+                created_at: Some(day(i as i64)),
+                ..Default::default()
+            }
+            .fake();
+
+            self.insert_book(&book).await;
+            books.push(book);
+        }
+
+        books
+    }
+
+    pub async fn seed_range_corpus(&self) -> Vec<BookQuery> {
+        const YEARS: [i16; 5] = [2010, 2012, 2015, 2018, 2020];
+
+        let mut books = Vec::with_capacity(YEARS.len());
+        for year in YEARS {
+            let book: BookQuery = BookFaker {
+                labels: 0..=0,
+                links: 0..=0,
+                titles: 0..=0,
+                creators: 0..=0,
+                publication_year: Some(year),
+                created_at: Some(day(i64::from(year) - 2000)),
+                ..Default::default()
+            }
+            .fake();
+
+            self.insert_book(&book).await;
+            books.push(book);
+        }
+
+        books
+    }
+
+    pub async fn seed_sort_corpus(&self) -> Vec<BookQuery> {
+        const ROWS: [(&str, i16, i64); 4] = [
+            ("Alpha", 2020, 4),
+            ("Bravo", 2010, 1),
+            ("Charlie", 2015, 3),
+            ("Delta", 2005, 2),
+        ];
+
+        let mut books = Vec::with_capacity(ROWS.len());
+        for (name, year, created) in ROWS {
+            let book: BookQuery = BookFaker {
+                labels: 0..=0,
+                links: 0..=0,
+                titles: 0..=0,
+                creators: 0..=0,
+                name: Some(name.to_owned()),
+                publication_year: Some(year),
+                created_at: Some(day(created)),
+                ..Default::default()
+            }
+            .fake();
+
+            self.insert_book(&book).await;
+            books.push(book);
+        }
+
+        books
+    }
+
+    pub async fn seed_tie_corpus(&self, n: usize) -> Vec<BookQuery> {
+        let mut books = Vec::with_capacity(n);
+        for _ in 0..n {
+            let book: BookQuery = BookFaker {
+                labels: 0..=0,
+                links: 0..=0,
+                titles: 0..=0,
+                creators: 0..=0,
+                name: Some("Tied".to_owned()),
+                publication_year: Some(2020),
+                created_at: Some(day(0)),
+                ..Default::default()
+            }
+            .fake();
+
+            self.insert_book(&book).await;
+            books.push(book);
+        }
+
+        books.sort_by_key(|b| b.id);
+
+        books
+    }
+
+    pub async fn seed_translated_corpus(&self) -> Vec<BookQuery> {
+        let japanese = LANGUAGES[0].clone();
+        let english = LANGUAGES[3].clone();
+        let russian = LANGUAGES[4].clone();
+
+        let rows: [(Language, BookVisibility, Vec<Language>); 6] = [
+            (
+                japanese.clone(),
+                BookVisibility::Listed,
+                vec![english.clone()],
+            ),
+            (
+                japanese.clone(),
+                BookVisibility::Listed,
+                vec![english.clone(), english.clone()],
+            ),
+            (japanese.clone(), BookVisibility::Listed, vec![russian]),
+            (english.clone(), BookVisibility::Listed, vec![]),
+            (japanese.clone(), BookVisibility::Listed, vec![]),
+            (japanese, BookVisibility::Hidden, vec![english]),
+        ];
+
+        let mut books = Vec::with_capacity(rows.len());
+        for (language, visibility, releases) in rows {
+            let book: BookQuery = BookFaker {
+                labels: 0..=0,
+                links: 0..=0,
+                titles: 0..=0,
+                creators: 0..=0,
+                publication_language: Some(language),
+                visibility,
+                ..Default::default()
+            }
+            .fake();
+
+            self.insert_book(&book).await;
+
+            for release_language in releases {
+                let chapter_id = self.insert_random_chapter(book.id).await;
+                self.insert_release(chapter_id, release_language.id).await;
+            }
+
+            books.push(book);
+        }
+
+        books
+    }
+
+    pub async fn get_labels(&self, path: &str) -> Vec<Label> {
+        let req = Request::get(path).body(Body::empty()).unwrap();
+        let resp = self.router.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK, "{path}");
+
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let wrapper: RespWrapper<Vec<Label>> = serde_json::from_slice(&bytes).unwrap();
+
+        wrapper.data
+    }
+
     pub async fn get_chapters(&self, path: String) -> RespWrapper<Vec<Chapter>> {
         let req = Request::get(path).body(Body::empty()).unwrap();
         let resp = self.router.clone().oneshot(req).await.unwrap();
@@ -1249,7 +1574,7 @@ order by sort_order;
     }
 
     pub async fn get_staged(&self, release_id: Uuid) -> Response {
-        let req = Request::get(format!("/releases/{release_id}/pages?status=staged"))
+        let req = Request::get(format!("/releases/{release_id}/pages?status=Staged"))
             .body(Body::empty())
             .unwrap();
 

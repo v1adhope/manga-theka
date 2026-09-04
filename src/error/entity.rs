@@ -34,6 +34,9 @@ pub enum EntityError {
     #[error("'{0}' is not a valid book kind")]
     InvalidBookKind(String),
 
+    #[error("'{0}' is not a valid publication demographic")]
+    InvalidPublicationDemographic(String),
+
     #[error("'{0}' is not a valid book visibility")]
     InvalidBookVisibility(String),
 
@@ -89,7 +92,16 @@ pub enum EntityError {
     LinkUrlSchemeNotAllowed(String),
 
     #[error("Limit {0} is out of range [1, {1}]")]
-    LimitOutOfRange(u32, u32),
+    LimitOutOfRange(i64, i64),
+
+    #[error("The {0} range starts after it ends")]
+    RangeIsInverted(&'static str),
+
+    #[error("Cursor was issued for a different selection")]
+    CursorSelectionMismatch,
+
+    #[error("Hash must be exactly {0} lowercase hex characters")]
+    HexHashIsMalformed(usize),
 
     #[error("Chapter number {0} must be within [{1}, {2}] with at most {3} decimal places")]
     ChapterNumberOutOfRange(f32, f32, f32, i32),
@@ -140,6 +152,7 @@ impl IntoResponse for EntityError {
                 StatusCode::CONFLICT
             }
             Self::NotReadable { .. } => StatusCode::NOT_FOUND,
+            Self::CursorSelectionMismatch => StatusCode::BAD_REQUEST,
             _ => StatusCode::UNPROCESSABLE_ENTITY,
         };
 

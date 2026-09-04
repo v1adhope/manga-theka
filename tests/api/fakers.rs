@@ -11,7 +11,7 @@ use manga_theka::entity::{
     AlternativeTitle, BookKind, BookLink, BookLinkKind, BookName, BookQuery, BookStatus,
     BookVisibility, Chapter, ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume,
     ContentRating, Creator, CreatorQuery, CreatorRole, Email, Feedback, FeedbackKind,
-    FeedbackStatus, Label, LabelKind, Language, LinkUrl, Name, Text,
+    FeedbackStatus, Label, LabelKind, Language, LinkUrl, Name, PublicationDemographic, Text,
 };
 use time::OffsetDateTime;
 use uuid::{Uuid, uuid};
@@ -83,37 +83,56 @@ pub static LANGUAGES: LazyLock<[Language; 5]> = LazyLock::new(|| {
     ]
 });
 
-pub static LABELS: LazyLock<[Label; 6]> = LazyLock::new(|| {
+pub const ACTION: Uuid = uuid!("019febc2-01af-7d7a-9468-ad2779d97503");
+pub const FANTASY: Uuid = uuid!("019febc2-01b3-75aa-9d15-98e0f3f847d6");
+pub const ROMANCE: Uuid = uuid!("019febc2-01b9-763d-822a-4c21c88b4f6d");
+pub const ISEKAI: Uuid = uuid!("019febc2-01b5-7ff6-8a68-81390867cd50");
+pub const MAFIA: Uuid = uuid!("019febba-36fa-701d-97ed-e65d87fe8ddd");
+pub const ZOMBIES: Uuid = uuid!("019febba-36fa-701d-97ed-eb6f2148a897");
+pub const SCHOOL_LIFE: Uuid = uuid!("019febbf-0532-70e9-85dc-7929be8cafc9");
+pub const LONG_STRIP: Uuid = uuid!("019cabd8-3822-7e25-b84c-08575e693b65");
+
+pub static LABELS: LazyLock<[Label; 8]> = LazyLock::new(|| {
     [
         Label {
-            id: uuid!("019febc2-01af-7d7a-9468-ad2779d97503"),
+            id: ACTION,
             name: "Action".to_owned(),
             kind: LabelKind::Genre,
         },
         Label {
-            id: uuid!("019febc2-01b3-75aa-9d15-98e0f3f847d6"),
+            id: FANTASY,
             name: "Fantasy".to_owned(),
             kind: LabelKind::Genre,
         },
         Label {
-            id: uuid!("019febc2-01b9-763d-822a-4c21c88b4f6d"),
+            id: ROMANCE,
             name: "Romance".to_owned(),
             kind: LabelKind::Genre,
         },
         Label {
-            id: uuid!("019febba-36fa-701d-97ed-e65d87fe8ddd"),
+            id: ISEKAI,
+            name: "Isekai".to_owned(),
+            kind: LabelKind::Genre,
+        },
+        Label {
+            id: MAFIA,
             name: "Mafia".to_owned(),
-            kind: LabelKind::Tag,
+            kind: LabelKind::Theme,
         },
         Label {
-            id: uuid!("019febba-36fa-701d-97ed-eb6f2148a897"),
+            id: ZOMBIES,
             name: "Zombies".to_owned(),
-            kind: LabelKind::Tag,
+            kind: LabelKind::Theme,
         },
         Label {
-            id: uuid!("019febbf-0532-70e9-85dc-7929be8cafc9"),
+            id: SCHOOL_LIFE,
             name: "School Life".to_owned(),
-            kind: LabelKind::Tag,
+            kind: LabelKind::Theme,
+        },
+        Label {
+            id: LONG_STRIP,
+            name: "Long Strip".to_owned(),
+            kind: LabelKind::Presentation,
         },
     ]
 });
@@ -196,6 +215,23 @@ impl Dummy<BookKindFaker> for BookKind {
             0 => BookKind::Manga,
             1 => BookKind::Manhwa,
             _ => BookKind::Manhua,
+        }
+    }
+}
+
+pub struct PublicationDemographicFaker;
+
+impl Dummy<PublicationDemographicFaker> for PublicationDemographic {
+    fn dummy_with_rng<R: RngExt + ?Sized>(
+        _config: &PublicationDemographicFaker,
+        rng: &mut R,
+    ) -> Self {
+        match rng.random_range(0..5) {
+            0 => PublicationDemographic::Shounen,
+            1 => PublicationDemographic::Shoujo,
+            2 => PublicationDemographic::Seinen,
+            3 => PublicationDemographic::Josei,
+            _ => PublicationDemographic::Kids,
         }
     }
 }
@@ -345,6 +381,15 @@ pub struct BookFaker {
     pub titles: RangeInclusive<usize>,
     pub creators: RangeInclusive<usize>,
     pub visibility: BookVisibility,
+    pub exact_labels: Option<Vec<Label>>,
+    pub name: Option<String>,
+    pub status: Option<BookStatus>,
+    pub kind: Option<BookKind>,
+    pub content_rating: Option<ContentRating>,
+    pub publication_language: Option<Language>,
+    pub publication_demographic: Option<PublicationDemographic>,
+    pub publication_year: Option<i16>,
+    pub created_at: Option<OffsetDateTime>,
 }
 
 impl Default for BookFaker {
@@ -355,15 +400,27 @@ impl Default for BookFaker {
             titles: 0..=5,
             creators: 0..=5,
             visibility: BookVisibility::Listed,
+            exact_labels: None,
+            name: None,
+            status: None,
+            kind: None,
+            content_rating: None,
+            publication_language: None,
+            publication_demographic: None,
+            publication_year: None,
+            created_at: None,
         }
     }
 }
 
 impl Dummy<BookFaker> for BookQuery {
     fn dummy_with_rng<R: RngExt + ?Sized>(config: &BookFaker, rng: &mut R) -> Self {
-        let mut labels: Vec<Label> = (0..rng.random_range(config.labels.clone()))
-            .map(|_| LabelFaker.fake_with_rng(rng))
-            .collect();
+        let mut labels: Vec<Label> = match &config.exact_labels {
+            Some(labels) => labels.clone(),
+            None => (0..rng.random_range(config.labels.clone()))
+                .map(|_| LabelFaker.fake_with_rng(rng))
+                .collect(),
+        };
         labels.sort_by_key(|l| l.id);
         labels.dedup_by_key(|l| l.id);
 
@@ -379,13 +436,31 @@ impl Dummy<BookFaker> for BookQuery {
 
         BookQuery {
             id: Uuid::now_v7(),
-            name: BookNameFaker.fake_with_rng(rng),
+            name: match &config.name {
+                Some(name) => BookName::try_from(name.clone()).expect("faker name must be valid"),
+                None => BookNameFaker.fake_with_rng(rng),
+            },
             description: TextFaker.fake_with_rng(rng),
-            publication_year: rng.random_range(1950..=2026),
-            content_rating: ContentRatingFaker.fake_with_rng(rng),
-            status: BookStatusFaker.fake_with_rng(rng),
-            kind: BookKindFaker.fake_with_rng(rng),
-            publication_language: LanguageFaker.fake_with_rng(rng),
+            publication_year: config
+                .publication_year
+                .unwrap_or_else(|| rng.random_range(1950..=2026)),
+            content_rating: config
+                .content_rating
+                .clone()
+                .unwrap_or_else(|| ContentRatingFaker.fake_with_rng(rng)),
+            status: config
+                .status
+                .unwrap_or_else(|| BookStatusFaker.fake_with_rng(rng)),
+            kind: config
+                .kind
+                .unwrap_or_else(|| BookKindFaker.fake_with_rng(rng)),
+            publication_language: config
+                .publication_language
+                .clone()
+                .unwrap_or_else(|| LanguageFaker.fake_with_rng(rng)),
+            publication_demographic: config
+                .publication_demographic
+                .unwrap_or_else(|| PublicationDemographicFaker.fake_with_rng(rng)),
             labels: labels.try_into().expect("too many labels in faker"),
             links: links.try_into().expect("too many links in faker"),
             titles: titles.try_into().expect("too many titles in faker"),
@@ -394,7 +469,7 @@ impl Dummy<BookFaker> for BookQuery {
             note: None,
             submitted_at: None,
             updated_at: None,
-            created_at: OffsetDateTime::UNIX_EPOCH,
+            created_at: config.created_at.unwrap_or(OffsetDateTime::UNIX_EPOCH),
         }
     }
 }

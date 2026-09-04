@@ -14,7 +14,7 @@ create table if not exists chapter_releases (
 
 create index if not exists idx_chapter_releases_chapter_id on chapter_releases(chapter_id);
 
-create index if not exists idx_chapter_releases_book_id on chapter_releases(book_id);
+create index if not exists idx_chapter_releases_book_id_language_id on chapter_releases(book_id, language_id);
 
 create function check_chapter_releases_language_not_publication() returns trigger as $$
 declare

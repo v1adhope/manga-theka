@@ -7,10 +7,11 @@ use uuid::Uuid;
 use crate::{
     database::{Database, Invariant, creator::CreatorQueryRow, label::LabelRow},
     entity::{
-        AlternativeTitle, Book, BookCover, BookCoverQuery, BookCreatorsQuery, BookFilter, BookKind,
-        BookLabels, BookLink, BookLinkKind, BookLinks, BookName, BookQuery, BookStatus, BookTitles,
-        BookVisibility, ContentRating, CoverUrl, CreatorQuery, ImageExtension, Label, Language,
-        LinkUrl, Text,
+        AlternativeTitle, Book, BookCover, BookCoverQuery, BookCreatorsQuery, BookCursor,
+        BookFilter, BookKind, BookLabels, BookLink, BookLinkKind, BookLinks, BookName, BookQuery,
+        BookSelection, BookSort, BookSortField, BookStatus, BookTitles, BookVisibility,
+        ContentRating, CoverUrl, CreatedAtBound, CreatorQuery, ImageExtension, Label, LabelsMode,
+        Language, LinkUrl, PublicationDemographic, PublicationYearBound, Text, Timestamp,
     },
     error::DatabaseError,
 };
@@ -29,6 +30,7 @@ struct BookRow {
     publication_language_id: Uuid,
     publication_language_code: String,
     publication_language_name: String,
+    publication_demographic: String,
     visibility: String,
     note: Option<String>,
     submitted_at: Option<time::OffsetDateTime>,
@@ -166,6 +168,10 @@ impl TryFrom<BookWithRelations> for BookQuery {
         let description = Text::try_from(row.description).or_corrupted("description")?;
         let status: BookStatus = row.status.parse().or_corrupted("status")?;
         let kind: BookKind = row.kind.parse().or_corrupted("kind")?;
+        let publication_demographic: PublicationDemographic =
+            row.publication_demographic
+                .parse()
+                .or_corrupted("publication_demographic")?;
         let visibility: BookVisibility = row.visibility.parse().or_corrupted("visibility")?;
         let note = row
             .note
@@ -194,6 +200,7 @@ impl TryFrom<BookWithRelations> for BookQuery {
                 code: row.publication_language_code,
                 name: row.publication_language_name,
             },
+            publication_demographic,
             labels,
             links,
             titles,
@@ -204,6 +211,89 @@ impl TryFrom<BookWithRelations> for BookQuery {
             updated_at: row.updated_at,
             created_at: row.created_at,
         })
+    }
+}
+
+fn sort_column(sort: BookSortField) -> &'static str {
+    match sort {
+        BookSortField::CreatedAt => "created_at",
+        BookSortField::Name => "name",
+        BookSortField::PublicationYear => "publication_year",
+    }
+}
+
+fn sort_value(sort: BookSortField, row: &BookRow) -> BookSort {
+    match sort {
+        BookSortField::CreatedAt => BookSort::CreatedAt(Timestamp::from(row.created_at)),
+        BookSortField::Name => BookSort::Name(row.name.clone()),
+        BookSortField::PublicationYear => BookSort::PublicationYear(row.publication_year),
+    }
+}
+
+fn push_id_facet(builder: &mut QueryBuilder<Postgres>, column: &'static str, ids: &[Uuid]) {
+    if ids.is_empty() {
+        return;
+    }
+
+    builder
+        .push(" and ")
+        .push(column)
+        .push(" = any(")
+        .push_bind(ids.to_vec())
+        .push(")");
+}
+
+fn push_enum_facet<T: AsRef<str>>(
+    builder: &mut QueryBuilder<Postgres>,
+    column: &'static str,
+    values: &[T],
+) {
+    if values.is_empty() {
+        return;
+    }
+
+    let values: Vec<String> = values.iter().map(|v| v.as_ref().to_owned()).collect();
+
+    builder
+        .push(" and ")
+        .push(column)
+        .push(" = any(")
+        .push_bind(values)
+        .push(")");
+}
+
+fn push_label_facet(builder: &mut QueryBuilder<Postgres>, selection: &BookSelection) {
+    let included = selection.labels.included.as_slice();
+
+    if !included.is_empty() {
+        match selection.labels.mode {
+            LabelsMode::And => {
+                for id in included {
+                    builder
+                        .push(" and exists (select 1 from book_labels bl")
+                        .push(" where bl.book_id = b.id and bl.label_id = ")
+                        .push_bind(*id)
+                        .push(")");
+                }
+            }
+            LabelsMode::Or => {
+                builder
+                    .push(" and exists (select 1 from book_labels bl")
+                    .push(" where bl.book_id = b.id and bl.label_id = any(")
+                    .push_bind(included.to_vec())
+                    .push("))");
+            }
+        }
+    }
+
+    let excluded = selection.labels.excluded.as_slice();
+
+    if !excluded.is_empty() {
+        builder
+            .push(" and not exists (select 1 from book_labels bl")
+            .push(" where bl.book_id = b.id and bl.label_id = any(")
+            .push_bind(excluded.to_vec())
+            .push("))");
     }
 }
 
@@ -228,6 +318,7 @@ impl Database {
             item.status.as_ref(),
             item.kind.as_ref(),
             item.publication_language_id,
+            item.publication_demographic.as_ref(),
             item.updated_at,
             item.created_at,
         )
@@ -260,6 +351,7 @@ impl Database {
             item.status.as_ref(),
             item.kind.as_ref(),
             item.publication_language_id,
+            item.publication_demographic.as_ref(),
             item.updated_at,
         )
         .fetch_optional(&mut *tx)
@@ -316,7 +408,7 @@ impl Database {
     pub async fn get_books(
         &self,
         filter: &BookFilter,
-    ) -> Result<(Vec<BookQuery>, Option<Uuid>), DatabaseError> {
+    ) -> Result<(Vec<BookQuery>, Option<BookCursor>), DatabaseError> {
         self.get_books_inner(filter)
             .await
             .inspect_err(DatabaseError::log_internal)
@@ -325,19 +417,21 @@ impl Database {
     async fn get_books_inner(
         &self,
         filter: &BookFilter,
-    ) -> Result<(Vec<BookQuery>, Option<Uuid>), DatabaseError> {
-        let limit = filter.page.effective_limit();
-        let sort_order = filter.page.effective_sort_order();
+    ) -> Result<(Vec<BookQuery>, Option<BookCursor>), DatabaseError> {
+        let selection = &filter.selection;
+        let limit = filter.limit.as_i64();
+        let order = selection.order;
+        let sort_field = selection.sort_field;
         let fetch_limit = super::fetch_limit(limit);
-        let (cursor_comparison, direction) = super::cursor_op(sort_order);
+        let (cursor_comparison, direction) = super::cursor_op(order);
 
         let mut builder: QueryBuilder<Postgres> = QueryBuilder::new(
             r"select b.id, b.name, b.description, b.publication_year,
                      cr.id as content_rating_id, cr.name as content_rating_name,
                      cr.code as content_rating_code, b.status, b.kind,
                      l.id as publication_language_id, l.code as publication_language_code,
-                     l.name as publication_language_name, b.visibility, b.note, b.submitted_at,
-                     b.updated_at, b.created_at
+                     l.name as publication_language_name, b.publication_demographic,
+                     b.visibility, b.note, b.submitted_at, b.updated_at, b.created_at
               from books b
               join content_ratings cr on cr.id = b.content_rating
               join languages l on l.id = b.publication_language
@@ -346,17 +440,84 @@ impl Database {
 
         builder
             .push(" and b.visibility = ")
-            .push_bind(filter.effective_visibility().as_ref());
+            .push_bind(selection.visibility.as_ref());
 
-        if let Some(id) = filter.page.after {
+        push_label_facet(&mut builder, selection);
+        push_enum_facet(&mut builder, "b.kind", selection.kinds.as_slice());
+        push_enum_facet(&mut builder, "b.status", selection.statuses.as_slice());
+        push_enum_facet(
+            &mut builder,
+            "b.publication_demographic",
+            selection.publication_demographics.as_slice(),
+        );
+        push_id_facet(
+            &mut builder,
+            "b.content_rating",
+            selection.content_rating_ids.as_slice(),
+        );
+        push_id_facet(
+            &mut builder,
+            "b.publication_language",
+            selection.publication_language_ids.as_slice(),
+        );
+
+        if !selection.available_translated_language_ids.is_empty() {
             builder
-                .push(" and b.id ")
+                .push(" and exists (select 1 from chapter_releases cr")
+                .push(" where cr.book_id = b.id and cr.language_id = any(")
+                .push_bind(
+                    selection
+                        .available_translated_language_ids
+                        .as_slice()
+                        .to_vec(),
+                )
+                .push("))");
+        }
+
+        if let Some(from) = selection.publication_year.from() {
+            builder.push(" and b.publication_year >= ").push_bind(*from);
+        }
+        if let Some(to) = selection.publication_year.to() {
+            builder
+                .push(" and b.publication_year ")
+                .push(super::upper_bound_op::<PublicationYearBound>())
+                .push(" ")
+                .push_bind(*to);
+        }
+        if let Some(from) = selection.created_at.from() {
+            builder
+                .push(" and b.created_at >= ")
+                .push_bind(time::OffsetDateTime::from(*from));
+        }
+        if let Some(to) = selection.created_at.to() {
+            builder
+                .push(" and b.created_at ")
+                .push(super::upper_bound_op::<CreatedAtBound>())
+                .push(" ")
+                .push_bind(time::OffsetDateTime::from(*to));
+        }
+
+        if let Some(cursor) = &filter.cursor {
+            builder
+                .push(" and (b.")
+                .push(sort_column(sort_field))
+                .push(", b.id) ")
                 .push(cursor_comparison)
-                .push_bind(id);
+                .push(" (");
+            match &cursor.sort {
+                BookSort::CreatedAt(at) => builder.push_bind(time::OffsetDateTime::from(*at)),
+                BookSort::Name(name) => builder.push_bind(name.clone()),
+                BookSort::PublicationYear(year) => builder.push_bind(*year),
+            };
+            builder.push(", ").push_bind(cursor.id).push(")");
         }
 
         builder
-            .push(" order by b.id ")
+            .push(" order by b.")
+            .push(sort_column(sort_field))
+            .push(" ")
+            .push(direction)
+            .push(", b.id ")
             .push(direction)
             .push(" limit ")
             .push_bind(fetch_limit);
@@ -370,7 +531,11 @@ impl Database {
             return Ok((Vec::new(), None));
         }
 
-        let next_cursor = super::take_page(&mut rows, limit, |r| r.id);
+        let next_cursor = super::take_page(&mut rows, limit, |r| BookCursor {
+            id: r.id,
+            sort: sort_value(sort_field, r),
+            selection_hash: filter.selection_hash.clone(),
+        });
 
         let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
         let mut labels = self.get_books_labels(&ids).await?;

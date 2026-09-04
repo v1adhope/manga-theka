@@ -1,5 +1,6 @@
 mod book;
 mod book_cover;
+mod book_filter;
 mod book_visibility;
 mod chapter;
 mod content_rating;

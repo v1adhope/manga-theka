@@ -110,8 +110,8 @@ impl Database {
         &self,
         filter: &Filter,
     ) -> Result<(Vec<CreatorQuery>, Option<Uuid>), DatabaseError> {
-        let limit = filter.effective_limit();
-        let sort_order = filter.effective_sort_order();
+        let limit = filter.limit.as_i64();
+        let sort_order = filter.sort_order;
         let fetch_limit = super::fetch_limit(limit);
         let (cursor_comparison, direction) = super::cursor_op(sort_order);
 

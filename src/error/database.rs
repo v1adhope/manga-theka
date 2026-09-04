@@ -171,6 +171,12 @@ impl From<sqlx::Error> for DatabaseError {
                         source: err,
                     };
                 }
+                Some("enum_books_publication_demographic") => {
+                    return Self::DoesNotExist {
+                        field: "Book publication demographic",
+                        source: err,
+                    };
+                }
                 Some("fk_books_content_ratings_content_rating") => {
                     return Self::DoesNotExist {
                         field: "Book content rating",

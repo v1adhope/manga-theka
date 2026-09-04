@@ -26,7 +26,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::{
-    entity::{FileName, Filter, Image, ImageContent, ImageExtension},
+    entity::{FileName, Filter, Image, ImageContent, ImageExtension, Limit, SortOrder},
     error::{AppError, EntityError, RouteError},
 };
 
@@ -40,14 +40,23 @@ pub struct StoreResp {
 #[serde(rename_all = "camelCase")]
 pub struct PaginationQuery {
     pub after: Option<Uuid>,
-    pub limit: Option<u32>,
+    pub limit: Option<i64>,
+    pub order: Option<SortOrder>,
 }
 
 impl TryFrom<PaginationQuery> for Filter {
     type Error = EntityError;
 
     fn try_from(q: PaginationQuery) -> Result<Self, Self::Error> {
-        Self::builder().after(q.after).limit(q.limit).build()
+        Ok(Self {
+            after: q.after,
+            limit: q
+                .limit
+                .map(Limit::try_from)
+                .transpose()?
+                .unwrap_or_default(),
+            sort_order: q.order.unwrap_or_default(),
+        })
     }
 }
 

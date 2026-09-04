@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select b.id, b.name, b.description, b.publication_year, cr.id as content_rating_id,\n       cr.name as content_rating_name, cr.code as content_rating_code, b.status, b.kind,\n       l.id as publication_language_id, l.code as publication_language_code,\n       l.name as publication_language_name, b.visibility, b.note, b.submitted_at,\n       b.updated_at, b.created_at\nfrom books b\njoin content_ratings cr on cr.id = b.content_rating\njoin languages l on l.id = b.publication_language\nwhere b.id = $1;\n",
+  "query": "select b.id, b.name, b.description, b.publication_year, cr.id as content_rating_id,\n       cr.name as content_rating_name, cr.code as content_rating_code, b.status, b.kind,\n       l.id as publication_language_id, l.code as publication_language_code,\n       l.name as publication_language_name, b.publication_demographic, b.visibility, b.note,\n       b.submitted_at, b.updated_at, b.created_at\nfrom books b\njoin content_ratings cr on cr.id = b.content_rating\njoin languages l on l.id = b.publication_language\nwhere b.id = $1;\n",
   "describe": {
     "columns": [
       {
@@ -137,6 +137,17 @@
       },
       {
         "ordinal": 12,
+        "name": "publication_demographic",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "books",
+            "name": "publication_demographic"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
         "name": "visibility",
         "type_info": "Text",
         "origin": {
@@ -147,7 +158,7 @@
         }
       },
       {
-        "ordinal": 13,
+        "ordinal": 14,
         "name": "note",
         "type_info": "Text",
         "origin": {
@@ -158,7 +169,7 @@
         }
       },
       {
-        "ordinal": 14,
+        "ordinal": 15,
         "name": "submitted_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -169,7 +180,7 @@
         }
       },
       {
-        "ordinal": 15,
+        "ordinal": 16,
         "name": "updated_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -180,7 +191,7 @@
         }
       },
       {
-        "ordinal": 16,
+        "ordinal": 17,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -210,11 +221,12 @@
       false,
       false,
       false,
+      false,
       true,
       true,
       true,
       false
     ]
   },
-  "hash": "c410b3b8f9686e1ee6b1ff936dbbfeae59d958daefdfcdfe15bc927daa40275a"
+  "hash": "be87e442b2c80a4dff9eaa33db75dca9fddafe13e8ead08a36638782a504ae76"
 }
