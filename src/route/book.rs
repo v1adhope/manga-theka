@@ -197,7 +197,7 @@ pub struct BookListQuery {
     pub visibility: Option<BookVisibility>,
     pub cursor: Option<String>,
     pub limit: Option<i64>,
-    pub sort: Option<BookSortField>,
+    pub sort_field: Option<BookSortField>,
     pub order: Option<SortOrder>,
     #[serde(default)]
     pub labels: Vec<Uuid>,
@@ -237,8 +237,8 @@ impl TryFrom<(BookListQuery, Option<BookCursor>)> for BookFilter {
 
         let selection = BookSelection {
             visibility: q.visibility.unwrap_or(BookVisibility::Listed),
-            sort_field: q.sort.unwrap_or(BookSortField::CreatedAt),
-            sort_order: q.order.unwrap_or_default(),
+            sort_field: q.sort_field.unwrap_or(BookSortField::CreatedAt),
+            order: q.order.unwrap_or_default(),
             labels: LabelFilter {
                 included: BookLabelIds::set_from(q.labels)?,
                 mode: q.labels_mode.unwrap_or(LabelsMode::And),
@@ -446,20 +446,20 @@ mod tests {
 
         assert_eq!(selection.visibility, BookVisibility::Listed);
         assert_eq!(selection.sort_field, BookSortField::CreatedAt);
-        assert_eq!(selection.sort_order, SortOrder::Desc);
+        assert_eq!(selection.order, SortOrder::Desc);
     }
 
     #[test]
     fn a_provided_facet_wins_over_the_default() {
         let selection = filter(serde_json::json!({
             "visibility": "Hidden",
-            "sort": "Name",
+            "sortField": "Name",
             "order": "Asc",
         }))
         .selection;
 
         assert_eq!(selection.visibility, BookVisibility::Hidden);
         assert_eq!(selection.sort_field, BookSortField::Name);
-        assert_eq!(selection.sort_order, SortOrder::Asc);
+        assert_eq!(selection.order, SortOrder::Asc);
     }
 }

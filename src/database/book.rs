@@ -420,10 +420,10 @@ impl Database {
     ) -> Result<(Vec<BookQuery>, Option<BookCursor>), DatabaseError> {
         let selection = &filter.selection;
         let limit = filter.limit.as_i64();
-        let sort_order = selection.sort_order;
+        let order = selection.order;
         let sort_field = selection.sort_field;
         let fetch_limit = super::fetch_limit(limit);
-        let (cursor_comparison, direction) = super::cursor_op(sort_order);
+        let (cursor_comparison, direction) = super::cursor_op(order);
 
         let mut builder: QueryBuilder<Postgres> = QueryBuilder::new(
             r"select b.id, b.name, b.description, b.publication_year,

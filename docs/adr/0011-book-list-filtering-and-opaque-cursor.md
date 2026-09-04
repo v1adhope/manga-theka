@@ -19,12 +19,12 @@ publicationYearTo=<i16>          inclusive
 createdAtFrom=<rfc3339>          inclusive
 createdAtTo=<rfc3339>            exclusive
 
-sort=CreatedAt|Name|PublicationYear    default CreatedAt
-order=Asc|Desc                         default Desc
-cursor=<opaque base64>                 replaces ?after=<uuid>
-limit=1..100                           default 20
+sortField=CreatedAt|Name|PublicationYear  default CreatedAt
+order=Asc|Desc                            default Desc
+cursor=<opaque base64>                   replaces ?after=<uuid>
+limit=1..100                             default 20
 
-visibility=<BookVisibility>            gate still deferred to issue 3
+visibility=<BookVisibility>              gate still deferred to issue 3
 ```
 
 Facets combine with AND between them and OR within them. `labels` is the only exception, because it is the only facet where one `Book` holds many values at once -- `kind` and `status` are single-valued per book, so "all of Manga and Manhwa" is unsatisfiable and no mode parameter could mean anything. That asymmetry is why `labelsMode` exists and why the enums deliberately have no equivalent. `excludedLabels` takes no mode either, and this is a rejection rather than an omission: exclusion is a blocklist and a blocklist is inherently "any of these". An `excludedLabelsMode=And` would hide only books carrying *every* excluded value at once, so a book tagged just `Gore` would still reach a reader who asked to exclude gore. That is not a niche preference, it is a bug with a parameter in front of it.

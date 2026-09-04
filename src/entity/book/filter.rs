@@ -118,7 +118,7 @@ pub struct BookCursor {
 pub struct BookSelection {
     pub visibility: BookVisibility,
     pub sort_field: BookSortField,
-    pub sort_order: SortOrder,
+    pub order: SortOrder,
     pub labels: LabelFilter,
     pub kinds: BookKinds,
     pub statuses: BookStatuses,
@@ -247,7 +247,7 @@ mod tests {
                 ..stub()
             },
             BookSelection {
-                sort_order: SortOrder::Asc,
+                order: SortOrder::Asc,
                 ..stub()
             },
         ];
