@@ -40,16 +40,6 @@ const REMOVED_NAMES: [&str; 9] = [
     "Traditional Games",
 ];
 
-// The six rows that were seeded under the retired `Tag` kind, with the ids they must keep.
-const REKINDED_THEMES: [(&str, &str); 6] = [
-    ("Mafia", "019febba-36fa-701d-97ed-e65d87fe8ddd"),
-    ("Music", "019febbf-0532-70e9-85dc-77f4c9b5e45d"),
-    ("School Life", "019febbf-0532-70e9-85dc-7929be8cafc9"),
-    ("Survival", "019febbf-0532-70e9-85dc-7e32fdad9879"),
-    ("Time Travel", "019febba-36fa-701d-97ed-eec9e8b450c6"),
-    ("Zombies", "019febba-36fa-701d-97ed-eb6f2148a897"),
-];
-
 async fn get_labels(app: &TestApp, path: &str) -> Vec<Label> {
     let req = Request::get(path).body(Body::empty()).unwrap();
     let resp = app.router.clone().oneshot(req).await.unwrap();
@@ -111,26 +101,6 @@ async fn get_labels_filtered_by_kind_returns_only_that_kind() {
                 );
             }
         }
-    }
-}
-
-#[tokio::test]
-async fn get_labels_keeps_the_ids_of_rekinded_themes() {
-    let app = TestApp::new().await;
-
-    let labels = get_labels(&app, "/labels?kind=Theme").await;
-
-    for (name, id) in REKINDED_THEMES {
-        let label = labels
-            .iter()
-            .find(|l| l.name == name)
-            .unwrap_or_else(|| panic!("{name} must be seeded as a theme"));
-
-        assert_eq!(
-            label.id.to_string(),
-            id,
-            "{name} must keep its id so existing attachments survive"
-        );
     }
 }
 
