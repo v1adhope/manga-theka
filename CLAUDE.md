@@ -24,6 +24,7 @@ This is an API for reading and hosting user-uploaded manga, manhwa, and manhua.
 Read the doc before editing its area.
 
 - `docs/rust.md` — before writing or editing Rust code, crate dependencies, or Rust tooling configs.
+- `docs/api.md` — before designing or changing an HTTP route, request/response shape, status code, or query parameter.
 - `docs/git.md` — before branching, committing, or pushing.
 - `docs/issue-tracker.md` — before creating, reading, or commenting on a GitHub issue or PR.
 - `docs/sql.md` — before writing or editing a SQL query, migration, or schema.

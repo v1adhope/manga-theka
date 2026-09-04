@@ -3,10 +3,10 @@
 ## Conventions
 
 - Don't write unsafe code.
-- Use `camelCase` for JSON keys and `PascalCase` for enum JSON values in router contracts. Variants serialize verbatim, so an enum takes no `rename_all`.
+- Router-contract enums serialize their variants verbatim — no `rename_all`, no per-variant `rename`.
+- Refer to `docs/api.md` for wire casing and time format.
 - Follow Guard Clause / Early Return Pattern.
 - Log internal errors immediately at the point of failure.
-- Time format is `RFC3339`.
 - Don't pass external invalid data to the application layer, use `NewType Pattern`.
 - Derive what you use now — add macros when a real need arises, not in advance for possible future use. Exception is `Debug`.
 - Don't add indirection for a single implementation — no trait or generic parameter with one implementor. Add it when the second one exists, or when a layer boundary needs the dependency inverted.
