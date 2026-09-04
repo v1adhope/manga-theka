@@ -48,3 +48,34 @@ begin
 	return v_deleted;
 end;
 $$ language plpgsql;
+
+create function delete_rejected_books() returns bigint as $$
+declare
+	v_deleted bigint;
+begin
+	with victim as (
+		select b.id
+		from books b
+		where b.visibility = 'Rejected'
+			and b.updated_at < now() - interval '7 days'
+			and not exists (select 1 from chapters c where c.book_id = b.id)
+		order by b.updated_at
+		limit 5000
+	),
+	enqueue as (
+		insert into orphaned_objects(id, kind, object_key, source, enqueued_at)
+		select uuidv7(), 'BookCover', bc.id, 'RejectedBook', now()
+		from book_covers bc
+		join victim v on v.id = bc.book_id
+	),
+	del as (
+		delete from books b
+		using victim v
+		where b.id = v.id
+		returning b.id
+	)
+	select count(*) into v_deleted from del;
+
+	return v_deleted;
+end;
+$$ language plpgsql;

@@ -328,6 +328,64 @@ impl TestApp {
         book.id
     }
 
+    pub async fn insert_book_with_visibility_at(
+        &self,
+        visibility: BookVisibility,
+        updated_at: time::OffsetDateTime,
+    ) -> Uuid {
+        let book: BookQuery = BookFaker {
+            visibility,
+            updated_at: Some(updated_at),
+            ..Default::default()
+        }
+        .fake();
+
+        self.insert_book(&book).await;
+
+        book.id
+    }
+
+    pub async fn seed_rejected_books(&self, count: i32, updated_at: time::OffsetDateTime) {
+        sqlx::query!(
+            r#"
+insert into books(id, name, description, publication_year, content_rating, status, kind,
+                  publication_language, publication_demographic, visibility, updated_at,
+                  created_at)
+select uuidv7(), 'Rejected ' || n, 'Seeded for reclamation', 2020, $2, 'Ongoing', 'Manga', $3,
+       'Shounen', 'Rejected', $4, now()
+from generate_series(1, $1) as n;
+        "#,
+            count,
+            CONTENT_RATINGS[0].id,
+            LANGUAGES[0].id,
+            updated_at
+        )
+        .execute(&self.pool)
+        .await
+        .expect("failed to seed factory rejected books");
+    }
+
+    pub async fn fetch_book_id(&self, id: Uuid) -> Option<Uuid> {
+        sqlx::query_scalar!(
+            r#"
+select id
+from books
+where id = $1;
+        "#,
+            id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .expect("failed to read book id")
+    }
+
+    pub async fn delete_rejected_books(&self) -> i64 {
+        sqlx::query_scalar!(r#"select delete_rejected_books() as "count!""#)
+            .fetch_one(&self.pool)
+            .await
+            .expect("failed to purge rejected books")
+    }
+
     pub async fn fetch_book_visibility_state(&self, id: Uuid) -> BookVisibilityState {
         let row = sqlx::query!(
             r#"
@@ -694,6 +752,20 @@ order by c.id;
         }
     }
 
+    pub async fn count_book_creators(&self, book_id: Uuid) -> i64 {
+        sqlx::query_scalar!(
+            r#"
+select count(*) as "count!"
+from book_creators
+where book_id = $1;
+        "#,
+            book_id
+        )
+        .fetch_one(&self.pool)
+        .await
+        .expect("failed to count book creator credits")
+    }
+
     pub async fn insert_random_book(&self) -> Uuid {
         let book: BookQuery = BookFaker::default().fake();
         self.insert_book(&book).await;
@@ -797,6 +869,19 @@ from unnest($2::uuid[], $3::text[]) as localization(language_id, name);
         .execute(&self.pool)
         .await
         .expect("failed to insert factory chapter localizations");
+    }
+
+    pub async fn delete_chapter_row(&self, id: Uuid) {
+        sqlx::query!(
+            r#"
+delete from chapters
+where id = $1;
+        "#,
+            id
+        )
+        .execute(&self.pool)
+        .await
+        .expect("failed to delete factory chapter");
     }
 
     pub async fn insert_numbered_chapters(&self, book_id: Uuid, numbers: &[f32]) {

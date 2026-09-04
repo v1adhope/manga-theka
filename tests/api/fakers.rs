@@ -389,6 +389,7 @@ pub struct BookFaker {
     pub publication_language: Option<Language>,
     pub publication_demographic: Option<PublicationDemographic>,
     pub publication_year: Option<i16>,
+    pub updated_at: Option<OffsetDateTime>,
     pub created_at: Option<OffsetDateTime>,
 }
 
@@ -408,6 +409,7 @@ impl Default for BookFaker {
             publication_language: None,
             publication_demographic: None,
             publication_year: None,
+            updated_at: None,
             created_at: None,
         }
     }
@@ -468,7 +470,7 @@ impl Dummy<BookFaker> for BookQuery {
             visibility: config.visibility,
             note: None,
             submitted_at: None,
-            updated_at: None,
+            updated_at: config.updated_at,
             created_at: config.created_at.unwrap_or(OffsetDateTime::UNIX_EPOCH),
         }
     }
