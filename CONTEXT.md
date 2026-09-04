@@ -144,6 +144,14 @@ _Avoid_: Page image, Scan page
 An image uploaded into a `Chapter Release` but not yet given a `Sort Order`, and so not yet part of what readers see. Becomes a `Chapter Page` when a declared order includes it, and ceases to exist when one leaves it out.
 _Avoid_: Draft page, Pending page, Unordered page
 
+**Stale Staged Page**:
+A `Staged Page` whose `Chapter Release` has gone untouched long enough that the upload it belongs to is treated as abandoned. Staleness is a property of the whole `Chapter Release` rather than of one image, so pages still arriving hold the entire set live. Never part of what readers see, and eligible for `Reclamation`.
+_Avoid_: Expired page, Dead page, Abandoned upload
+
+**Orphaned Object**:
+A stored image that no `Book` or `Chapter Release` still claims -- one that has outlived the record naming it. Invisible to readers and to the `User` who uploaded it; it persists only until `Reclamation` reaches it.
+_Avoid_: Dangling file, Garbage, Unreferenced image
+
 ## Moderation
 
 **Book Visibility**:
@@ -157,3 +165,7 @@ _Avoid_: Review note, Comment, Reason, Moderation note, Internal note
 **Feedback**:
 An inbound message from a `Guest` or `User`, no `Role` required, carrying a reply-to email and a note. One of three kinds: `Report` (flags a specific `Book` for a removal-worthy problem), `Correction` (a proposed metadata fix for a specific `Book`), or `General` (site-wide feedback tied to no `Book` -- a bug report, a feature request, a question, or a message to the operators); the first two reference a `Book`, `General` does not. Progresses through `Open`, `Resolved`, and `Dismissed`, and is always retained.
 _Avoid_: Complaint, Report (as the entity name), Ticket, Flag
+
+**Reclamation**:
+The standing removal of material the domain no longer treats as live -- `Stale Staged Page`s, `Rejected` `Book`s that hold no `Chapter`s, and the `Orphaned Object`s both leave behind. Never a step in anyone's request: it happens on its own schedule, after a grace period long enough that a `User` who is still working is never caught by it. A `Rejected` `Book` that still holds content is left for a `Moderator`, since removing it would discard work nobody asked to discard.
+_Avoid_: Cleanup, Garbage collection, Purge, Sweep
