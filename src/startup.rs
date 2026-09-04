@@ -96,9 +96,9 @@ impl App {
                 "/releases/{id}/pages/{page_id}/image",
                 get(get_chapter_page_image),
             )
-            .route("/feedback", post(store_feedback).get(get_feedbacks))
-            .route("/feedback/{id}", get(get_feedback))
-            .route("/feedback/{id}/status", put(update_feedback_status))
+            .route("/feedbacks", post(store_feedback).get(get_feedbacks))
+            .route("/feedbacks/{id}", get(get_feedback))
+            .route("/feedbacks/{id}/status", put(update_feedback_status))
             .with_state(service);
 
         Self {

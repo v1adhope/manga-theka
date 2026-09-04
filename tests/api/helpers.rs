@@ -968,7 +968,7 @@ values($1, $2, $3);
     }
 
     pub async fn post_feedback(&self, body: serde_json::Value) -> Response {
-        let req = Request::post("/feedback")
+        let req = Request::post("/feedbacks")
             .header(header::CONTENT_TYPE, "application/json")
             .body(Body::from(body.to_string()))
             .unwrap();
@@ -1035,7 +1035,7 @@ where f.id = $1;
     }
 
     pub async fn get_feedback(&self, id: Uuid) -> Response {
-        let req = Request::get(format!("/feedback/{id}"))
+        let req = Request::get(format!("/feedbacks/{id}"))
             .body(Body::empty())
             .unwrap();
 
@@ -1044,7 +1044,7 @@ where f.id = $1;
 
     pub async fn put_feedback_status(&self, id: Uuid, status: &str) -> StatusCode {
         let body = serde_json::json!({ "status": status }).to_string();
-        let req = Request::put(format!("/feedback/{id}/status"))
+        let req = Request::put(format!("/feedbacks/{id}/status"))
             .header(header::CONTENT_TYPE, "application/json")
             .body(Body::from(body))
             .unwrap();
