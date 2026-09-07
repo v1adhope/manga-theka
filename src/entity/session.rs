@@ -5,7 +5,7 @@ use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
 use crate::{
-    entity::{Entity, Text},
+    entity::{Entity, Text, Timestamp},
     error::EntityError,
 };
 
@@ -34,10 +34,8 @@ pub struct Session {
     pub jti: JtiHash,
     pub ua: Option<Text>,
     pub ip: Option<IpAddr>,
-    #[serde(with = "time::serde::rfc3339")]
-    pub created_at: OffsetDateTime,
-    #[serde(with = "time::serde::rfc3339")]
-    pub updated_at: OffsetDateTime,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 impl Entity for Session {
@@ -45,10 +43,8 @@ impl Entity for Session {
 }
 
 impl Session {
-    /// A session younger than 24h may not revoke other sessions, so a freshly
-    /// compromised credential cannot lock the user out of their live sessions.
     pub fn ensure_revoker(&self, now: OffsetDateTime) -> Result<(), EntityError> {
-        if now - self.created_at < MIN_REVOKER_AGE {
+        if now - OffsetDateTime::from(self.created_at) < MIN_REVOKER_AGE {
             return Err(EntityError::SessionTooNewToRevoke);
         }
 
@@ -56,17 +52,14 @@ impl Session {
     }
 }
 
-/// The `GET /sessions/me` read shape -- `jti` absent by construction.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionQuery {
     pub sid: Uuid,
     pub ua: Option<Text>,
     pub ip: Option<IpAddr>,
-    #[serde(with = "time::serde::rfc3339")]
-    pub created_at: OffsetDateTime,
-    #[serde(with = "time::serde::rfc3339")]
-    pub updated_at: OffsetDateTime,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 impl SessionQuery {
@@ -98,8 +91,8 @@ mod tests {
             jti: JtiHash::from_hex("deadbeef".to_owned()),
             ua: None,
             ip: None,
-            created_at: now - age,
-            updated_at: now - age,
+            created_at: (now - age).into(),
+            updated_at: (now - age).into(),
         }
     }
 

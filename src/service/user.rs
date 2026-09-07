@@ -36,7 +36,7 @@ impl Service {
             password_hash,
             roles: vec![Role::Reader],
             verified_at: None,
-            created_at,
+            created_at: created_at.into(),
         };
 
         self.database.store_user(&user).await?;

@@ -404,8 +404,8 @@ values($1, $2, $3, $4, $5, $6, $7);
             user.username.as_ref(),
             user.password_hash.as_ref(),
             &roles,
-            user.verified_at,
-            user.created_at,
+            user.verified_at.map(time::OffsetDateTime::from),
+            time::OffsetDateTime::from(user.created_at),
         )
         .execute(&self.pool)
         .await
@@ -419,8 +419,8 @@ values($1, $2, $3, $4, $5, $6, $7);
             jti: self.hasher.keyed_jti_hash(Uuid::now_v7()),
             ua: None,
             ip: None,
-            created_at,
-            updated_at: created_at,
+            created_at: created_at.into(),
+            updated_at: created_at.into(),
         };
 
         self.memory

@@ -188,8 +188,8 @@ impl Dummy<UserFaker> for User {
             roles: config.roles.clone(),
             verified_at: config
                 .verified
-                .then(|| OffsetDateTime::now_utc() - time::Duration::hours(1)),
-            created_at: OffsetDateTime::now_utc(),
+                .then(|| (OffsetDateTime::now_utc() - time::Duration::hours(1)).into()),
+            created_at: OffsetDateTime::now_utc().into(),
         }
     }
 }

@@ -186,8 +186,8 @@ async fn refresh_with_an_expired_token_returns_401() {
                 jti: app.hasher.keyed_jti_hash(jti),
                 ua: None,
                 ip: None,
-                created_at: long_ago,
-                updated_at: long_ago,
+                created_at: long_ago.into(),
+                updated_at: long_ago.into(),
             },
         )
         .await

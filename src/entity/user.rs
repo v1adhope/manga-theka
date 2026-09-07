@@ -4,11 +4,10 @@ use std::sync::LazyLock;
 use regex::Regex;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
-    entity::{Email, Entity},
+    entity::{Email, Entity, Timestamp},
     error::EntityError,
 };
 
@@ -130,10 +129,8 @@ pub struct User {
     #[serde(skip_serializing)]
     pub password_hash: PasswordHash,
     pub roles: Vec<Role>,
-    #[serde(with = "time::serde::rfc3339::option")]
-    pub verified_at: Option<OffsetDateTime>,
-    #[serde(with = "time::serde::rfc3339")]
-    pub created_at: OffsetDateTime,
+    pub verified_at: Option<Timestamp>,
+    pub created_at: Timestamp,
 }
 
 impl Entity for User {
@@ -159,9 +156,10 @@ impl UserClaims {
 
 #[cfg(test)]
 mod tests {
+    use time::OffsetDateTime;
     use uuid::Uuid;
 
-    use crate::entity::{Password, Role, UserClaims, Username};
+    use crate::entity::{Email, Password, PasswordHash, Role, User, UserClaims, Username};
 
     fn claims(roles: &[Role]) -> UserClaims {
         UserClaims {
@@ -169,6 +167,37 @@ mod tests {
             sid: Uuid::now_v7(),
             roles: roles.to_vec(),
         }
+    }
+
+    #[test]
+    fn serializing_a_user_never_exposes_the_password_hash() {
+        let user = User {
+            id: Uuid::now_v7(),
+            email: Email::try_from("reader@example.com".to_owned()).unwrap(),
+            username: Username::try_from("reader".to_owned()).unwrap(),
+            password_hash: PasswordHash::try_from(
+                "$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$aGFzaA".to_owned(),
+            )
+            .unwrap(),
+            roles: vec![Role::Reader],
+            verified_at: None,
+            created_at: OffsetDateTime::now_utc().into(),
+        };
+
+        let json = serde_json::to_value(&user).unwrap();
+
+        assert!(
+            json.get("passwordHash").is_none(),
+            "camelCase key must be absent"
+        );
+        assert!(
+            json.get("password_hash").is_none(),
+            "snake_case key must be absent"
+        );
+        assert!(
+            !serde_json::to_string(&user).unwrap().contains("aGFzaA"),
+            "the hash value must not leak under any key"
+        );
     }
 
     #[test]

@@ -64,8 +64,8 @@ impl Service {
             jti: self.hasher.keyed_jti_hash(jti),
             ua,
             ip,
-            created_at: now,
-            updated_at: now,
+            created_at: now.into(),
+            updated_at: now.into(),
         };
         self.memory.put_session(user.id, sid, &session).await?;
 
@@ -104,7 +104,7 @@ impl Service {
             ua: session.ua,
             ip: session.ip,
             created_at: session.created_at,
-            updated_at: now,
+            updated_at: now.into(),
         };
         self.memory
             .put_session(claims.sub, claims.sid, &rotated)

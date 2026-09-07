@@ -40,8 +40,8 @@ impl TryFrom<UserRow> for User {
             username,
             password_hash,
             roles,
-            verified_at: row.verified_at,
-            created_at: row.created_at,
+            verified_at: row.verified_at.map(Into::into),
+            created_at: row.created_at.into(),
         })
     }
 }
@@ -58,8 +58,8 @@ impl Database {
             item.username.as_ref(),
             item.password_hash.as_ref(),
             &roles as &[&str],
-            item.verified_at,
-            item.created_at,
+            item.verified_at.map(OffsetDateTime::from),
+            OffsetDateTime::from(item.created_at),
         )
         .execute(&self.pool)
         .await
