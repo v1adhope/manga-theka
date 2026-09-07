@@ -114,12 +114,6 @@ impl AsRef<str> for PasswordHash {
     }
 }
 
-impl PasswordHash {
-    pub fn into_inner(self) -> String {
-        self.0
-    }
-}
-
 /// What a caller asks to create at registration, before the system stamps an id,
 /// hashes the password, or applies role defaults. [`UserQuery`] is the read side.
 #[derive(Debug)]
