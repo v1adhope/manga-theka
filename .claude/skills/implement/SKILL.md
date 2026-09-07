@@ -10,6 +10,6 @@ Use /tdd where possible, at pre-agreed seams.
 
 Run typechecking regularly, single test files regularly, and the full test suite once at the end.
 
-Once done, run /code-review, then /security-review in a subagent.
+Once done, run /code-review, then /security-review as a subagent.
 
 Commit your work to the current branch with /caveman-commit.
