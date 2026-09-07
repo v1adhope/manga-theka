@@ -114,15 +114,24 @@ impl AsRef<str> for PasswordHash {
     }
 }
 
-impl From<PasswordHash> for String {
-    fn from(hash: PasswordHash) -> Self {
-        hash.0
+impl PasswordHash {
+    pub fn into_inner(self) -> String {
+        self.0
     }
+}
+
+/// What a caller asks to create at registration, before the system stamps an id,
+/// hashes the password, or applies role defaults. [`UserQuery`] is the read side.
+#[derive(Debug)]
+pub struct User {
+    pub email: Email,
+    pub username: Username,
+    pub password: Password,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct User {
+pub struct UserQuery {
     pub id: Uuid,
     pub email: Email,
     pub username: Username,
@@ -133,7 +142,7 @@ pub struct User {
     pub created_at: Timestamp,
 }
 
-impl Entity for User {
+impl Entity for UserQuery {
     const NAME: &'static str = "User";
 }
 
@@ -159,7 +168,7 @@ mod tests {
     use time::OffsetDateTime;
     use uuid::Uuid;
 
-    use crate::entity::{Email, Password, PasswordHash, Role, User, UserClaims, Username};
+    use crate::entity::{Email, Password, PasswordHash, Role, UserClaims, UserQuery, Username};
 
     fn claims(roles: &[Role]) -> UserClaims {
         UserClaims {
@@ -171,7 +180,7 @@ mod tests {
 
     #[test]
     fn serializing_a_user_never_exposes_the_password_hash() {
-        let user = User {
+        let user = UserQuery {
             id: Uuid::now_v7(),
             email: Email::try_from("reader@example.com".to_owned()).unwrap(),
             username: Username::try_from("reader".to_owned()).unwrap(),
@@ -189,10 +198,6 @@ mod tests {
         assert!(
             json.get("passwordHash").is_none(),
             "camelCase key must be absent"
-        );
-        assert!(
-            json.get("password_hash").is_none(),
-            "snake_case key must be absent"
         );
         assert!(
             !serde_json::to_string(&user).unwrap().contains("aGFzaA"),

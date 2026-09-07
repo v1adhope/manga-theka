@@ -1,5 +1,7 @@
 /target
 .env
 /untracked
-/.keys
+.keys/
+*.pem
+*.key
 sbx-cmt-*.tar

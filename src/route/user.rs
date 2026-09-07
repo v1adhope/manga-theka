@@ -4,7 +4,7 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
-    entity::{Email, Password, UserClaims, Username},
+    entity::{Email, Password, User, UserClaims, Username},
     error::AppError,
     route::json_data_response,
     service::Service,
@@ -18,6 +18,18 @@ pub struct RegisterReq {
     pub password: String,
 }
 
+impl TryFrom<RegisterReq> for User {
+    type Error = AppError;
+
+    fn try_from(req: RegisterReq) -> Result<Self, Self::Error> {
+        Ok(Self {
+            email: Email::try_from(req.email)?,
+            username: Username::try_from(req.username)?,
+            password: Password::try_from(req.password)?,
+        })
+    }
+}
+
 pub async fn register_user(
     State(service): State<Service>,
     Json(req): Json<RegisterReq>,
@@ -25,15 +37,11 @@ pub async fn register_user(
     let id = Uuid::now_v7();
     let created_at = OffsetDateTime::now_utc();
 
-    let email = Email::try_from(req.email)?;
-    let username = Username::try_from(req.username)?;
-    let password = Password::try_from(req.password)?;
+    let user = User::try_from(req)?;
 
-    let user = service
-        .register_user(id, email, username, password, created_at)
-        .await?;
+    let stored = service.register_user(id, user, created_at).await?;
 
-    Ok(json_data_response(StatusCode::CREATED, user))
+    Ok(json_data_response(StatusCode::CREATED, stored))
 }
 
 pub async fn get_me(

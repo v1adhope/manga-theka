@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     database::{Database, Invariant},
-    entity::{Email, PasswordHash, Role, Timestamp, User, Username},
+    entity::{Email, PasswordHash, Role, Timestamp, UserQuery, Username},
     error::DatabaseError,
 };
 
@@ -19,7 +19,7 @@ pub(super) struct UserRow {
     pub(super) created_at: OffsetDateTime,
 }
 
-impl TryFrom<UserRow> for User {
+impl TryFrom<UserRow> for UserQuery {
     type Error = DatabaseError;
 
     fn try_from(row: UserRow) -> Result<Self, Self::Error> {
@@ -34,7 +34,7 @@ impl TryFrom<UserRow> for User {
             roles.push(role);
         }
 
-        Ok(User {
+        Ok(UserQuery {
             id: row.id,
             email,
             username,
@@ -48,7 +48,7 @@ impl TryFrom<UserRow> for User {
 
 impl Database {
     #[instrument(name = "db.user.store", skip_all, fields(user.id = %item.id))]
-    pub async fn store_user(&self, item: &User) -> Result<(), DatabaseError> {
+    pub async fn store_user(&self, item: &UserQuery) -> Result<(), DatabaseError> {
         let roles: Vec<&str> = item.roles.iter().map(AsRef::as_ref).collect();
 
         sqlx::query_file!(
@@ -70,35 +70,41 @@ impl Database {
     }
 
     #[instrument(name = "db.user.get", skip_all, fields(user.id = %id))]
-    pub async fn get_user(&self, id: Uuid) -> Result<User, DatabaseError> {
+    pub async fn get_user(&self, id: Uuid) -> Result<UserQuery, DatabaseError> {
         self.get_user_inner(id)
             .await
             .inspect_err(DatabaseError::log_internal)
     }
 
-    async fn get_user_inner(&self, id: Uuid) -> Result<User, DatabaseError> {
+    async fn get_user_inner(&self, id: Uuid) -> Result<UserQuery, DatabaseError> {
         let row = sqlx::query_file_as!(UserRow, "queries/get_user.sql", id)
             .fetch_optional(&self.pool)
             .await?;
 
         match row {
-            Some(row) => User::try_from(row),
-            None => Err(DatabaseError::not_found::<User>()),
+            Some(row) => UserQuery::try_from(row),
+            None => Err(DatabaseError::not_found::<UserQuery>()),
         }
     }
 
     #[instrument(name = "db.user.get_by_email", skip_all)]
-    pub async fn get_user_by_email(&self, email: &Email) -> Result<Option<User>, DatabaseError> {
+    pub async fn get_user_by_email(
+        &self,
+        email: &Email,
+    ) -> Result<Option<UserQuery>, DatabaseError> {
         self.get_user_by_email_inner(email)
             .await
             .inspect_err(DatabaseError::log_internal)
     }
 
-    async fn get_user_by_email_inner(&self, email: &Email) -> Result<Option<User>, DatabaseError> {
+    async fn get_user_by_email_inner(
+        &self,
+        email: &Email,
+    ) -> Result<Option<UserQuery>, DatabaseError> {
         let row = sqlx::query_file_as!(UserRow, "queries/get_user_by_email.sql", email.as_ref())
             .fetch_optional(&self.pool)
             .await?;
 
-        row.map(User::try_from).transpose()
+        row.map(UserQuery::try_from).transpose()
     }
 }

@@ -2,7 +2,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use fake::Fake;
 use http_body_util::BodyExt;
-use manga_theka::entity::{Role, User};
+use manga_theka::entity::{Role, UserQuery};
 use uuid::Uuid;
 
 use crate::fakers::UserFaker;
@@ -56,7 +56,7 @@ async fn register_with_a_valid_body_returns_201_and_hides_the_hash() {
 #[tokio::test]
 async fn register_with_a_taken_email_returns_409() {
     let app = TestApp::new().await;
-    let existing: User = UserFaker::default().fake();
+    let existing: UserQuery = UserFaker::default().fake();
     app.insert_user(&existing).await;
 
     let mut body = valid_body();
@@ -68,7 +68,7 @@ async fn register_with_a_taken_email_returns_409() {
 #[tokio::test]
 async fn register_with_a_taken_username_returns_409() {
     let app = TestApp::new().await;
-    let existing: User = UserFaker::default().fake();
+    let existing: UserQuery = UserFaker::default().fake();
     app.insert_user(&existing).await;
 
     let mut body = valid_body();
@@ -115,7 +115,7 @@ async fn register_with_broken_json_returns_400() {
 #[tokio::test]
 async fn get_me_returns_the_caller_without_the_hash() {
     let app = TestApp::new().await;
-    let user: User = UserFaker {
+    let user: UserQuery = UserFaker {
         roles: vec![Role::Reader, Role::Uploader],
         verified: false,
     }
@@ -154,7 +154,7 @@ async fn get_me_without_a_token_returns_401() {
 #[tokio::test]
 async fn get_me_after_the_row_is_gone_returns_404() {
     let app = TestApp::new().await;
-    let user: User = UserFaker::default().fake();
+    let user: UserQuery = UserFaker::default().fake();
     app.insert_user(&user).await;
 
     sqlx::query!("delete from users where id = $1", user.id)

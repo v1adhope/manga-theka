@@ -12,7 +12,7 @@ pub struct Config {
     pub redis: Redis,
     pub jwt_access: Jwt,
     pub jwt_refresh: Jwt,
-    pub blake3: Blake3,
+    pub pepper: Pepper,
     pub password: Password,
     pub log_level: String,
 }
@@ -83,8 +83,10 @@ pub struct Jwt {
     pub ttl: i64,
 }
 
+/// Pepper for the keyed BLAKE3 hash that maps a session refresh jti to its
+/// stored digest.
 #[derive(Deserialize, Debug)]
-pub struct Blake3 {
+pub struct Pepper {
     pub key: SecretString,
 }
 

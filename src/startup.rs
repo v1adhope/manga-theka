@@ -58,7 +58,7 @@ impl App {
             cfg.password.m_cost,
             cfg.password.t_cost,
             cfg.password.p_cost,
-            cfg.blake3.key.expose_secret().as_bytes(),
+            cfg.pepper.key.expose_secret().as_bytes(),
         )
         .expect("failed to build the password hasher");
 

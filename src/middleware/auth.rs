@@ -26,20 +26,24 @@ pub async fn authenticate(
     mut req: Request,
     next: Next,
 ) -> Response {
-    let claims = req
+    let auth_header = req
         .headers()
         .get(header::AUTHORIZATION)
-        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.to_str().ok());
+
+    let token = auth_header
         .and_then(|value| value.split_once(' '))
         .filter(|(scheme, _)| scheme.eq_ignore_ascii_case("bearer"))
         .map(|(_, token)| token.trim())
-        .filter(|token| !token.is_empty())
-        .and_then(|token| service.jwt.verify_access(token).ok())
-        .map(|access| UserClaims {
-            id: access.sub,
-            sid: access.sid,
-            roles: access.roles,
-        });
+        .filter(|token| !token.is_empty());
+
+    let access = token.and_then(|token| service.jwt.verify_access(token).ok());
+
+    let claims = access.map(|access| UserClaims {
+        id: access.sub,
+        sid: access.sid,
+        roles: access.roles,
+    });
 
     req.extensions_mut().insert::<Option<UserClaims>>(claims);
     next.run(req).await
@@ -49,7 +53,6 @@ type BoxFuture = Pin<Box<dyn Future<Output = Response> + Send>>;
 
 type GateFn = fn(State<&'static [Role]>, Extension<Option<UserClaims>>, Request, Next) -> BoxFuture;
 
-/// The layer type `require_roles` produces.
 pub type RoleGate = FromFnLayer<
     GateFn,
     &'static [Role],
@@ -60,8 +63,6 @@ pub type RoleGate = FromFnLayer<
     ),
 >;
 
-/// A `route_layer` over the same extension: empty role intersection -> 403,
-/// absent claims -> 401. Pure OR, no hierarchy.
 pub fn require_roles(allowed: &'static [Role]) -> RoleGate {
     from_fn_with_state(allowed, gate as GateFn)
 }

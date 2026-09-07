@@ -2,7 +2,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use fake::Fake;
 use http_body_util::BodyExt;
-use manga_theka::entity::{Role, Session, User};
+use manga_theka::entity::{Role, Session, UserQuery};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
@@ -42,8 +42,8 @@ async fn body_json(resp: axum::response::Response) -> serde_json::Value {
     serde_json::from_slice(&bytes).unwrap()
 }
 
-async fn seeded_user(app: &TestApp) -> User {
-    let user: User = UserFaker {
+async fn seeded_user(app: &TestApp) -> UserQuery {
+    let user: UserQuery = UserFaker {
         roles: vec![Role::Reader],
         verified: true,
     }

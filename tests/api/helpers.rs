@@ -17,7 +17,7 @@ use manga_theka::{
         BookVisibility, Chapter, ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume,
         ContentRating, CoverUrl, Creator, CreatorQuery, CreatorRole, Email, Feedback,
         ImageExtension, Label, Language, LinkUrl, Name, PublicationDemographic, Role, Session,
-        Text, Timestamp, User,
+        Text, Timestamp, UserQuery,
     },
     hasher::Hasher,
     jwt::Jwt,
@@ -307,7 +307,7 @@ impl TestApp {
             ("APP_JWT_REFRESH__PRIVATE_KEY", refresh_private.as_str()),
             ("APP_JWT_REFRESH__PUBLIC_KEY", refresh_public.as_str()),
             ("APP_JWT_REFRESH__TTL", "2592000"),
-            ("APP_BLAKE3__KEY", "test-pepper"),
+            ("APP_PEPPER__KEY", "test-pepper"),
             // Minimum viable Argon2 cost -- tests exercise behavior, not
             // hardness, and every `Hasher::new` pays one hash for its dummy PHC.
             ("APP_PASSWORD__M_COST", "8"),
@@ -391,7 +391,7 @@ impl TestApp {
         format!("Bearer {}", self.access_token(sub, sid, roles))
     }
 
-    pub async fn insert_user(&self, user: &User) {
+    pub async fn insert_user(&self, user: &UserQuery) {
         let roles: Vec<String> = user.roles.iter().map(|r| r.as_ref().to_owned()).collect();
 
         sqlx::query!(

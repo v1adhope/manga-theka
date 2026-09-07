@@ -12,7 +12,7 @@ use manga_theka::entity::{
     BookVisibility, Chapter, ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume,
     ContentRating, Creator, CreatorQuery, CreatorRole, Email, Feedback, FeedbackKind,
     FeedbackStatus, Label, LabelKind, Language, LinkUrl, Name, PasswordHash,
-    PublicationDemographic, Role, Text, User, Username,
+    PublicationDemographic, Role, Text, UserQuery, Username,
 };
 use time::OffsetDateTime;
 use uuid::{Uuid, uuid};
@@ -175,12 +175,12 @@ impl Default for UserFaker {
     }
 }
 
-impl Dummy<UserFaker> for User {
+impl Dummy<UserFaker> for UserQuery {
     fn dummy_with_rng<R: RngExt + ?Sized>(config: &UserFaker, _rng: &mut R) -> Self {
         let id = Uuid::now_v7();
         let handle = id.simple().to_string();
 
-        User {
+        UserQuery {
             id,
             email: Email::try_from(format!("{}@example.test", &handle[..12])).unwrap(),
             username: Username::try_from(format!("u{}", &handle[..16])).unwrap(),

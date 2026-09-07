@@ -4,7 +4,7 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
-    entity::{Email, Session, SessionQuery, Text, User},
+    entity::{Email, Session, SessionQuery, Text, UserQuery},
     error::{EntityError, ServiceError},
     service::Service,
 };
@@ -52,7 +52,7 @@ impl Service {
 
     async fn mint_session(
         &self,
-        user: &User,
+        user: &UserQuery,
         ua: Option<Text>,
         ip: Option<IpAddr>,
         now: OffsetDateTime,
