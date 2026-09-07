@@ -26,6 +26,15 @@ services:
     volumes:
       - rustfsdata:/data
 
+  redis:
+    image: redis:8
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+
 volumes:
   pgdata:
   rustfsdata:
+  redisdata:

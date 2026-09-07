@@ -3,7 +3,6 @@ use axum::{
     http::{Request, StatusCode},
 };
 use http_body_util::BodyExt;
-use tower::ServiceExt;
 
 use crate::fakers::{
     ACTION, BookFaker, CONTENT_RATINGS, FANTASY, ISEKAI, LABELS, LANGUAGES, LONG_STRIP, MAFIA,
@@ -285,7 +284,7 @@ async fn get_books_embeds_each_books_own_arrays() {
     app.insert_book(&full).await;
 
     let req = Request::get("/books").body(Body::empty()).unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -328,7 +327,7 @@ async fn get_books_returns_default_limit_and_next_cursor() {
     }
 
     let req = Request::get("/books").body(Body::empty()).unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -374,7 +373,7 @@ async fn get_books_desc_order_confirmed() {
     ids.sort_by(|a, b| b.cmp(a));
 
     let req = Request::get("/books").body(Body::empty()).unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -389,7 +388,7 @@ async fn get_books_zero_limit_returns_422() {
     let app = TestApp::new().await;
 
     let req = Request::get("/books?limit=0").body(Body::empty()).unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
 
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
@@ -401,7 +400,7 @@ async fn get_books_invalid_cursor_returns_400() {
     let req = Request::get("/books?cursor=not-a-cursor!!")
         .body(Body::empty())
         .unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
 
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
@@ -514,7 +513,7 @@ async fn a_cursor_minted_under_another_filter_returns_400() {
         format!("/books?limit=2&cursor={cursor}"),
     ] {
         let req = Request::get(&changed).body(Body::empty()).unwrap();
-        let resp = app.router.clone().oneshot(req).await.unwrap();
+        let resp = app.send(req).await;
 
         assert_error(resp, StatusCode::BAD_REQUEST).await;
     }
@@ -634,7 +633,7 @@ async fn get_books_rejects_malformed_and_out_of_range_queries() {
         let req = Request::get(format!("/books{query}"))
             .body(Body::empty())
             .unwrap();
-        let resp = app.router.clone().oneshot(req).await.unwrap();
+        let resp = app.send(req).await;
 
         assert_eq!(resp.status(), expected, "{query:?}");
     }
@@ -649,7 +648,7 @@ async fn get_books_accepts_duplicates_that_fit_after_deduping() {
     let req = Request::get(format!("/books?a=1{repeated}"))
         .body(Body::empty())
         .unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
 
     assert_eq!(resp.status(), StatusCode::OK);
 }

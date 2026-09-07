@@ -4,7 +4,6 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use time::OffsetDateTime;
-use tower::ServiceExt;
 
 use crate::fakers::CreatorFaker;
 use crate::helpers::{RespWrapper, TestApp, assert_error, assert_stored};
@@ -24,7 +23,7 @@ async fn store_creator_with_valid_body_passes() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     let id = assert_stored(resp).await;
 
     let row = sqlx::query!("select id, first_name, last_name, created_at from creators",)
@@ -46,7 +45,7 @@ async fn store_creator_with_broken_json_returns_400() {
         .body(Body::from("{not json"))
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
 
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
@@ -63,7 +62,7 @@ async fn store_creator_with_missing_first_name_returns_422() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
 
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
@@ -86,7 +85,7 @@ async fn update_creator_with_valid_body_passes() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let row = sqlx::query!("select first_name, last_name, created_at from creators")
@@ -121,7 +120,7 @@ async fn update_creator_leaves_other_creators_untouched() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let row = sqlx::query!(
@@ -154,7 +153,7 @@ async fn update_creator_with_unknown_id_returns_404() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::NOT_FOUND).await;
 }
 
@@ -177,7 +176,7 @@ async fn update_creator_fullname_duplication_returns_409() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::CONFLICT).await;
 }
 
@@ -199,7 +198,7 @@ async fn update_creator_name_validation_failure_returns_422() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
 
@@ -272,7 +271,7 @@ async fn get_creators_returns_default_limit_and_next_cursor() {
     }
 
     let req = Request::get("/creators").body(Body::empty()).unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -294,7 +293,7 @@ async fn get_creators_with_after_and_limit_3_returns_next_page() {
     let req = Request::get("/creators?limit=3")
         .body(Body::empty())
         .unwrap();
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let body = resp.into_body().collect().await.unwrap().to_bytes();
@@ -306,7 +305,7 @@ async fn get_creators_with_after_and_limit_3_returns_next_page() {
     let second_req = Request::get(format!("/creators?limit=3&after={cursor}"))
         .body(Body::empty())
         .unwrap();
-    let second_resp = app.router.oneshot(second_req).await.unwrap();
+    let second_resp = app.send(second_req).await;
     assert_eq!(second_resp.status(), StatusCode::OK);
 
     let second_body = second_resp.into_body().collect().await.unwrap().to_bytes();
@@ -332,7 +331,7 @@ async fn get_creators_desc_order_confirmed() {
     ids.sort_by(|a, b| b.cmp(a));
 
     let req = Request::get("/creators").body(Body::empty()).unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
     let resp: RespWrapper<Vec<CreatorQuery>> = serde_json::from_slice(&bytes).unwrap();
     let returned_ids: Vec<uuid::Uuid> = resp.data.iter().map(|c| c.id).collect();
@@ -348,7 +347,7 @@ async fn get_creators_next_cursor_null_on_last_page() {
     }
 
     let req = Request::get("/creators").body(Body::empty()).unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     let body = resp.into_body().collect().await.unwrap().to_bytes();
     let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert!(v["nextCursor"].is_null());
@@ -362,7 +361,7 @@ async fn get_creators_invalid_limit_returns_400() {
         .body(Body::empty())
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
 
@@ -374,7 +373,7 @@ async fn get_creators_zero_limit_returns_422() {
         .body(Body::empty())
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
 
@@ -386,7 +385,7 @@ async fn get_creators_invalid_after_returns_400() {
         .body(Body::empty())
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
 

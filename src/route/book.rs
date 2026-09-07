@@ -144,7 +144,7 @@ impl TryFrom<BookWithRelations> for Book {
     }
 }
 
-// deferred: gate to any signed-in User; record the caller as the submitter
+// deferred: record the caller as the submitter
 pub async fn store_book(
     State(service): State<Service>,
     Json(req): Json<BookReq>,
@@ -164,7 +164,7 @@ pub async fn store_book(
     Ok(json_data_response(StatusCode::CREATED, StoreResp { id }))
 }
 
-// deferred: gate to Uploader/Moderator/Admin, plus the submitter on their own Draft
+// deferred: also admit the book's submitter to edit their own Draft
 pub async fn update_book(
     State(service): State<Service>,
     Path(id): Path<Uuid>,
@@ -276,11 +276,17 @@ impl TryFrom<(BookListQuery, Option<BookCursor>)> for BookFilter {
     }
 }
 
-// deferred: gate the ?visibility= override to Moderator/Admin
 pub async fn get_books(
     State(service): State<Service>,
+    claims: Option<UserClaims>,
     Query(query): Query<BookListQuery>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
+    // The list is public and defaults to `Listed`; the `?visibility=` override
+    // that reaches into the moderation queue is Moderator/Admin only.
+    if query.visibility.is_some() && !claims.is_some_and(|c| c.can_moderate()) {
+        return Err(RouteError::Forbidden.into());
+    }
+
     let cursor = query.cursor.as_deref().map(Coder::decode).transpose()?;
     let filter = BookFilter::try_from((query, cursor))?;
 
@@ -293,7 +299,7 @@ pub async fn get_books(
     ))
 }
 
-// deferred: scope non-Listed reads to the submitter or a Moderator
+// deferred: also admit the book's submitter to non-Listed metadata reads
 pub async fn get_book(
     State(service): State<Service>,
     Path(id): Path<Uuid>,
@@ -331,12 +337,20 @@ impl TryFrom<BookVisibilityWithContext> for VisibilityTransition {
     }
 }
 
-// deferred: gate to the submitter for Draft -> PendingReview, Moderator/Admin otherwise
+// deferred: admit only the book's submitter to Draft -> PendingReview once
+// `books` records one; until then any signed-in user may submit for review.
 pub async fn update_book_visibility(
     State(service): State<Service>,
+    claims: UserClaims,
     Path(id): Path<Uuid>,
     Json(req): Json<BookVisibilityReq>,
 ) -> Result<StatusCode, AppError> {
+    // A `PendingReview` target is a signed-in user's own submit move (the domain
+    // guard refuses it from any state but `Draft` / itself); all else is moderation.
+    if req.visibility != BookVisibility::PendingReview && !claims.can_moderate() {
+        return Err(RouteError::Forbidden.into());
+    }
+
     let transition: VisibilityTransition = BookVisibilityWithContext {
         req,
         id,
@@ -349,7 +363,6 @@ pub async fn update_book_visibility(
     Ok(StatusCode::NO_CONTENT)
 }
 
-// deferred: gate to Moderator/Admin
 pub async fn delete_book(
     State(service): State<Service>,
     Path(id): Path<Uuid>,
@@ -358,7 +371,6 @@ pub async fn delete_book(
     Ok(StatusCode::NO_CONTENT)
 }
 
-// deferred: gate to Uploader/Moderator/Admin
 pub async fn store_book_cover(
     State(service): State<Service>,
     Path(book_id): Path<Uuid>,
@@ -408,7 +420,6 @@ pub struct MainCoverReq {
     pub cover_id: Uuid,
 }
 
-// deferred: gate to Uploader/Moderator/Admin
 pub async fn update_book_main_cover(
     State(service): State<Service>,
     Path(book_id): Path<Uuid>,
@@ -418,7 +429,6 @@ pub async fn update_book_main_cover(
     Ok(StatusCode::NO_CONTENT)
 }
 
-// deferred: gate to Uploader/Moderator/Admin
 pub async fn delete_book_cover(
     State(service): State<Service>,
     Path(cover_id): Path<Uuid>,

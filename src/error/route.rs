@@ -17,6 +17,9 @@ pub enum RouteError {
 
     #[error("Invalid credentials")]
     InvalidCredentials,
+
+    #[error("Forbidden")]
+    Forbidden,
 }
 
 impl IntoResponse for RouteError {
@@ -27,6 +30,7 @@ impl IntoResponse for RouteError {
                 error_response(StatusCode::UNPROCESSABLE_ENTITY, self.to_string())
             }
             Self::InvalidCredentials => error_response(StatusCode::UNAUTHORIZED, self.to_string()),
+            Self::Forbidden => error_response(StatusCode::FORBIDDEN, self.to_string()),
         }
     }
 }

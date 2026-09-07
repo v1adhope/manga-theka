@@ -3,7 +3,6 @@ use axum::{
     http::{Request, StatusCode},
 };
 use http_body_util::BodyExt;
-use tower::ServiceExt;
 use uuid::Uuid;
 
 use crate::helpers::{RespWrapper, TestApp};
@@ -16,7 +15,7 @@ async fn get_content_ratings_returns_seeded_set() {
     let req = Request::get("/content-ratings")
         .body(Body::empty())
         .unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();

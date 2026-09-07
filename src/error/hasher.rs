@@ -14,6 +14,18 @@ pub enum HasherError {
 
     #[error("Digest is not a well-formed hash")]
     Digest(#[source] EntityError),
+
+    #[error("Failed to build the Argon2 parameters")]
+    Params(#[source] argon2::Error),
+
+    #[error("Failed to hash the password")]
+    HashPassword(#[source] argon2::password_hash::Error),
+
+    #[error("Failed to verify the password")]
+    VerifyPassword(#[source] argon2::password_hash::Error),
+
+    #[error("Argon2 produced a PHC string outside the storage bound")]
+    Phc(#[source] EntityError),
 }
 
 impl HasherError {

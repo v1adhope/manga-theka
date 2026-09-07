@@ -119,7 +119,6 @@ pub struct GetFeedbacksResp {
     pub next_cursor: Option<Uuid>,
 }
 
-// deferred: gate to Moderator/Admin
 pub async fn get_feedbacks(
     State(service): State<Service>,
     Query(query): Query<FeedbackListQuery>,
@@ -134,7 +133,6 @@ pub async fn get_feedbacks(
     ))
 }
 
-// deferred: gate to Moderator/Admin
 pub async fn get_feedback(
     State(service): State<Service>,
     Path(id): Path<Uuid>,
@@ -161,7 +159,6 @@ impl From<(FeedbackStatusReq, Uuid, OffsetDateTime)> for FeedbackStatusUpdate {
     }
 }
 
-// deferred: gate to Moderator/Admin
 pub async fn update_feedback_status(
     State(service): State<Service>,
     Path(id): Path<Uuid>,

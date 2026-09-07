@@ -16,8 +16,12 @@ use manga_theka::{
         AlternativeTitle, BookCoverQuery, BookKind, BookLink, BookName, BookQuery, BookStatus,
         BookVisibility, Chapter, ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume,
         ContentRating, CoverUrl, Creator, CreatorQuery, CreatorRole, Email, Feedback,
-        ImageExtension, Label, Language, LinkUrl, Name, PublicationDemographic, Text,
+        ImageExtension, Label, Language, LinkUrl, Name, PublicationDemographic, Role, Session,
+        Text, User,
     },
+    hasher::Hasher,
+    jwt::Jwt,
+    memory_storage::{self, MemoryStore},
     object_storage,
     startup::App,
     telemetry,
@@ -36,6 +40,54 @@ use crate::fakers::{
 static TRACING: LazyLock<()> = LazyLock::new(|| {
     telemetry::init_subscriber("info");
 });
+
+/// Four Ed25519 PEM files (two keypairs) written once per test process into a
+/// temp dir, derived from fixed literal seeds so no key material is committed
+/// and CI needs no openssl.
+pub static KEYS: LazyLock<TestKeys> = LazyLock::new(TestKeys::generate);
+
+pub struct TestKeys {
+    pub access_private: std::path::PathBuf,
+    pub access_public: std::path::PathBuf,
+    pub refresh_private: std::path::PathBuf,
+    pub refresh_public: std::path::PathBuf,
+}
+
+impl TestKeys {
+    fn generate() -> Self {
+        use ed25519_dalek::SigningKey;
+        use ed25519_dalek::pkcs8::{EncodePrivateKey, EncodePublicKey, spki::der::pem::LineEnding};
+
+        let dir =
+            std::env::temp_dir().join(format!("manga-theka-test-keys-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("failed to create the test key dir");
+
+        let write = |name: &str, seed: [u8; 32], private: bool| {
+            let signing = SigningKey::from_bytes(&seed);
+            let pem = if private {
+                signing
+                    .to_pkcs8_pem(LineEnding::LF)
+                    .expect("failed to encode the private key")
+                    .to_string()
+            } else {
+                signing
+                    .verifying_key()
+                    .to_public_key_pem(LineEnding::LF)
+                    .expect("failed to encode the public key")
+            };
+            let path = dir.join(name);
+            std::fs::write(&path, pem).expect("failed to write a test key");
+            path
+        };
+
+        TestKeys {
+            access_private: write("access_private.pem", [7u8; 32], true),
+            access_public: write("access_public.pem", [7u8; 32], false),
+            refresh_private: write("refresh_private.pem", [11u8; 32], true),
+            refresh_public: write("refresh_public.pem", [11u8; 32], false),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct BookSample {
@@ -200,6 +252,15 @@ pub fn localization_keys(localizations: &[ChapterLocalization]) -> Vec<(Uuid, &s
     keys
 }
 
+/// The known password whose Argon2id PHC string `UserFaker` stores, so login
+/// tests can present a password that actually verifies.
+pub const KNOWN_PASSWORD: &str = "correct horse battery staple";
+pub const KNOWN_PASSWORD_PHC: &str = "$argon2id$v=19$m=19456,t=2,p=1$P/qEkLVC2cUEZbYOairU+A$vdXpqQIqcVifQO1OXrCfvkTanUQLmtw2L7jEc6UDbiA";
+
+/// The default token every write helper attaches: a caller holding every
+/// content-writing role.
+pub const DEFAULT_ROLES: [Role; 3] = [Role::Uploader, Role::Moderator, Role::Admin];
+
 // TODO: migrate this to axum_test::TestServer/TestResponse.
 pub struct TestApp {
     pub pool: PgPool,
@@ -207,6 +268,9 @@ pub struct TestApp {
     pub s3: aws_sdk_s3::Client,
     pub covers_bucket: String,
     pub release_pages_bucket: String,
+    pub jwt: Jwt,
+    pub memory: MemoryStore,
+    pub hasher: Hasher,
 }
 
 impl TestApp {
@@ -216,6 +280,11 @@ impl TestApp {
         let db_name = Uuid::now_v7().to_string();
         let covers_bucket = format!("covers-{}", Uuid::now_v7());
         let release_pages_bucket = format!("release-pages-{}", Uuid::now_v7());
+        let keys = &*KEYS;
+        let access_private = keys.access_private.to_string_lossy().into_owned();
+        let access_public = keys.access_public.to_string_lossy().into_owned();
+        let refresh_private = keys.refresh_private.to_string_lossy().into_owned();
+        let refresh_public = keys.refresh_public.to_string_lossy().into_owned();
         let cfg = Config::from_env_pairs([
             ("APP_DATABASE__USERNAME", "postgres"),
             ("APP_DATABASE__PASSWORD", "postgres"),
@@ -231,6 +300,19 @@ impl TestApp {
                 "APP_OBJECT_STORAGE__RELEASE_PAGES_BUCKET",
                 release_pages_bucket.as_str(),
             ),
+            ("APP_REDIS__URL", "redis://localhost:6379"),
+            ("APP_JWT_ACCESS__PRIVATE_KEY", access_private.as_str()),
+            ("APP_JWT_ACCESS__PUBLIC_KEY", access_public.as_str()),
+            ("APP_JWT_ACCESS__TTL", "900"),
+            ("APP_JWT_REFRESH__PRIVATE_KEY", refresh_private.as_str()),
+            ("APP_JWT_REFRESH__PUBLIC_KEY", refresh_public.as_str()),
+            ("APP_JWT_REFRESH__TTL", "2592000"),
+            ("APP_BLAKE3__KEY", "test-pepper"),
+            // Minimum viable Argon2 cost -- tests exercise behavior, not
+            // hardness, and every `Hasher::new` pays one hash for its dummy PHC.
+            ("APP_PASSWORD__M_COST", "8"),
+            ("APP_PASSWORD__T_COST", "1"),
+            ("APP_PASSWORD__P_COST", "1"),
             // Ignored pairs
             ("APP_ADDR", "0.0.0.0:0"),
             ("APP_LOG_LEVEL", "info"),
@@ -239,12 +321,26 @@ impl TestApp {
         let s3 = object_storage::client(&cfg.object_storage).await;
         let app = App::build(&cfg).await;
 
+        let jwt = Jwt::load(&cfg.jwt_access, &cfg.jwt_refresh);
+        let redis = memory_storage::connection(&cfg.redis).await;
+        let memory = MemoryStore::new(redis, cfg.jwt_refresh.ttl);
+        let hasher = Hasher::new(
+            cfg.password.m_cost,
+            cfg.password.t_cost,
+            cfg.password.p_cost,
+            b"test-pepper",
+        )
+        .unwrap();
+
         TestApp {
             pool,
             router: app.router(),
             s3,
             covers_bucket,
             release_pages_bucket,
+            jwt,
+            memory,
+            hasher,
         }
     }
 
@@ -264,6 +360,73 @@ impl TestApp {
         .expect("failed to create database");
 
         database::pool(cfg).await
+    }
+
+    /// Dispatch a request, attaching a default all-roles bearer token when it
+    /// carries no `Authorization` header of its own.
+    pub async fn send(&self, mut req: Request<Body>) -> Response {
+        if !req.headers().contains_key(header::AUTHORIZATION) {
+            let token = self.access_token(Uuid::now_v7(), Uuid::now_v7(), &DEFAULT_ROLES);
+            req.headers_mut().insert(
+                header::AUTHORIZATION,
+                format!("Bearer {token}").parse().unwrap(),
+            );
+        }
+
+        self.router.clone().oneshot(req).await.unwrap()
+    }
+
+    /// Dispatch a request exactly as given -- no token injection.
+    pub async fn send_raw(&self, req: Request<Body>) -> Response {
+        self.router.clone().oneshot(req).await.unwrap()
+    }
+
+    pub fn access_token(&self, sub: Uuid, sid: Uuid, roles: &[Role]) -> String {
+        self.jwt
+            .issue_access(sub, sid, roles, time::OffsetDateTime::now_utc())
+            .expect("failed to issue a test access token")
+    }
+
+    pub fn bearer(&self, sub: Uuid, sid: Uuid, roles: &[Role]) -> String {
+        format!("Bearer {}", self.access_token(sub, sid, roles))
+    }
+
+    pub async fn insert_user(&self, user: &User) {
+        let roles: Vec<String> = user.roles.iter().map(|r| r.as_ref().to_owned()).collect();
+
+        sqlx::query!(
+            r#"
+insert into users(id, email, username, password_hash, roles, verified_at, created_at)
+values($1, $2, $3, $4, $5, $6, $7);
+        "#,
+            user.id,
+            user.email.as_ref(),
+            user.username.as_ref(),
+            user.password_hash.as_ref(),
+            &roles,
+            user.verified_at,
+            user.created_at,
+        )
+        .execute(&self.pool)
+        .await
+        .expect("failed to insert factory user");
+    }
+
+    /// Write a session blob straight into Redis. `created_at` is caller-set so
+    /// the 24h revoke rule is exercised without a clock seam.
+    pub async fn insert_session(&self, sub: Uuid, sid: Uuid, created_at: time::OffsetDateTime) {
+        let session = Session {
+            jti: self.hasher.keyed_jti_hash(Uuid::now_v7()),
+            ua: None,
+            ip: None,
+            created_at,
+            updated_at: created_at,
+        };
+
+        self.memory
+            .put_session(sub, sid, &session)
+            .await
+            .expect("failed to insert factory session");
     }
 
     pub async fn object_exists(&self, bucket: &str, key: Uuid) -> bool {
@@ -343,18 +506,18 @@ where b.id = $1;
             .body(Body::from(body))
             .unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap()
+        self.send(req).await
     }
 
     pub async fn get_books(&self, path: &str) -> Response {
         let req = Request::get(path).body(Body::empty()).unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap()
+        self.send_raw(req).await
     }
 
     pub async fn get_body(&self, path: &str) -> (StatusCode, String) {
         let req = Request::get(path).body(Body::empty()).unwrap();
-        let resp = self.router.clone().oneshot(req).await.unwrap();
+        let resp = self.send_raw(req).await;
         let status = resp.status();
         let bytes = resp.into_body().collect().await.unwrap().to_bytes();
 
@@ -363,12 +526,14 @@ where b.id = $1;
 
     pub async fn get_as_moderator(&self, path: &str) -> Response {
         let req = Request::get(path)
-            .header("x-user-id", Uuid::now_v7().to_string())
-            .header("x-user-role", "Moderator")
+            .header(
+                header::AUTHORIZATION,
+                self.bearer(Uuid::now_v7(), Uuid::now_v7(), &[Role::Moderator]),
+            )
             .body(Body::empty())
             .unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap()
+        self.send_raw(req).await
     }
 
     pub async fn insert_book(&self, b: &BookQuery) {
@@ -914,7 +1079,7 @@ values($1, $2, $3);
             .body(Body::from(form))
             .unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap()
+        self.send(req).await
     }
 
     pub async fn get_covers(&self, book_id: Uuid) -> Response {
@@ -922,7 +1087,7 @@ values($1, $2, $3);
             .body(Body::empty())
             .unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap()
+        self.send_raw(req).await
     }
 
     pub async fn get_cover_image(&self, cover_id: Uuid) -> Response {
@@ -930,7 +1095,7 @@ values($1, $2, $3);
             .body(Body::empty())
             .unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap()
+        self.send_raw(req).await
     }
 
     pub async fn put_main_cover(&self, book_id: Uuid, cover_id: Uuid) -> StatusCode {
@@ -940,7 +1105,7 @@ values($1, $2, $3);
             .body(Body::from(body))
             .unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap().status()
+        self.send(req).await.status()
     }
 
     pub async fn delete_cover(&self, cover_id: Uuid) -> Response {
@@ -948,7 +1113,7 @@ values($1, $2, $3);
             .body(Body::empty())
             .unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap()
+        self.send(req).await
     }
 
     pub async fn get_creator(&self, id: Uuid) -> Response {
@@ -956,7 +1121,7 @@ values($1, $2, $3);
             .body(Body::empty())
             .unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap()
+        self.send_raw(req).await
     }
 
     pub async fn delete_creator(&self, id: Uuid) -> Response {
@@ -964,7 +1129,7 @@ values($1, $2, $3);
             .body(Body::empty())
             .unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap()
+        self.send(req).await
     }
 
     pub async fn post_feedback(&self, body: serde_json::Value) -> Response {
@@ -973,7 +1138,7 @@ values($1, $2, $3);
             .body(Body::from(body.to_string()))
             .unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap()
+        self.send(req).await
     }
 
     pub async fn insert_feedback(&self, f: &Feedback) {
@@ -1029,17 +1194,27 @@ where f.id = $1;
     }
 
     pub async fn get_feedbacks(&self, path: &str) -> Response {
-        let req = Request::get(path).body(Body::empty()).unwrap();
+        let req = Request::get(path)
+            .header(
+                header::AUTHORIZATION,
+                self.bearer(Uuid::now_v7(), Uuid::now_v7(), &[Role::Moderator]),
+            )
+            .body(Body::empty())
+            .unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap()
+        self.send_raw(req).await
     }
 
     pub async fn get_feedback(&self, id: Uuid) -> Response {
         let req = Request::get(format!("/feedbacks/{id}"))
+            .header(
+                header::AUTHORIZATION,
+                self.bearer(Uuid::now_v7(), Uuid::now_v7(), &[Role::Moderator]),
+            )
             .body(Body::empty())
             .unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap()
+        self.send_raw(req).await
     }
 
     pub async fn put_feedback_status(&self, id: Uuid, status: &str) -> StatusCode {
@@ -1049,7 +1224,7 @@ where f.id = $1;
             .body(Body::from(body))
             .unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap().status()
+        self.send(req).await.status()
     }
 
     pub async fn delete_chapter(&self, id: Uuid) -> Response {
@@ -1057,12 +1232,12 @@ where f.id = $1;
             .body(Body::empty())
             .unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap()
+        self.send(req).await
     }
 
     pub async fn get_books_page(&self, path: &str) -> RespWrapper<Vec<BookQuery>, String> {
         let req = Request::get(path).body(Body::empty()).unwrap();
-        let resp = self.router.clone().oneshot(req).await.unwrap();
+        let resp = self.send_raw(req).await;
         assert_eq!(resp.status(), StatusCode::OK, "{path}");
 
         let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -1322,7 +1497,7 @@ where f.id = $1;
 
     pub async fn get_labels(&self, path: &str) -> Vec<Label> {
         let req = Request::get(path).body(Body::empty()).unwrap();
-        let resp = self.router.clone().oneshot(req).await.unwrap();
+        let resp = self.send_raw(req).await;
         assert_eq!(resp.status(), StatusCode::OK, "{path}");
 
         let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -1333,7 +1508,7 @@ where f.id = $1;
 
     pub async fn get_chapters(&self, path: String) -> RespWrapper<Vec<Chapter>> {
         let req = Request::get(path).body(Body::empty()).unwrap();
-        let resp = self.router.clone().oneshot(req).await.unwrap();
+        let resp = self.send_raw(req).await;
         assert_eq!(resp.status(), StatusCode::OK);
 
         let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -1516,7 +1691,7 @@ order by sort_order;
             .body(Body::from(body))
             .unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap()
+        self.send(req).await
     }
 
     pub async fn post_release(&self, chapter_id: Uuid, language_id: Uuid) -> Response {
@@ -1526,7 +1701,7 @@ order by sort_order;
             .body(Body::from(body))
             .unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap()
+        self.send(req).await
     }
 
     pub async fn get_releases(&self, chapter_id: Uuid) -> Response {
@@ -1534,7 +1709,7 @@ order by sort_order;
             .body(Body::empty())
             .unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap()
+        self.send_raw(req).await
     }
 
     pub async fn get_release(&self, id: Uuid) -> Response {
@@ -1542,7 +1717,7 @@ order by sort_order;
             .body(Body::empty())
             .unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap()
+        self.send_raw(req).await
     }
 
     pub async fn post_upload_pages(&self, release_id: Uuid, parts: &[&[u8]]) -> Response {
@@ -1552,7 +1727,7 @@ order by sort_order;
             .body(Body::from(form))
             .unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap()
+        self.send(req).await
     }
 
     pub async fn post_commit(&self, release_id: Uuid, page_order: &[Uuid]) -> Response {
@@ -1562,7 +1737,7 @@ order by sort_order;
             .body(Body::from(body))
             .unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap()
+        self.send(req).await
     }
 
     pub async fn get_pages(&self, release_id: Uuid) -> Response {
@@ -1570,7 +1745,7 @@ order by sort_order;
             .body(Body::empty())
             .unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap()
+        self.send_raw(req).await
     }
 
     pub async fn get_staged(&self, release_id: Uuid) -> Response {
@@ -1578,7 +1753,7 @@ order by sort_order;
             .body(Body::empty())
             .unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap()
+        self.send_raw(req).await
     }
 
     pub async fn get_page_image(&self, release_id: Uuid, page_id: Uuid) -> Response {
@@ -1586,7 +1761,7 @@ order by sort_order;
             .body(Body::empty())
             .unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap()
+        self.send_raw(req).await
     }
 
     pub async fn get_page(&self, release_id: Uuid, page_number: i32) -> Response {
@@ -1594,7 +1769,7 @@ order by sort_order;
             .body(Body::empty())
             .unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap()
+        self.send_raw(req).await
     }
 
     pub async fn delete_book(&self, id: Uuid) -> Response {
@@ -1602,7 +1777,7 @@ order by sort_order;
             .body(Body::empty())
             .unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap()
+        self.send(req).await
     }
 
     pub async fn delete_release(&self, id: Uuid) -> Response {
@@ -1610,6 +1785,6 @@ order by sort_order;
             .body(Body::empty())
             .unwrap();
 
-        self.router.clone().oneshot(req).await.unwrap()
+        self.send(req).await
     }
 }

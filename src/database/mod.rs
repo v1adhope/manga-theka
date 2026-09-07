@@ -7,6 +7,7 @@ mod label;
 mod language;
 mod query;
 mod release;
+mod user;
 mod visibility;
 
 use sqlx::PgPool;

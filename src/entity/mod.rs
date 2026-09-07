@@ -24,6 +24,7 @@ mod language;
 mod range;
 mod release;
 mod resource_url;
+mod session;
 mod user;
 mod visibility;
 
@@ -42,6 +43,7 @@ pub use language::*;
 pub use range::*;
 pub use release::*;
 pub use resource_url::*;
+pub use session::*;
 pub use user::*;
 pub use visibility::*;
 
@@ -158,6 +160,8 @@ impl TryFrom<String> for Email {
         static PATTERN: LazyLock<Regex> = LazyLock::new(|| {
             Regex::new(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$").unwrap()
         });
+
+        let s = s.trim().to_lowercase();
 
         if s.chars().count() > 254 {
             return Err(EntityError::EmailExceedsCharLimit);
@@ -317,6 +321,25 @@ mod tests {
         for s in ["a@b.co", "A@B.CO", "a.b+c-d_e@sub.example.co.uk"] {
             assert!(Email::try_from(s.to_owned()).is_ok(), "{s} must be valid");
         }
+    }
+
+    #[test]
+    fn email_is_trimmed_and_lowercased() {
+        let email = Email::try_from(" A@B.CO ".to_owned()).unwrap();
+
+        assert_eq!(email.as_ref(), "a@b.co");
+    }
+
+    #[test]
+    fn email_254_char_boundary_measures_the_trimmed_value() {
+        let local = "a".repeat(249);
+        let email = format!("  {local}@b.co  ");
+
+        let res = Email::try_from(email);
+        assert!(
+            res.is_ok(),
+            "surrounding whitespace must not count toward the limit"
+        );
     }
 
     #[test]

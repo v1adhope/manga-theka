@@ -5,7 +5,6 @@ use axum::{
 use axum_test::multipart::{MultipartForm, Part};
 use http_body_util::BodyExt;
 use manga_theka::entity::{BookCoverQuery, ImageExtension};
-use tower::ServiceExt;
 use uuid::Uuid;
 
 use crate::fakers::{COVER_JPG, COVER_PNG, COVER_WEBP};
@@ -28,7 +27,7 @@ async fn store_book_cover_is_sniffed_not_trusted_from_content_type() {
         .body(Body::from(form))
         .unwrap();
 
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     let cover_id = assert_stored(resp).await;
     let content_type = app.object_content_type(&app.covers_bucket, cover_id).await;
 
@@ -99,7 +98,7 @@ async fn store_book_cover_with_malformed_book_id_returns_400() {
         .body(Body::from(COVER_PNG))
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
 
@@ -329,7 +328,7 @@ async fn delete_book_removes_its_covers_and_purges_their_objects() {
         .body(Body::empty())
         .unwrap();
 
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let resp = app.get_covers(book_id).await;

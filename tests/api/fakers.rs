@@ -11,10 +11,13 @@ use manga_theka::entity::{
     AlternativeTitle, BookKind, BookLink, BookLinkKind, BookName, BookQuery, BookStatus,
     BookVisibility, Chapter, ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume,
     ContentRating, Creator, CreatorQuery, CreatorRole, Email, Feedback, FeedbackKind,
-    FeedbackStatus, Label, LabelKind, Language, LinkUrl, Name, PublicationDemographic, Text,
+    FeedbackStatus, Label, LabelKind, Language, LinkUrl, Name, PasswordHash,
+    PublicationDemographic, Role, Text, User, Username,
 };
 use time::OffsetDateTime;
 use uuid::{Uuid, uuid};
+
+use crate::helpers::KNOWN_PASSWORD_PHC;
 
 pub const COVER_JPG: &[u8] = include_bytes!("fixtures/cover.jpg");
 pub const COVER_PNG: &[u8] = include_bytes!("fixtures/cover.png");
@@ -155,6 +158,39 @@ impl Dummy<NameFaker> for Name {
     fn dummy_with_rng<R: RngExt + ?Sized>(_config: &NameFaker, rng: &mut R) -> Self {
         let name = FirstName().fake_with_rng::<String, R>(rng);
         Name::try_from(name).unwrap()
+    }
+}
+
+pub struct UserFaker {
+    pub roles: Vec<Role>,
+    pub verified: bool,
+}
+
+impl Default for UserFaker {
+    fn default() -> Self {
+        UserFaker {
+            roles: vec![Role::Reader],
+            verified: false,
+        }
+    }
+}
+
+impl Dummy<UserFaker> for User {
+    fn dummy_with_rng<R: RngExt + ?Sized>(config: &UserFaker, _rng: &mut R) -> Self {
+        let id = Uuid::now_v7();
+        let handle = id.simple().to_string();
+
+        User {
+            id,
+            email: Email::try_from(format!("{}@example.test", &handle[..12])).unwrap(),
+            username: Username::try_from(format!("u{}", &handle[..16])).unwrap(),
+            password_hash: PasswordHash::try_from(KNOWN_PASSWORD_PHC.to_owned()).unwrap(),
+            roles: config.roles.clone(),
+            verified_at: config
+                .verified
+                .then(|| OffsetDateTime::now_utc() - time::Duration::hours(1)),
+            created_at: OffsetDateTime::now_utc(),
+        }
     }
 }
 

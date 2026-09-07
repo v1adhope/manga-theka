@@ -3,7 +3,6 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
-use tower::ServiceExt;
 
 use crate::fakers::{BookFaker, CONTENT_RATINGS, CreatorFaker, LabelFaker};
 use crate::helpers::{
@@ -47,7 +46,7 @@ async fn store_book_with_valid_body_passes() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     let id = assert_stored(resp).await;
 
     let got = app.fetch_book(id).await;
@@ -107,7 +106,7 @@ async fn store_book_without_relations_passes() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     let id = assert_stored(resp).await;
 
     let sample = app.fetch_book_sample(id).await;
@@ -127,7 +126,7 @@ async fn store_book_with_broken_json_returns_400() {
         .body(Body::from("{not json"))
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
 
@@ -152,7 +151,7 @@ async fn store_book_with_missing_name_returns_422() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
 
@@ -178,7 +177,7 @@ async fn store_book_with_unknown_status_returns_422() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
 
@@ -204,7 +203,7 @@ async fn store_book_with_unknown_publication_demographic_returns_422() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
 
@@ -229,7 +228,7 @@ async fn store_book_without_publication_demographic_returns_422() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
 
@@ -256,7 +255,7 @@ async fn store_book_with_unknown_label_id_returns_422() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 
     let count = sqlx::query_scalar!(r#"select count(*) as "count!" from books"#)
@@ -290,7 +289,7 @@ async fn store_book_with_unknown_creator_id_returns_422() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 
     let count = sqlx::query_scalar!(r#"select count(*) as "count!" from books"#)
@@ -329,7 +328,7 @@ async fn store_book_with_dual_role_creator_merges_into_one_credit() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     let id = assert_stored(resp).await;
 
     let got = app.fetch_book(id).await;
@@ -374,7 +373,7 @@ async fn store_book_with_duplicate_creator_role_returns_422() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
 
@@ -395,7 +394,7 @@ async fn get_book_with_valid_id_passes() {
     let req = Request::get(format!("/books/{}", book.id))
         .body(Body::empty())
         .unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -450,7 +449,7 @@ async fn get_book_with_unknown_id_returns_404() {
         .body(Body::empty())
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
 
     assert_error(resp, StatusCode::NOT_FOUND).await;
 }
@@ -463,7 +462,7 @@ async fn get_book_with_malformed_id_returns_400() {
         .body(Body::empty())
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
 
@@ -507,7 +506,7 @@ async fn update_book_with_valid_body_passes() {
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(body))
         .unwrap();
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let got = app.fetch_book(book.id).await;
@@ -576,7 +575,7 @@ async fn update_book_swaps_the_content_rating() {
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(updated_body))
         .unwrap();
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let got = app.fetch_book(book.id).await;
@@ -616,7 +615,7 @@ async fn update_book_with_empty_arrays_detaches_everything() {
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(detached))
         .unwrap();
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let sample = app.fetch_book_sample(book.id).await;
@@ -652,7 +651,7 @@ async fn update_book_leaves_other_books_untouched() {
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(updated_body))
         .unwrap();
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let sample = app.fetch_book_sample(other.id).await;
@@ -686,7 +685,7 @@ async fn update_book_with_unknown_id_returns_404() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::NOT_FOUND).await;
 }
 
@@ -707,7 +706,7 @@ async fn delete_book_with_valid_id_passes() {
         .body(Body::empty())
         .unwrap();
 
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let sample = app.fetch_book_sample(book.id).await;
@@ -743,7 +742,7 @@ async fn delete_book_leaves_other_books_untouched() {
     let req = Request::delete(format!("/books/{}", book.id))
         .body(Body::empty())
         .unwrap();
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let sample = app.fetch_book_sample(other.id).await;
@@ -762,7 +761,7 @@ async fn delete_book_with_unknown_id_returns_404() {
         .body(Body::empty())
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
 
     assert_error(resp, StatusCode::NOT_FOUND).await;
 }

@@ -1,0 +1,187 @@
+use std::net::IpAddr;
+
+use time::OffsetDateTime;
+use uuid::Uuid;
+
+use crate::{
+    entity::{Email, Session, SessionQuery, Text, User},
+    error::{EntityError, ServiceError},
+    service::Service,
+};
+
+pub struct SessionTokens {
+    pub access: String,
+    pub refresh: String,
+}
+
+impl Service {
+    pub async fn login(
+        &self,
+        email: String,
+        candidate: String,
+        ua: Option<Text>,
+        ip: Option<IpAddr>,
+        now: OffsetDateTime,
+    ) -> Result<SessionTokens, ServiceError> {
+        let user = match Email::try_from(email) {
+            Ok(email) => self.database.get_user_by_email(&email).await?,
+            Err(_) => None,
+        };
+
+        // Off the reactor. The no-such-user branch runs a dummy verify so timing
+        // does not reveal whether the address has an account.
+        let hasher = self.hasher.clone();
+        let stored = user.as_ref().map(|u| u.password_hash.as_ref().to_owned());
+        let verified = tokio::task::spawn_blocking(move || match stored {
+            Some(hash) => hasher.verify_password(&candidate, &hash),
+            None => {
+                hasher.verify_dummy(&candidate);
+                Ok(false)
+            }
+        })
+        .await
+        .expect("password verification task panicked")?;
+
+        let user = user.ok_or(ServiceError::InvalidCredentials)?;
+        if !verified {
+            return Err(ServiceError::InvalidCredentials);
+        }
+
+        self.mint_session(&user, ua, ip, now).await
+    }
+
+    async fn mint_session(
+        &self,
+        user: &User,
+        ua: Option<Text>,
+        ip: Option<IpAddr>,
+        now: OffsetDateTime,
+    ) -> Result<SessionTokens, ServiceError> {
+        let sid = Uuid::now_v7();
+        let jti = Uuid::now_v7();
+
+        let session = Session {
+            jti: self.hasher.keyed_jti_hash(jti),
+            ua,
+            ip,
+            created_at: now,
+            updated_at: now,
+        };
+        self.memory.put_session(user.id, sid, &session).await?;
+
+        let access = self.jwt.issue_access(user.id, sid, &user.roles, now)?;
+        let refresh = self.jwt.issue_refresh(user.id, sid, jti, now)?;
+
+        Ok(SessionTokens { access, refresh })
+    }
+
+    pub async fn refresh_session(
+        &self,
+        refresh_token: &str,
+        now: OffsetDateTime,
+    ) -> Result<SessionTokens, ServiceError> {
+        let claims = self.jwt.verify_refresh(refresh_token)?;
+
+        let session = self
+            .memory
+            .get_session(claims.sub, claims.sid)
+            .await?
+            .ok_or(ServiceError::InvalidCredentials)?;
+
+        if self.hasher.keyed_jti_hash(claims.jti) != session.jti {
+            // ADR-0003 rejects reuse-detection escalation: warn, no family revoke.
+            tracing::warn!(sub = %claims.sub, sid = %claims.sid, "refresh jti mismatch");
+            return Err(ServiceError::InvalidCredentials);
+        }
+
+        // No compare-and-swap on the jti, so two refreshes racing on one cookie
+        // both pass and the loser re-logs-in -- accepted per ADR-0003.
+        let user = self.database.get_user(claims.sub).await?;
+
+        let jti = Uuid::now_v7();
+        let rotated = Session {
+            jti: self.hasher.keyed_jti_hash(jti),
+            ua: session.ua,
+            ip: session.ip,
+            created_at: session.created_at,
+            updated_at: now,
+        };
+        self.memory
+            .put_session(claims.sub, claims.sid, &rotated)
+            .await?;
+
+        let access = self
+            .jwt
+            .issue_access(claims.sub, claims.sid, &user.roles, now)?;
+        let refresh = self.jwt.issue_refresh(claims.sub, claims.sid, jti, now)?;
+
+        Ok(SessionTokens { access, refresh })
+    }
+
+    pub async fn list_sessions(&self, sub: Uuid) -> Result<Vec<SessionQuery>, ServiceError> {
+        let sessions = self.memory.list_sessions(sub).await?;
+
+        Ok(sessions
+            .into_iter()
+            .map(|(sid, session)| SessionQuery::from_session(sid, session))
+            .collect())
+    }
+
+    /// Exempt from the 24h rule -- a freshly logged-in user can always self-logout.
+    pub async fn revoke_current_session(&self, sub: Uuid, sid: Uuid) -> Result<(), ServiceError> {
+        self.memory
+            .revoke_session(sub, sid)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn revoke_session(
+        &self,
+        sub: Uuid,
+        current_sid: Uuid,
+        target_sid: Uuid,
+        now: OffsetDateTime,
+    ) -> Result<(), ServiceError> {
+        self.ensure_revoker(sub, current_sid, now).await?;
+
+        if !self.memory.owns_session(sub, target_sid).await? {
+            return Err(EntityError::not_readable::<Session>().into());
+        }
+
+        self.memory
+            .revoke_session(sub, target_sid)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn revoke_all_sessions(
+        &self,
+        sub: Uuid,
+        current_sid: Uuid,
+        now: OffsetDateTime,
+    ) -> Result<(), ServiceError> {
+        self.ensure_revoker(sub, current_sid, now).await?;
+
+        self.memory
+            .revoke_all_sessions(sub)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn ensure_revoker(
+        &self,
+        sub: Uuid,
+        current_sid: Uuid,
+        now: OffsetDateTime,
+    ) -> Result<(), ServiceError> {
+        let current = self
+            .memory
+            .get_session(sub, current_sid)
+            .await?
+            .ok_or(ServiceError::InvalidCredentials)?;
+
+        current.ensure_revoker(now)?;
+
+        Ok(())
+    }
+}

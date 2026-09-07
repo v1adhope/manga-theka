@@ -2,8 +2,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use fake::Fake;
 use http_body_util::BodyExt;
-use manga_theka::entity::{BookQuery, BookVisibility};
-use tower::ServiceExt;
+use manga_theka::entity::{BookQuery, BookVisibility, Role};
 
 use crate::fakers::{BookFaker, COVER_JPG, COVER_PNG, EVERY_VISIBILITY};
 use crate::helpers::{RespWrapper, TestApp, assert_error};
@@ -29,7 +28,7 @@ async fn store_book_starts_it_as_a_draft() {
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(body))
         .unwrap();
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_eq!(resp.status(), StatusCode::CREATED);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -66,7 +65,7 @@ async fn get_books_with_a_visibility_overrides_the_default_filter() {
         .await;
     let drafted = app.insert_book_with_visibility(BookVisibility::Draft).await;
 
-    let resp = app.get_books("/books?visibility=Draft").await;
+    let resp = app.get_as_moderator("/books?visibility=Draft").await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -95,7 +94,7 @@ async fn get_book_serves_every_visibility() {
         let req = Request::get(format!("/books/{id}"))
             .body(Body::empty())
             .unwrap();
-        let resp = app.router.clone().oneshot(req).await.unwrap();
+        let resp = app.send(req).await;
 
         assert_eq!(
             resp.status(),
@@ -113,7 +112,7 @@ async fn get_book_carries_its_review_fields() {
     let req = Request::get(format!("/books/{id}"))
         .body(Body::empty())
         .unwrap();
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
     let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
 
@@ -135,7 +134,7 @@ async fn get_chapter_pages_of_an_unlisted_book_returns_404() {
         let req = Request::get(format!("/releases/{release_id}/pages"))
             .body(Body::empty())
             .unwrap();
-        let resp = app.router.clone().oneshot(req).await.unwrap();
+        let resp = app.send_raw(req).await;
 
         let expected = match visibility {
             BookVisibility::Listed => StatusCode::OK,
@@ -162,14 +161,8 @@ async fn get_chapter_page_of_an_unlisted_book_returns_404() {
             .body(Body::empty())
             .unwrap();
 
-        let number_status = app
-            .router
-            .clone()
-            .oneshot(by_number)
-            .await
-            .unwrap()
-            .status();
-        let image_status = app.router.clone().oneshot(by_id).await.unwrap().status();
+        let number_status = app.send_raw(by_number).await.status();
+        let image_status = app.send_raw(by_id).await.status();
 
         let expected = match visibility {
             BookVisibility::Listed => StatusCode::FOUND,
@@ -295,17 +288,23 @@ async fn a_reader_role_does_not_unlock_unlisted_content() {
     app.insert_page(release_id, Some(1), COVER_PNG).await;
 
     let req = Request::get(format!("/releases/{release_id}/pages"))
-        .header("x-user-id", uuid::Uuid::now_v7().to_string())
-        .header("x-user-role", "Reader,Uploader")
+        .header(
+            header::AUTHORIZATION,
+            app.bearer(
+                uuid::Uuid::now_v7(),
+                uuid::Uuid::now_v7(),
+                &[Role::Reader, Role::Uploader],
+            ),
+        )
         .body(Body::empty())
         .unwrap();
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.send_raw(req).await;
 
     assert_error(resp, StatusCode::NOT_FOUND).await;
 }
 
 #[tokio::test]
-async fn a_broken_identity_returns_401_rather_than_reading_as_anonymous() {
+async fn a_broken_bearer_token_reads_as_anonymous_on_public_routes_and_401s_on_gated_ones() {
     let app = TestApp::new().await;
     let book_id = app
         .insert_book_with_visibility(BookVisibility::Listed)
@@ -315,25 +314,35 @@ async fn a_broken_identity_returns_401_rather_than_reading_as_anonymous() {
     let release_id = app.insert_random_release(book_id, chapter_id).await;
     let page_id = app.insert_page(release_id, Some(1), COVER_PNG).await;
 
-    for path in [
-        format!("/covers/{cover_id}/image"),
-        format!("/releases/{release_id}/pages"),
-        format!("/releases/{release_id}/pages/1"),
-        format!("/releases/{release_id}/pages/{page_id}/image"),
+    // A garbage or stale token never grants privilege, but on a public route it
+    // must not lock the caller out either -- it reads exactly as anonymous.
+    for (path, expected) in [
+        (format!("/covers/{cover_id}/image"), StatusCode::FOUND),
+        (format!("/releases/{release_id}/pages"), StatusCode::OK),
+        (format!("/releases/{release_id}/pages/1"), StatusCode::FOUND),
+        (
+            format!("/releases/{release_id}/pages/{page_id}/image"),
+            StatusCode::FOUND,
+        ),
     ] {
         let req = Request::get(&path)
-            .header("x-user-id", "not-a-uuid")
-            .header("x-user-role", "Reader")
+            .header(header::AUTHORIZATION, "Bearer not-a-real-jwt")
             .body(Body::empty())
             .unwrap();
-        let resp = app.router.clone().oneshot(req).await.unwrap();
 
         assert_eq!(
-            resp.status(),
-            StatusCode::UNAUTHORIZED,
-            "{path} with a broken identity"
+            app.send_raw(req).await.status(),
+            expected,
+            "{path} with a broken bearer token"
         );
     }
+
+    // A gated route still refuses it.
+    let gated = Request::get("/sessions/me")
+        .header(header::AUTHORIZATION, "Bearer not-a-real-jwt")
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(app.send_raw(gated).await.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
@@ -413,7 +422,7 @@ async fn update_book_visibility_with_a_malformed_id_returns_400() {
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(r#"{"visibility":"Hidden","note":"why"}"#))
         .unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
 
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
@@ -445,7 +454,7 @@ async fn book_writes_are_refused_unless_the_book_is_draft_or_listed() {
             .header(header::CONTENT_TYPE, "application/json")
             .body(Body::from(body))
             .unwrap();
-        let update = app.router.clone().oneshot(req).await.unwrap().status();
+        let update = app.send(req).await.status();
 
         let cover = app.post_cover(book.id, COVER_PNG).await.status();
 

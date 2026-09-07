@@ -366,6 +366,33 @@ impl From<sqlx::Error> for DatabaseError {
                         source: err,
                     };
                 }
+                Some("unique_users_email") => {
+                    return Self::AlreadyExists {
+                        field: "User email",
+                        source: err,
+                    };
+                }
+                Some("unique_users_username") => {
+                    return Self::AlreadyExists {
+                        field: "User username",
+                        source: err,
+                    };
+                }
+                Some("check_length_users_email")
+                | Some("check_length_users_username")
+                | Some("check_length_users_password_hash")
+                | Some("check_empty_users_roles") => {
+                    return Self::OutOfRange {
+                        field: "User",
+                        source: err,
+                    };
+                }
+                Some("enum_users_roles") => {
+                    return Self::DoesNotExist {
+                        field: "User role",
+                        source: err,
+                    };
+                }
                 _ => {}
             }
         }

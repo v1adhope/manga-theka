@@ -69,12 +69,22 @@ aws-config = { version = "1", default-features = false, features = [
 anyhow = "1"
 regex = "1"
 sanitize-filename = "0.6"
-axum-extra = { version = "0.12", features = ["query"] }
+axum-extra = { version = "0.12", features = ["query", "cookie"] }
 base64 = "0.23"
 blake3 = "1"
+argon2 = "0.6"
+jsonwebtoken = { version = "11", default-features = false, features = [
+  "rust_crypto",
+  "use_pem",
+] }
+redis = { version = "1", default-features = false, features = [
+  "tokio-comp",
+  "connection-manager",
+] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 fake = "5"
 axum-test = "21"
+ed25519-dalek = { version = "3", features = ["pkcs8", "pem"] }

@@ -3,7 +3,6 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
-use tower::ServiceExt;
 
 use crate::fakers::{ChapterFaker, LANGUAGES};
 use crate::helpers::{RespWrapper, TestApp, assert_error, assert_stored, localization_keys};
@@ -33,7 +32,7 @@ async fn store_chapter_with_valid_body_passes() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     let id = assert_stored(resp).await;
 
     let got = app.fetch_chapter(id).await;
@@ -62,7 +61,7 @@ async fn store_chapter_with_only_a_number_passes() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     let id = assert_stored(resp).await;
 
     let got = app.fetch_chapter(id).await;
@@ -89,7 +88,7 @@ async fn store_chapter_with_duplicate_number_returns_409() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::CONFLICT).await;
 }
 
@@ -110,7 +109,7 @@ async fn store_chapter_reuses_a_number_taken_in_another_book() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     let id = assert_stored(resp).await;
 
     let got = app.fetch_chapter(id).await;
@@ -129,7 +128,7 @@ async fn store_chapter_with_unknown_book_returns_404() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::NOT_FOUND).await;
 }
 
@@ -153,7 +152,7 @@ async fn store_chapter_with_repeated_localization_language_returns_422() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 
     let count = sqlx::query_scalar!(r#"select count(*) as "count!" from chapters"#)
@@ -174,7 +173,7 @@ async fn store_chapter_with_broken_json_returns_400() {
         .body(Body::from("{not json"))
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
 
@@ -193,7 +192,7 @@ async fn get_chapter_with_valid_id_embeds_its_localizations() {
     let req = Request::get(format!("/chapters/{}", chapter.id))
         .body(Body::empty())
         .unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -220,7 +219,7 @@ async fn get_chapter_with_unknown_id_returns_404() {
         .body(Body::empty())
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::NOT_FOUND).await;
 }
 
@@ -235,7 +234,7 @@ async fn get_chapter_resolves_without_a_book_scope() {
         .body(Body::empty())
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -414,7 +413,7 @@ async fn get_chapters_with_unknown_book_returns_404() {
         .body(Body::empty())
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::NOT_FOUND).await;
 }
 
@@ -427,7 +426,7 @@ async fn get_chapters_zero_limit_returns_422() {
         .body(Body::empty())
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
 
@@ -440,7 +439,7 @@ async fn get_chapters_unknown_order_returns_400() {
         .body(Body::empty())
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
 
@@ -453,7 +452,7 @@ async fn get_chapters_with_malformed_after_returns_400() {
         .body(Body::empty())
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
 
@@ -487,7 +486,7 @@ async fn update_chapter_with_valid_body_passes() {
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(body))
         .unwrap();
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let got = app.fetch_chapter(chapter.id).await;
@@ -530,7 +529,7 @@ async fn update_chapter_with_empty_localizations_detaches_everything() {
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(body))
         .unwrap();
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let sample = app.fetch_chapter_sample(chapter.id).await;
@@ -557,7 +556,7 @@ async fn update_chapter_renumbers_without_touching_other_chapters() {
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(body))
         .unwrap();
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let sample = app.fetch_chapter_sample(chapter.id).await;
@@ -588,7 +587,7 @@ async fn update_chapter_to_a_taken_number_returns_409() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::CONFLICT).await;
 }
 
@@ -603,7 +602,7 @@ async fn update_chapter_with_unknown_id_returns_404() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::NOT_FOUND).await;
 }
 
@@ -621,7 +620,7 @@ async fn update_chapter_leaves_the_owning_book_untouched() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let got = app.fetch_chapter(chapter_id).await;
@@ -712,7 +711,7 @@ async fn delete_book_cascades_its_chapters() {
     let req = Request::delete(format!("/books/{book_id}"))
         .body(Body::empty())
         .unwrap();
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let sample = app.fetch_chapter_sample(chapter_id).await;

@@ -8,6 +8,8 @@ mod healthz;
 mod label;
 mod language;
 mod release;
+mod session;
+mod user;
 
 pub use book::*;
 pub use chapter::*;
@@ -18,6 +20,8 @@ pub use healthz::*;
 pub use label::*;
 pub use language::*;
 pub use release::*;
+pub use session::*;
+pub use user::*;
 
 use axum::{Json, extract::multipart::Field, http::StatusCode};
 use bytes::{Bytes, BytesMut};

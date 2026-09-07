@@ -2,7 +2,6 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use tower::ServiceExt;
 
 use crate::helpers::{TestApp, assert_error};
 
@@ -85,7 +84,7 @@ async fn get_labels_with_retired_tag_kind_returns_400() {
     let req = Request::get("/labels?kind=Tag")
         .body(Body::empty())
         .unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
 
@@ -96,6 +95,6 @@ async fn get_labels_with_invalid_kind_returns_400() {
     let req = Request::get("/labels?kind=NotAType")
         .body(Body::empty())
         .unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send(req).await;
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
