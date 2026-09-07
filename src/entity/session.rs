@@ -44,7 +44,8 @@ impl Entity for Session {
 
 impl Session {
     pub fn ensure_revoker(&self, now: OffsetDateTime) -> Result<(), EntityError> {
-        if now - OffsetDateTime::from(self.created_at) < MIN_REVOKER_AGE {
+        let created_at: OffsetDateTime = self.created_at.into();
+        if now - created_at < MIN_REVOKER_AGE {
             return Err(EntityError::SessionTooNewToRevoke);
         }
 
