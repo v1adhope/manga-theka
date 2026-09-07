@@ -17,7 +17,7 @@ use manga_theka::{
         BookVisibility, Chapter, ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume,
         ContentRating, CoverUrl, Creator, CreatorQuery, CreatorRole, Email, Feedback,
         ImageExtension, Label, Language, LinkUrl, Name, PublicationDemographic, Role, Session,
-        Text, User,
+        Text, Timestamp, User,
     },
     hasher::Hasher,
     jwt::Jwt,
@@ -404,8 +404,8 @@ values($1, $2, $3, $4, $5, $6, $7);
             user.username.as_ref(),
             user.password_hash.as_ref(),
             &roles,
-            user.verified_at.map(time::OffsetDateTime::from),
-            time::OffsetDateTime::from(user.created_at),
+            user.verified_at.map(Timestamp::into_inner),
+            user.created_at.into_inner(),
         )
         .execute(&self.pool)
         .await

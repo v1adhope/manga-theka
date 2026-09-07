@@ -487,14 +487,14 @@ impl Database {
         if let Some(from) = selection.created_at.from() {
             builder
                 .push(" and b.created_at >= ")
-                .push_bind(time::OffsetDateTime::from(*from));
+                .push_bind(from.into_inner());
         }
         if let Some(to) = selection.created_at.to() {
             builder
                 .push(" and b.created_at ")
                 .push(super::upper_bound_op::<CreatedAtBound>())
                 .push(" ")
-                .push_bind(time::OffsetDateTime::from(*to));
+                .push_bind(to.into_inner());
         }
 
         if let Some(cursor) = &filter.cursor {
@@ -505,7 +505,7 @@ impl Database {
                 .push(cursor_comparison)
                 .push(" (");
             match &cursor.sort {
-                BookSort::CreatedAt(at) => builder.push_bind(time::OffsetDateTime::from(*at)),
+                BookSort::CreatedAt(at) => builder.push_bind(at.into_inner()),
                 BookSort::Name(name) => builder.push_bind(name.clone()),
                 BookSort::PublicationYear(year) => builder.push_bind(*year),
             };

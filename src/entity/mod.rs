@@ -61,9 +61,9 @@ impl From<OffsetDateTime> for Timestamp {
     }
 }
 
-impl From<Timestamp> for OffsetDateTime {
-    fn from(at: Timestamp) -> Self {
-        at.0
+impl Timestamp {
+    pub const fn into_inner(self) -> OffsetDateTime {
+        self.0
     }
 }
 

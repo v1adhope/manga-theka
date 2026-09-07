@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     database::{Database, Invariant},
-    entity::{Email, PasswordHash, Role, User, Username},
+    entity::{Email, PasswordHash, Role, Timestamp, User, Username},
     error::DatabaseError,
 };
 
@@ -58,8 +58,8 @@ impl Database {
             item.username.as_ref(),
             item.password_hash.as_ref(),
             &roles as &[&str],
-            item.verified_at.map(OffsetDateTime::from),
-            OffsetDateTime::from(item.created_at),
+            item.verified_at.map(Timestamp::into_inner),
+            item.created_at.into_inner(),
         )
         .execute(&self.pool)
         .await
