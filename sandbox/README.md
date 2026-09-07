@@ -22,3 +22,7 @@ sbx run --name cmt --template sbx-cmt:v1 claude
 The agent argument must match the base image variant, so it stays `claude`.
 Bump the tag on every rebuild: the runtime caches templates by tag and reusing
 one can serve the older image.
+
+`settings/` holds Claude Code config for the agent running inside the sandbox:
+`settings.json` and the `statusline.sh` it references. The `Dockerfile` does not
+copy them yet; wire that up when the sandbox should consume them.
