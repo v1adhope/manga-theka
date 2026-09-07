@@ -147,6 +147,10 @@ pub struct User {
     pub created_at: Timestamp,
 }
 
+impl Entity for User {
+    const NAME: &'static str = "User";
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserQuery {
@@ -158,10 +162,6 @@ pub struct UserQuery {
     pub roles: Roles,
     pub verified_at: Option<Timestamp>,
     pub created_at: Timestamp,
-}
-
-impl Entity for UserQuery {
-    const NAME: &'static str = "User";
 }
 
 #[derive(Debug, Clone)]

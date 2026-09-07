@@ -18,7 +18,7 @@ pub struct Config {
 pub struct Auth {
     pub jwt_access: Jwt,
     pub jwt_refresh: Jwt,
-    pub pepper: Pepper,
+    pub pepper: PepperHash,
     pub password: Password,
 }
 
@@ -88,10 +88,8 @@ pub struct Jwt {
     pub ttl: i64,
 }
 
-/// Pepper for the keyed BLAKE3 hash that maps a session refresh jti to its
-/// stored digest.
 #[derive(Deserialize, Debug)]
-pub struct Pepper {
+pub struct PepperHash {
     pub key: SecretString,
 }
 

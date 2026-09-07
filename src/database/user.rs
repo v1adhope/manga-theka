@@ -77,7 +77,7 @@ impl Database {
 
         match row {
             Some(row) => UserQuery::try_from(row),
-            None => Err(DatabaseError::not_found::<UserQuery>()),
+            None => Err(DatabaseError::not_found::<User>()),
         }
     }
 
