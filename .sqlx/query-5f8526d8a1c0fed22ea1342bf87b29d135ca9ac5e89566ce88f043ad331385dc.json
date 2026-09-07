@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into users(id, email, username, password_hash, roles, verified_at, created_at)\nvalues($1, $2, $3, $4, array['Reader']::text[], null, $5);\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5f8526d8a1c0fed22ea1342bf87b29d135ca9ac5e89566ce88f043ad331385dc"
+}

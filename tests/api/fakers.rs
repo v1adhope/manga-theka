@@ -185,7 +185,7 @@ impl Dummy<UserFaker> for UserQuery {
             email: Email::try_from(format!("{}@example.test", &handle[..12])).unwrap(),
             username: Username::try_from(format!("u{}", &handle[..16])).unwrap(),
             password_hash: PasswordHash::try_from(KNOWN_PASSWORD_PHC.to_owned()).unwrap(),
-            roles: config.roles.clone(),
+            roles: config.roles.clone().try_into().unwrap(),
             verified_at: config
                 .verified
                 .then(|| (OffsetDateTime::now_utc() - time::Duration::hours(1)).into()),

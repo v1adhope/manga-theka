@@ -395,7 +395,12 @@ impl TestApp {
     }
 
     pub async fn insert_user(&self, user: &UserQuery) {
-        let roles: Vec<String> = user.roles.iter().map(|r| r.as_ref().to_owned()).collect();
+        let roles: Vec<String> = user
+            .roles
+            .as_slice()
+            .iter()
+            .map(|r| r.as_ref().to_owned())
+            .collect();
 
         sqlx::query!(
             r#"

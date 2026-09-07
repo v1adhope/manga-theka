@@ -6,7 +6,7 @@ use manga_theka::entity::{Role, UserQuery};
 use uuid::Uuid;
 
 use crate::fakers::UserFaker;
-use crate::helpers::{TestApp, assert_error};
+use crate::helpers::{TestApp, assert_error, assert_stored};
 
 async fn register(app: &TestApp, body: serde_json::Value) -> axum::response::Response {
     let req = Request::post("/users/register")
@@ -26,29 +26,20 @@ fn valid_body() -> serde_json::Value {
 }
 
 #[tokio::test]
-async fn register_with_a_valid_body_returns_201_and_hides_the_hash() {
+async fn register_with_a_valid_body_returns_201_and_persists_a_hashed_reader() {
     let app = TestApp::new().await;
     let body = valid_body();
 
-    let resp = register(&app, body.clone()).await;
-    assert_eq!(resp.status(), StatusCode::CREATED);
-
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-
-    assert_eq!(v["data"]["email"], body["email"]);
-    assert_eq!(v["data"]["username"], body["username"]);
-    assert_eq!(v["data"]["roles"], serde_json::json!(["Reader"]));
-    assert!(v["data"].get("passwordHash").is_none());
-    assert!(v["data"].get("password").is_none());
+    let id = assert_stored(register(&app, body.clone()).await).await;
 
     let row = sqlx::query!(
-        "select roles, password_hash from users where email = $1",
+        "select id, roles, password_hash from users where email = $1",
         body["email"].as_str().unwrap()
     )
     .fetch_one(&app.pool)
     .await
     .unwrap();
+    assert_eq!(row.id, id);
     assert_eq!(row.roles, vec!["Reader".to_owned()]);
     assert!(row.password_hash.starts_with("$argon2id$"));
 }
@@ -125,7 +116,7 @@ async fn get_me_returns_the_caller_without_the_hash() {
     let req = Request::get("/users/me")
         .header(
             header::AUTHORIZATION,
-            app.bearer(user.id, Uuid::now_v7(), &user.roles),
+            app.bearer(user.id, Uuid::now_v7(), user.roles.as_slice()),
         )
         .body(Body::empty())
         .unwrap();
@@ -165,7 +156,7 @@ async fn get_me_after_the_row_is_gone_returns_404() {
     let req = Request::get("/users/me")
         .header(
             header::AUTHORIZATION,
-            app.bearer(user.id, Uuid::now_v7(), &user.roles),
+            app.bearer(user.id, Uuid::now_v7(), user.roles.as_slice()),
         )
         .body(Body::empty())
         .unwrap();

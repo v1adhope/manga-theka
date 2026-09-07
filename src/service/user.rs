@@ -1,13 +1,13 @@
 use uuid::Uuid;
 
 use crate::{
-    entity::{Role, User, UserQuery},
+    entity::{User, UserQuery},
     error::ServiceError,
     service::Service,
 };
 
 impl Service {
-    pub async fn register_user(&self, user: User) -> Result<UserQuery, ServiceError> {
+    pub async fn register_user(&self, user: User) -> Result<(), ServiceError> {
         // Reject a known address before paying for Argon2; `unique_users_email`
         // is still the backstop for a race past this point.
         if self
@@ -21,25 +21,15 @@ impl Service {
 
         // Argon2 blocks the runtime; hash off the reactor.
         let hasher = self.hasher.clone();
-        let password = user.password;
+        let password = user.password.clone();
         let password_hash =
             tokio::task::spawn_blocking(move || hasher.hash_password(password.expose_secret()))
                 .await
                 .expect("password hashing task panicked")?;
 
-        let stored = UserQuery {
-            id: user.id,
-            email: user.email,
-            username: user.username,
-            password_hash,
-            roles: vec![Role::Reader],
-            verified_at: None,
-            created_at: user.created_at.into(),
-        };
+        self.database.store_user(user, password_hash).await?;
 
-        self.database.store_user(&stored).await?;
-
-        Ok(stored)
+        Ok(())
     }
 
     pub async fn get_user(&self, id: Uuid) -> Result<UserQuery, ServiceError> {

@@ -69,7 +69,9 @@ impl Service {
         };
         self.memory.put_session(user.id, sid, &session).await?;
 
-        let access = self.jwt.issue_access(user.id, sid, &user.roles, now)?;
+        let access = self
+            .jwt
+            .issue_access(user.id, sid, user.roles.as_slice(), now)?;
         let refresh = self.jwt.issue_refresh(user.id, sid, jti, now)?;
 
         Ok(SessionTokens { access, refresh })
@@ -112,7 +114,7 @@ impl Service {
 
         let access = self
             .jwt
-            .issue_access(claims.sub, claims.sid, &user.roles, now)?;
+            .issue_access(claims.sub, claims.sid, user.roles.as_slice(), now)?;
         let refresh = self.jwt.issue_refresh(claims.sub, claims.sid, jti, now)?;
 
         Ok(SessionTokens { access, refresh })

@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::{
     entity::{Email, Password, User, UserClaims, Username},
     error::{AppError, EntityError},
-    route::json_data_response,
+    route::{StoreResp, json_data_response},
     service::Service,
 };
 
@@ -33,7 +33,7 @@ impl TryFrom<(RegisterReq, Uuid, OffsetDateTime)> for User {
             email,
             username,
             password,
-            created_at,
+            created_at: created_at.into(),
         })
     }
 }
@@ -46,9 +46,9 @@ pub async fn register_user(
     let created_at = OffsetDateTime::now_utc();
     let user: User = (req, id, created_at).try_into()?;
 
-    let stored = service.register_user(user).await?;
+    service.register_user(user).await?;
 
-    Ok(json_data_response(StatusCode::CREATED, stored))
+    Ok(json_data_response(StatusCode::CREATED, StoreResp { id }))
 }
 
 pub async fn get_me(

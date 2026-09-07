@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     database::{Database, Invariant},
-    entity::{Email, PasswordHash, Role, Timestamp, UserQuery, Username},
+    entity::{Email, PasswordHash, Roles, User, UserQuery, Username},
     error::DatabaseError,
 };
 
@@ -28,18 +28,12 @@ impl TryFrom<UserRow> for UserQuery {
         let password_hash =
             PasswordHash::try_from(row.password_hash).or_corrupted("password_hash")?;
 
-        let mut roles = Vec::with_capacity(row.roles.len());
-        for role in row.roles {
-            let role: Role = role.parse().or_corrupted("roles")?;
-            roles.push(role);
-        }
-
         Ok(UserQuery {
             id: row.id,
             email,
             username,
             password_hash,
-            roles,
+            roles: Roles::try_from(row.roles).or_corrupted("roles")?,
             verified_at: row.verified_at.map(Into::into),
             created_at: row.created_at.into(),
         })
@@ -47,19 +41,19 @@ impl TryFrom<UserRow> for UserQuery {
 }
 
 impl Database {
-    #[instrument(name = "db.user.store", skip_all, fields(user.id = %item.id))]
-    pub async fn store_user(&self, item: &UserQuery) -> Result<(), DatabaseError> {
-        let roles: Vec<&str> = item.roles.iter().map(AsRef::as_ref).collect();
-
+    #[instrument(name = "db.user.store", skip_all, fields(user.id = %user.id))]
+    pub async fn store_user(
+        &self,
+        user: User,
+        password_hash: PasswordHash,
+    ) -> Result<(), DatabaseError> {
         sqlx::query_file!(
             "queries/store_user.sql",
-            item.id,
-            item.email.as_ref(),
-            item.username.as_ref(),
-            item.password_hash.as_ref(),
-            &roles as &[&str],
-            item.verified_at.map(Timestamp::into_inner),
-            item.created_at.into_inner(),
+            user.id,
+            user.email.as_ref(),
+            user.username.as_ref(),
+            password_hash.as_ref(),
+            user.created_at.into_inner(),
         )
         .execute(&self.pool)
         .await

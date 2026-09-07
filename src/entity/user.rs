@@ -4,11 +4,10 @@ use std::sync::LazyLock;
 use regex::Regex;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
-    entity::{Email, Entity, Timestamp},
+    entity::{Bounded, BoundedVec, Email, Entity, Timestamp},
     error::EntityError,
 };
 
@@ -45,6 +44,30 @@ impl AsRef<str> for Role {
     }
 }
 
+// Closed vocabulary: one value per `Role` variant. Adding or removing a variant
+// means updating this constant.
+pub const MAX_USER_ROLES: usize = 4;
+
+pub struct UserRolesBound;
+
+impl Bounded for UserRolesBound {
+    const MAX: usize = MAX_USER_ROLES;
+    const NAME: &'static str = "user roles";
+}
+
+pub type Roles = BoundedVec<Role, UserRolesBound>;
+
+impl TryFrom<Vec<String>> for Roles {
+    type Error = EntityError;
+
+    fn try_from(raw: Vec<String>) -> Result<Self, Self::Error> {
+        raw.into_iter()
+            .map(|role| role.parse())
+            .collect::<Result<Vec<Role>, _>>()?
+            .try_into()
+    }
+}
+
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Username(String);
@@ -69,7 +92,7 @@ impl AsRef<str> for Username {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Password(SecretString);
 
 impl TryFrom<String> for Password {
@@ -115,15 +138,13 @@ impl AsRef<str> for PasswordHash {
     }
 }
 
-/// What a caller asks to create at registration, before the system hashes the
-/// password or applies role defaults. [`UserQuery`] is the read side.
 #[derive(Debug)]
 pub struct User {
     pub id: Uuid,
     pub email: Email,
     pub username: Username,
     pub password: Password,
-    pub created_at: OffsetDateTime,
+    pub created_at: Timestamp,
 }
 
 #[derive(Debug, Serialize)]
@@ -134,7 +155,7 @@ pub struct UserQuery {
     pub username: Username,
     #[serde(skip_serializing)]
     pub password_hash: PasswordHash,
-    pub roles: Vec<Role>,
+    pub roles: Roles,
     pub verified_at: Option<Timestamp>,
     pub created_at: Timestamp,
 }
@@ -165,7 +186,9 @@ mod tests {
     use time::OffsetDateTime;
     use uuid::Uuid;
 
-    use crate::entity::{Email, Password, PasswordHash, Role, UserClaims, UserQuery, Username};
+    use crate::entity::{
+        Email, MAX_USER_ROLES, Password, PasswordHash, Role, Roles, UserClaims, UserQuery, Username,
+    };
 
     fn claims(roles: &[Role]) -> UserClaims {
         UserClaims {
@@ -185,7 +208,7 @@ mod tests {
                 "$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$aGFzaA".to_owned(),
             )
             .unwrap(),
-            roles: vec![Role::Reader],
+            roles: Roles::try_from(vec![Role::Reader]).unwrap(),
             verified_at: None,
             created_at: OffsetDateTime::now_utc().into(),
         };
@@ -213,6 +236,27 @@ mod tests {
     #[test]
     fn unknown_role_is_rejected() {
         let res = "Owner".parse::<Role>();
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn roles_parse_from_their_wire_names() {
+        let roles = Roles::try_from(vec!["Reader".to_owned(), "Admin".to_owned()]).unwrap();
+
+        assert_eq!(roles.as_slice(), [Role::Reader, Role::Admin]);
+    }
+
+    #[test]
+    fn an_unknown_name_rejects_the_whole_set() {
+        let res = Roles::try_from(vec!["Reader".to_owned(), "Owner".to_owned()]);
+
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn more_values_than_the_vocabulary_are_rejected() {
+        let res = Roles::try_from(vec!["Reader".to_owned(); MAX_USER_ROLES + 1]);
+
         assert!(res.is_err());
     }
 
