@@ -10,11 +10,16 @@ pub struct Config {
     pub database: Database,
     pub object_storage: ObjectStorage,
     pub redis: Redis,
+    pub auth: Auth,
+    pub log_level: String,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Auth {
     pub jwt_access: Jwt,
     pub jwt_refresh: Jwt,
     pub pepper: Pepper,
     pub password: Password,
-    pub log_level: String,
 }
 
 impl Config {

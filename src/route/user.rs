@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::{
     entity::{Email, Password, User, UserClaims, Username},
-    error::AppError,
+    error::{AppError, EntityError},
     route::json_data_response,
     service::Service,
 };
@@ -18,14 +18,22 @@ pub struct RegisterReq {
     pub password: String,
 }
 
-impl TryFrom<RegisterReq> for User {
-    type Error = AppError;
+impl TryFrom<(RegisterReq, Uuid, OffsetDateTime)> for User {
+    type Error = EntityError;
 
-    fn try_from(req: RegisterReq) -> Result<Self, Self::Error> {
+    fn try_from(ctx: (RegisterReq, Uuid, OffsetDateTime)) -> Result<Self, Self::Error> {
+        let (req, id, created_at) = ctx;
+
+        let email = Email::try_from(req.email)?;
+        let username = Username::try_from(req.username)?;
+        let password = Password::try_from(req.password)?;
+
         Ok(Self {
-            email: Email::try_from(req.email)?,
-            username: Username::try_from(req.username)?,
-            password: Password::try_from(req.password)?,
+            id,
+            email,
+            username,
+            password,
+            created_at,
         })
     }
 }
@@ -36,10 +44,9 @@ pub async fn register_user(
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let id = Uuid::now_v7();
     let created_at = OffsetDateTime::now_utc();
+    let user: User = (req, id, created_at).try_into()?;
 
-    let user = User::try_from(req)?;
-
-    let stored = service.register_user(id, user, created_at).await?;
+    let stored = service.register_user(user).await?;
 
     Ok(json_data_response(StatusCode::CREATED, stored))
 }

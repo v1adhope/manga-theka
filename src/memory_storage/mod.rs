@@ -25,7 +25,6 @@ pub async fn connection(cfg: &config::Redis) -> redis::aio::ConnectionManager {
         .expect("failed to connect to Redis")
 }
 
-/// The Redis sibling of `object_storage::ObjectStorage`.
 #[derive(Clone)]
 pub struct MemoryStore {
     conn: redis::aio::ConnectionManager,

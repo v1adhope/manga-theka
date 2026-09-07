@@ -55,17 +55,17 @@ impl App {
         storage.ensure_buckets().await;
 
         let hasher = Hasher::new(
-            cfg.password.m_cost,
-            cfg.password.t_cost,
-            cfg.password.p_cost,
-            cfg.pepper.key.expose_secret().as_bytes(),
+            cfg.auth.password.m_cost,
+            cfg.auth.password.t_cost,
+            cfg.auth.password.p_cost,
+            cfg.auth.pepper.key.expose_secret().as_bytes(),
         )
         .expect("failed to build the password hasher");
 
-        let jwt = Jwt::load(&cfg.jwt_access, &cfg.jwt_refresh);
+        let jwt = Jwt::load(&cfg.auth.jwt_access, &cfg.auth.jwt_refresh);
 
         let redis = memory_storage::connection(&cfg.redis).await;
-        let memory = MemoryStore::new(redis, cfg.jwt_refresh.ttl);
+        let memory = MemoryStore::new(redis, cfg.auth.jwt_refresh.ttl);
 
         let service = Service::new(database, storage, hasher, jwt, memory);
 

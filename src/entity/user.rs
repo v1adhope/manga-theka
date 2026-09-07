@@ -4,6 +4,7 @@ use std::sync::LazyLock;
 use regex::Regex;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
@@ -114,13 +115,15 @@ impl AsRef<str> for PasswordHash {
     }
 }
 
-/// What a caller asks to create at registration, before the system stamps an id,
-/// hashes the password, or applies role defaults. [`UserQuery`] is the read side.
+/// What a caller asks to create at registration, before the system hashes the
+/// password or applies role defaults. [`UserQuery`] is the read side.
 #[derive(Debug)]
 pub struct User {
+    pub id: Uuid,
     pub email: Email,
     pub username: Username,
     pub password: Password,
+    pub created_at: OffsetDateTime,
 }
 
 #[derive(Debug, Serialize)]

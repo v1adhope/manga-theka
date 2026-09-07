@@ -301,18 +301,21 @@ impl TestApp {
                 release_pages_bucket.as_str(),
             ),
             ("APP_REDIS__URL", "redis://localhost:6379"),
-            ("APP_JWT_ACCESS__PRIVATE_KEY", access_private.as_str()),
-            ("APP_JWT_ACCESS__PUBLIC_KEY", access_public.as_str()),
-            ("APP_JWT_ACCESS__TTL", "900"),
-            ("APP_JWT_REFRESH__PRIVATE_KEY", refresh_private.as_str()),
-            ("APP_JWT_REFRESH__PUBLIC_KEY", refresh_public.as_str()),
-            ("APP_JWT_REFRESH__TTL", "2592000"),
-            ("APP_PEPPER__KEY", "test-pepper"),
+            ("APP_AUTH__JWT_ACCESS__PRIVATE_KEY", access_private.as_str()),
+            ("APP_AUTH__JWT_ACCESS__PUBLIC_KEY", access_public.as_str()),
+            ("APP_AUTH__JWT_ACCESS__TTL", "900"),
+            (
+                "APP_AUTH__JWT_REFRESH__PRIVATE_KEY",
+                refresh_private.as_str(),
+            ),
+            ("APP_AUTH__JWT_REFRESH__PUBLIC_KEY", refresh_public.as_str()),
+            ("APP_AUTH__JWT_REFRESH__TTL", "2592000"),
+            ("APP_AUTH__PEPPER__KEY", "test-pepper"),
             // Minimum viable Argon2 cost -- tests exercise behavior, not
             // hardness, and every `Hasher::new` pays one hash for its dummy PHC.
-            ("APP_PASSWORD__M_COST", "8"),
-            ("APP_PASSWORD__T_COST", "1"),
-            ("APP_PASSWORD__P_COST", "1"),
+            ("APP_AUTH__PASSWORD__M_COST", "8"),
+            ("APP_AUTH__PASSWORD__T_COST", "1"),
+            ("APP_AUTH__PASSWORD__P_COST", "1"),
             // Ignored pairs
             ("APP_ADDR", "0.0.0.0:0"),
             ("APP_LOG_LEVEL", "info"),
@@ -321,13 +324,13 @@ impl TestApp {
         let s3 = object_storage::client(&cfg.object_storage).await;
         let app = App::build(&cfg).await;
 
-        let jwt = Jwt::load(&cfg.jwt_access, &cfg.jwt_refresh);
+        let jwt = Jwt::load(&cfg.auth.jwt_access, &cfg.auth.jwt_refresh);
         let redis = memory_storage::connection(&cfg.redis).await;
-        let memory = MemoryStore::new(redis, cfg.jwt_refresh.ttl);
+        let memory = MemoryStore::new(redis, cfg.auth.jwt_refresh.ttl);
         let hasher = Hasher::new(
-            cfg.password.m_cost,
-            cfg.password.t_cost,
-            cfg.password.p_cost,
+            cfg.auth.password.m_cost,
+            cfg.auth.password.t_cost,
+            cfg.auth.password.p_cost,
             b"test-pepper",
         )
         .unwrap();

@@ -1,4 +1,3 @@
-use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
@@ -8,12 +7,7 @@ use crate::{
 };
 
 impl Service {
-    pub async fn register_user(
-        &self,
-        id: Uuid,
-        user: User,
-        created_at: OffsetDateTime,
-    ) -> Result<UserQuery, ServiceError> {
+    pub async fn register_user(&self, user: User) -> Result<UserQuery, ServiceError> {
         // Reject a known address before paying for Argon2; `unique_users_email`
         // is still the backstop for a race past this point.
         if self
@@ -34,13 +28,13 @@ impl Service {
                 .expect("password hashing task panicked")?;
 
         let stored = UserQuery {
-            id,
+            id: user.id,
             email: user.email,
             username: user.username,
             password_hash,
             roles: vec![Role::Reader],
             verified_at: None,
-            created_at: created_at.into(),
+            created_at: user.created_at.into(),
         };
 
         self.database.store_user(&stored).await?;
