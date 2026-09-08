@@ -11,6 +11,10 @@ use crate::{
     error::EntityError,
 };
 
+// Closed vocabulary: one value per `Role` variant. Adding or removing a variant
+// means updating this constant.
+pub const MAX_USER_ROLES: usize = 4;
+
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
 pub enum Role {
     Reader,
@@ -44,10 +48,6 @@ impl AsRef<str> for Role {
     }
 }
 
-// Closed vocabulary: one value per `Role` variant. Adding or removing a variant
-// means updating this constant.
-pub const MAX_USER_ROLES: usize = 4;
-
 pub struct UserRolesBound;
 
 impl Bounded for UserRolesBound {
@@ -69,6 +69,7 @@ impl TryFrom<Vec<String>> for Roles {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "String")]
 pub struct Username(String);
 
 impl TryFrom<String> for Username {
