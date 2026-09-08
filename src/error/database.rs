@@ -22,6 +22,9 @@ pub enum DatabaseError {
     #[error("Declared page order names a page outside the release")]
     PageOrderIsForeign,
 
+    #[error("User email already exists")]
+    UserEmailTaken,
+
     // Generic, reused across fields
     #[error("{field} is out of range")]
     OutOfRange {
@@ -405,9 +408,10 @@ impl IntoResponse for DatabaseError {
         let status = match self {
             Self::Unknown(_) | Self::InvariantCorrupted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Self::NotFound { .. } => StatusCode::NOT_FOUND,
-            Self::AlreadyExists { .. } | Self::InUse { .. } | Self::BookCoverMainConflict(_) => {
-                StatusCode::CONFLICT
-            }
+            Self::AlreadyExists { .. }
+            | Self::InUse { .. }
+            | Self::BookCoverMainConflict(_)
+            | Self::UserEmailTaken => StatusCode::CONFLICT,
             Self::OutOfRange { .. }
             | Self::DoesNotExist { .. }
             | Self::Duplication { .. }

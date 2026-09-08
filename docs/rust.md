@@ -16,7 +16,7 @@
 - Declare a constant at the smallest scope that covers all its uses — function, file, or module, in that order of preference.
 - Keep one canonical entity per responsibility in a domain layer — a command entity and a read/query entity — instead of operation-specific aliases for each use case. A single entity may serve both responsibilities when the read and command shapes coincide; split only when they diverge.
 - A repository owns its own transaction boundary by default. Put begin/commit in the application layer when the atomic unit spans more than one repository or depends on a business decision; in that case give the repository methods involved a `&mut PgConnection` parameter so they can join the caller's transaction.
-- Comments answer *why*, not *what*. If a comment restates the code, delete it.
+- Don't add comments unless explicitly asked. When asked, a comment answers *why*, not *what*; if it restates the code, flag it.
 - Service layer methods take ownership of the entity they act on, even when only forwarding `&item` downstream.
 
 ## Dependencies & Versioning

@@ -15,9 +15,6 @@ pub enum ServiceError {
     #[error("Invalid credentials")]
     InvalidCredentials,
 
-    #[error("{0} already exists")]
-    AlreadyExists(&'static str),
-
     #[error(transparent)]
     DatabaseError(#[from] DatabaseError),
 
@@ -41,7 +38,6 @@ impl IntoResponse for ServiceError {
     fn into_response(self) -> Response {
         match self {
             Self::InvalidCredentials => error_response(StatusCode::UNAUTHORIZED, self.to_string()),
-            Self::AlreadyExists(_) => error_response(StatusCode::CONFLICT, self.to_string()),
             Self::DatabaseError(e) => e.into_response(),
             Self::ObjectStorageError(e) => e.into_response(),
             Self::EntityError(e) => e.into_response(),
