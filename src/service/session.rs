@@ -52,7 +52,7 @@ impl Service {
 
         let session = Session {
             sid,
-            jti: self.hasher.keyed_jti_hash(jti)?,
+            jti: self.hasher.compute_keyed_hex_hash(jti)?,
             ua,
             ip,
             created_at: now.into(),
@@ -81,7 +81,7 @@ impl Service {
             .await?
             .ok_or(ServiceError::InvalidCredentials)?;
 
-        if self.hasher.keyed_jti_hash(claims.jti)? != session.jti {
+        if self.hasher.compute_keyed_hex_hash(claims.jti)? != session.jti {
             // ADR-0003 rejects reuse-detection escalation: warn, no family revoke.
             tracing::warn!(sub = %claims.sub, sid = %claims.sid, "refresh jti mismatch");
             return Err(ServiceError::InvalidCredentials);
@@ -94,7 +94,7 @@ impl Service {
         let jti = Uuid::now_v7();
         let rotated = Session {
             sid: claims.sid,
-            jti: self.hasher.keyed_jti_hash(jti)?,
+            jti: self.hasher.compute_keyed_hex_hash(jti)?,
             ua: session.ua,
             ip: session.ip,
             created_at: session.created_at,

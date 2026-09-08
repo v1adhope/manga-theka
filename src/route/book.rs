@@ -262,7 +262,7 @@ impl TryFrom<(BookListQuery, Option<BookCursor>)> for BookFilter {
             )?,
         };
 
-        let selection_hash = Hasher::compute_hex_hash(&selection)?;
+        let selection_hash = Hasher::compute_short_hex_hash(&selection)?;
         let filter = Self {
             limit,
             cursor,

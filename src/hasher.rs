@@ -60,15 +60,15 @@ impl Hasher {
         }
     }
 
-    pub fn keyed_jti_hash(&self, jti: uuid::Uuid) -> Result<HexHash, HasherError> {
-        let hex = blake3::keyed_hash(&self.pepper, jti.as_bytes()).to_hex();
+    pub fn compute_keyed_hex_hash(&self, id: uuid::Uuid) -> Result<HexHash, HasherError> {
+        let hex = blake3::keyed_hash(&self.pepper, id.as_bytes()).to_hex();
 
         HexHash::try_from(hex.to_string())
             .map_err(HasherError::Digest)
             .inspect_err(HasherError::log_internal)
     }
 
-    pub fn compute_hex_hash(target: &BookSelection) -> Result<ShortHexHash, HasherError> {
+    pub fn compute_short_hex_hash(target: &BookSelection) -> Result<ShortHexHash, HasherError> {
         const LEN: usize = 16;
 
         let json = serde_json::to_string(target)
@@ -102,8 +102,8 @@ mod tests {
     #[test]
     fn a_hash_is_stable_across_runs() {
         assert_eq!(
-            Hasher::compute_hex_hash(&unfiltered_selection()).unwrap(),
-            Hasher::compute_hex_hash(&unfiltered_selection()).unwrap(),
+            Hasher::compute_short_hex_hash(&unfiltered_selection()).unwrap(),
+            Hasher::compute_short_hex_hash(&unfiltered_selection()).unwrap(),
         );
     }
 
@@ -115,8 +115,8 @@ mod tests {
         };
 
         assert_ne!(
-            Hasher::compute_hex_hash(&unfiltered_selection()).unwrap(),
-            Hasher::compute_hex_hash(&moved).unwrap(),
+            Hasher::compute_short_hex_hash(&unfiltered_selection()).unwrap(),
+            Hasher::compute_short_hex_hash(&moved).unwrap(),
         );
     }
 
@@ -135,8 +135,8 @@ mod tests {
         };
 
         assert_eq!(
-            Hasher::compute_hex_hash(&one).unwrap(),
-            Hasher::compute_hex_hash(&other).unwrap(),
+            Hasher::compute_short_hex_hash(&one).unwrap(),
+            Hasher::compute_short_hex_hash(&other).unwrap(),
         );
     }
 
@@ -164,18 +164,18 @@ mod tests {
     }
 
     #[test]
-    fn a_keyed_jti_hash_is_stable_and_key_dependent() {
-        let jti = uuid::Uuid::now_v7();
+    fn a_keyed_hex_hash_is_stable_and_key_dependent() {
+        let id = uuid::Uuid::now_v7();
         let a = Hasher::new(19456, 2, 1, b"one").unwrap();
         let b = Hasher::new(19456, 2, 1, b"two").unwrap();
 
         assert_eq!(
-            a.keyed_jti_hash(jti).unwrap().as_ref(),
-            a.keyed_jti_hash(jti).unwrap().as_ref()
+            a.compute_keyed_hex_hash(id).unwrap().as_ref(),
+            a.compute_keyed_hex_hash(id).unwrap().as_ref()
         );
         assert_ne!(
-            a.keyed_jti_hash(jti).unwrap().as_ref(),
-            b.keyed_jti_hash(jti).unwrap().as_ref()
+            a.compute_keyed_hex_hash(id).unwrap().as_ref(),
+            b.compute_keyed_hex_hash(id).unwrap().as_ref()
         );
     }
 }

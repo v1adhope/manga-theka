@@ -426,7 +426,7 @@ values($1, $2, $3, $4, $5, $6, $7);
             sid,
             jti: self
                 .hasher
-                .keyed_jti_hash(Uuid::now_v7())
+                .compute_keyed_hex_hash(Uuid::now_v7())
                 .expect("keyed jti hash"),
             ua: None,
             ip: None,
