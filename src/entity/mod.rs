@@ -154,7 +154,7 @@ impl TryFrom<String> for ShortHexHash {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct HexHash(String);
 
@@ -171,6 +171,12 @@ impl TryFrom<String> for HexHash {
 impl AsRef<str> for HexHash {
     fn as_ref(&self) -> &str {
         &self.0
+    }
+}
+
+impl From<HexHash> for String {
+    fn from(hash: HexHash) -> Self {
+        hash.0
     }
 }
 

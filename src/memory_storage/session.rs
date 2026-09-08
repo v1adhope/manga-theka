@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::{
     entity::{HexHash, Session, Text, Timestamp},
-    error::MemoryStoreError,
+    error::{EntityError, MemoryStoreError},
 };
 
 use super::{MemoryStore, blob_key, sids_key};
@@ -15,7 +15,7 @@ use super::{MemoryStore, blob_key, sids_key};
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SessionBlob {
-    jti: HexHash,
+    jti: String,
     ua: Option<Text>,
     ip: Option<IpAddr>,
     created_at: Timestamp,
@@ -25,7 +25,7 @@ struct SessionBlob {
 impl From<Session> for SessionBlob {
     fn from(session: Session) -> Self {
         Self {
-            jti: session.jti,
+            jti: session.jti.into(),
             ua: session.ua,
             ip: session.ip,
             created_at: session.created_at,
@@ -34,16 +34,18 @@ impl From<Session> for SessionBlob {
     }
 }
 
-impl SessionBlob {
-    fn into_session(self, sid: Uuid) -> Session {
-        Session {
+impl TryFrom<(SessionBlob, Uuid)> for Session {
+    type Error = EntityError;
+
+    fn try_from((blob, sid): (SessionBlob, Uuid)) -> Result<Self, Self::Error> {
+        Ok(Self {
             sid,
-            jti: self.jti,
-            ua: self.ua,
-            ip: self.ip,
-            created_at: self.created_at,
-            updated_at: self.updated_at,
-        }
+            jti: HexHash::try_from(blob.jti)?,
+            ua: blob.ua,
+            ip: blob.ip,
+            created_at: blob.created_at,
+            updated_at: blob.updated_at,
+        })
     }
 }
 
@@ -86,11 +88,16 @@ impl MemoryStore {
             .map_err(MemoryStoreError::from)
             .inspect_err(MemoryStoreError::log_internal)?;
 
-        json.map(|j| serde_json::from_str::<SessionBlob>(&j))
+        let blob = json
+            .map(|j| serde_json::from_str::<SessionBlob>(&j))
             .transpose()
             .map_err(MemoryStoreError::Serde)
+            .inspect_err(MemoryStoreError::log_internal)?;
+
+        blob.map(|b| Session::try_from((b, sid)))
+            .transpose()
+            .map_err(MemoryStoreError::CorruptJti)
             .inspect_err(MemoryStoreError::log_internal)
-            .map(|blob| blob.map(|b| b.into_session(sid)))
     }
 
     #[instrument(name = "memory.session.list", skip_all, fields(user.id = %sub))]
@@ -122,7 +129,10 @@ impl MemoryStore {
                     let parsed = Uuid::parse_str(&sid).map_err(MemoryStoreError::CorruptSid)?;
                     let blob: SessionBlob =
                         serde_json::from_str(&json).map_err(MemoryStoreError::Serde)?;
-                    live.push(blob.into_session(parsed));
+                    let session = Session::try_from((blob, parsed))
+                        .map_err(MemoryStoreError::CorruptJti)
+                        .inspect_err(MemoryStoreError::log_internal)?;
+                    live.push(session);
                 }
                 None => dead.push(sid),
             }
@@ -224,6 +234,6 @@ mod tests {
         );
 
         let blob: SessionBlob = serde_json::from_str(&json).unwrap();
-        assert_eq!(blob.into_session(sid).sid, sid);
+        assert_eq!(Session::try_from((blob, sid)).unwrap().sid, sid);
     }
 }

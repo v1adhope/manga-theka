@@ -4,7 +4,7 @@ use axum::{
 };
 use thiserror::Error;
 
-use crate::error::error_response;
+use crate::error::{EntityError, error_response};
 
 #[derive(Debug, Error)]
 #[non_exhaustive]
@@ -17,6 +17,9 @@ pub enum MemoryStoreError {
 
     #[error("Stored session id is not a uuid")]
     CorruptSid(#[source] uuid::Error),
+
+    #[error("Stored session jti is not a well-formed hash")]
+    CorruptJti(#[source] EntityError),
 }
 
 impl MemoryStoreError {
