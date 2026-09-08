@@ -69,7 +69,6 @@ impl TryFrom<Vec<String>> for Roles {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[serde(transparent)]
 pub struct Username(String);
 
 impl TryFrom<String> for Username {

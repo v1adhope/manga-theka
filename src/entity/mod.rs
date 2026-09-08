@@ -93,7 +93,6 @@ impl Ordinal {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[serde(transparent)]
 pub struct Name(String);
 
 impl TryFrom<String> for Name {
@@ -135,7 +134,6 @@ fn parse_hex(s: String, len: usize) -> Result<String, EntityError> {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(transparent)]
 pub struct ShortHexHash(String);
 
 impl ShortHexHash {
@@ -155,7 +153,6 @@ impl TryFrom<String> for ShortHexHash {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(transparent)]
 pub struct HexHash(String);
 
 impl TryFrom<String> for HexHash {
@@ -181,7 +178,6 @@ impl From<HexHash> for String {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[serde(transparent)]
 pub struct Email(String);
 
 impl TryFrom<String> for Email {
@@ -211,7 +207,6 @@ impl AsRef<str> for Email {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[serde(transparent)]
 pub struct Text(String);
 
 impl TryFrom<String> for Text {

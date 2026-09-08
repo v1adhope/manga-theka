@@ -150,7 +150,6 @@ impl AsRef<str> for BookLinkKind {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[serde(transparent)]
 pub struct BookName(String);
 
 impl TryFrom<String> for BookName {
@@ -168,7 +167,6 @@ impl AsRef<str> for BookName {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[serde(transparent)]
 pub struct LinkUrl(Url);
 
 impl TryFrom<String> for LinkUrl {
