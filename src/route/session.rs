@@ -1,56 +1,69 @@
-use std::net::IpAddr;
-
 use axum::{
     Json,
     extract::{Path, State},
-    http::{HeaderMap, StatusCode, header},
+    http::{HeaderMap, StatusCode},
 };
-use axum_extra::extract::{
-    CookieJar,
-    cookie::{Cookie, SameSite},
-};
+use axum_extra::extract::CookieJar;
 use serde::Deserialize;
 use serde_json::json;
-use time::{Duration, OffsetDateTime};
+use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
-    entity::{Text, UserClaims},
-    error::{AppError, RouteError},
-    route::json_data_response,
-    service::{Service, SessionTokens},
+    entity::{Email, LoginForm, Password, UserClaims},
+    error::{AppError, EntityError, RouteError},
+    route::{
+        cookie::{REFRESH_COOKIE, clear_refresh_cookie, refresh_cookie},
+        header::{forwarded_ip, user_agent},
+        json_data_response,
+    },
+    service::Service,
 };
-
-const REFRESH_COOKIE: &str = "refresh_token";
-const REFRESH_COOKIE_PATH: &str = "/sessions";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct LoginReq {
+pub struct LoginFormReq {
     pub email: String,
     pub password: String,
+}
+
+impl TryFrom<(LoginFormReq, HeaderMap, OffsetDateTime)> for LoginForm {
+    type Error = EntityError;
+
+    fn try_from(ctx: (LoginFormReq, HeaderMap, OffsetDateTime)) -> Result<Self, Self::Error> {
+        let (req, headers, now) = ctx;
+
+        let email = Email::try_from(req.email)?;
+        let password = Password::try_from(req.password)?;
+        let ua = user_agent(&headers);
+        let ip = forwarded_ip(&headers);
+
+        Ok(Self {
+            email,
+            password,
+            ua,
+            ip,
+            now,
+        })
+    }
 }
 
 pub async fn login(
     State(service): State<Service>,
     headers: HeaderMap,
-    Json(req): Json<LoginReq>,
+    Json(req): Json<LoginFormReq>,
 ) -> Result<(StatusCode, CookieJar, Json<serde_json::Value>), AppError> {
-    let ua = user_agent(&headers);
-    let ip = forwarded_ip(&headers);
     let now = OffsetDateTime::now_utc();
+    let form: LoginForm = (req, headers, now).try_into()?;
 
-    // The email is not validated here: a malformed one takes the no-such-user
-    // path, so every failed login returns 401 after the same work.
-    let SessionTokens { access, refresh } =
-        service.login(req.email, req.password, ua, ip, now).await?;
+    let tokens = service.login(form).await?;
 
-    let jar = CookieJar::new().add(refresh_cookie(refresh, service.jwt.refresh_ttl()));
+    let jar = CookieJar::new().add(refresh_cookie(tokens.refresh, service.jwt.refresh_ttl()));
 
     Ok((
         StatusCode::CREATED,
         jar,
-        Json(json!({ "data": { "accessToken": access } })),
+        Json(json!({ "data": { "accessToken": tokens.access } })),
     ))
 }
 
@@ -64,11 +77,14 @@ pub async fn refresh(
         .ok_or(RouteError::InvalidCredentials)?;
     let now = OffsetDateTime::now_utc();
 
-    let SessionTokens { access, refresh } = service.refresh_session(&token, now).await?;
+    let tokens = service.refresh_session(&token, now).await?;
 
-    let jar = jar.add(refresh_cookie(refresh, service.jwt.refresh_ttl()));
+    let jar = jar.add(refresh_cookie(tokens.refresh, service.jwt.refresh_ttl()));
 
-    Ok((jar, Json(json!({ "data": { "accessToken": access } }))))
+    Ok((
+        jar,
+        Json(json!({ "data": { "accessToken": tokens.access } })),
+    ))
 }
 
 pub async fn list_my_sessions(
@@ -122,41 +138,4 @@ pub async fn revoke_session(
     };
 
     Ok((StatusCode::NO_CONTENT, jar))
-}
-
-fn refresh_cookie(value: String, ttl: i64) -> Cookie<'static> {
-    Cookie::build((REFRESH_COOKIE, value))
-        .http_only(true)
-        .secure(true)
-        .same_site(SameSite::Strict)
-        .path(REFRESH_COOKIE_PATH)
-        .max_age(Duration::seconds(ttl))
-        .build()
-}
-
-fn clear_refresh_cookie(jar: CookieJar) -> CookieJar {
-    jar.add(
-        Cookie::build((REFRESH_COOKIE, ""))
-            .http_only(true)
-            .secure(true)
-            .same_site(SameSite::Strict)
-            .path(REFRESH_COOKIE_PATH)
-            .max_age(Duration::ZERO)
-            .build(),
-    )
-}
-
-fn user_agent(headers: &HeaderMap) -> Option<Text> {
-    headers
-        .get(header::USER_AGENT)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| Text::try_from(v.to_owned()).ok())
-}
-
-fn forwarded_ip(headers: &HeaderMap) -> Option<IpAddr> {
-    headers
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.split(',').next())
-        .and_then(|v| v.trim().parse().ok())
 }

@@ -5,9 +5,23 @@ use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
 use crate::{
-    entity::{Entity, HexHash, Text, Timestamp},
+    entity::{Email, Entity, HexHash, Password, Text, Timestamp},
     error::EntityError,
 };
+
+#[derive(Debug)]
+pub struct LoginForm {
+    pub email: Email,
+    pub password: Password,
+    pub ua: Option<Text>,
+    pub ip: Option<IpAddr>,
+    pub now: OffsetDateTime,
+}
+
+pub struct SessionTokens {
+    pub access: String,
+    pub refresh: String,
+}
 
 #[derive(Debug)]
 pub struct Session {

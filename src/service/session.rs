@@ -4,38 +4,31 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
-    entity::{Email, Session, SessionQuery, Text, UserQuery},
+    entity::{LoginForm, Session, SessionQuery, SessionTokens, Text, UserQuery},
     error::{EntityError, ServiceError},
     service::Service,
 };
 
-pub struct SessionTokens {
-    pub access: String,
-    pub refresh: String,
-}
-
 impl Service {
-    pub async fn login(
-        &self,
-        email: String,
-        candidate: String,
-        ua: Option<Text>,
-        ip: Option<IpAddr>,
-        now: OffsetDateTime,
-    ) -> Result<SessionTokens, ServiceError> {
-        let user = match Email::try_from(email) {
-            Ok(email) => self.database.get_user_by_email(&email).await?,
-            Err(_) => None,
-        };
+    pub async fn login(&self, form: LoginForm) -> Result<SessionTokens, ServiceError> {
+        let LoginForm {
+            email,
+            password,
+            ua,
+            ip,
+            now,
+        } = form;
+
+        let user = self.database.get_user_by_email(&email).await?;
 
         // Off the reactor. The no-such-user branch runs a dummy verify so timing
         // does not reveal whether the address has an account.
         let hasher = self.hasher.clone();
         let stored = user.as_ref().map(|u| u.password_hash.as_ref().to_owned());
         let verified = tokio::task::spawn_blocking(move || match stored {
-            Some(hash) => hasher.verify_password(&candidate, &hash),
+            Some(hash) => hasher.verify_password(password.expose_secret(), &hash),
             None => {
-                hasher.verify_dummy(&candidate);
+                hasher.verify_dummy(password.expose_secret());
                 Ok(false)
             }
         })

@@ -24,8 +24,6 @@ pub struct Service {
     pub memory: MemoryStore,
 }
 
-pub use session::SessionTokens;
-
 impl Service {
     pub fn new(
         database: Database,
