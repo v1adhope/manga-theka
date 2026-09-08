@@ -11,6 +11,7 @@ mod book;
 #[path = "book/cover.rs"]
 mod book_cover;
 #[path = "book/filter.rs"]
+// TODO: place fixtures in one place
 pub(crate) mod book_filter;
 mod bounded_vec;
 mod chapter;
@@ -156,6 +157,12 @@ impl TryFrom<String> for ShortHexHash {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct HexHash(String);
 
+impl HexHash {
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+}
+
 impl TryFrom<String> for HexHash {
     type Error = EntityError;
 
@@ -169,12 +176,6 @@ impl TryFrom<String> for HexHash {
 impl AsRef<str> for HexHash {
     fn as_ref(&self) -> &str {
         &self.0
-    }
-}
-
-impl From<HexHash> for String {
-    fn from(hash: HexHash) -> Self {
-        hash.0
     }
 }
 

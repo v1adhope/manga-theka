@@ -25,7 +25,7 @@ struct SessionBlob {
 impl From<Session> for SessionBlob {
     fn from(session: Session) -> Self {
         Self {
-            jti: session.jti.into(),
+            jti: session.jti.into_inner(),
             ua: session.ua,
             ip: session.ip,
             created_at: session.created_at,
