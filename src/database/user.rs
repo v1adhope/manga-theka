@@ -9,14 +9,14 @@ use crate::{
 };
 
 #[derive(sqlx::FromRow)]
-pub(super) struct UserRow {
-    pub(super) id: Uuid,
-    pub(super) email: String,
-    pub(super) username: String,
-    pub(super) password_hash: String,
-    pub(super) roles: Vec<String>,
-    pub(super) verified_at: Option<OffsetDateTime>,
-    pub(super) created_at: OffsetDateTime,
+struct UserRow {
+    id: Uuid,
+    email: String,
+    username: String,
+    password_hash: String,
+    roles: Vec<String>,
+    verified_at: Option<OffsetDateTime>,
+    created_at: OffsetDateTime,
 }
 
 impl TryFrom<UserRow> for UserQuery {
