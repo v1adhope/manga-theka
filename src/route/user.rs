@@ -38,7 +38,7 @@ impl TryFrom<(RegisterReq, Uuid, OffsetDateTime)> for User {
     }
 }
 
-pub async fn register_user(
+pub async fn register(
     State(service): State<Service>,
     Json(req): Json<RegisterReq>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
@@ -46,7 +46,7 @@ pub async fn register_user(
     let created_at = OffsetDateTime::now_utc();
     let user: User = (req, id, created_at).try_into()?;
 
-    service.register_user(user).await?;
+    service.register(user).await?;
 
     Ok(json_data_response(StatusCode::CREATED, StoreResp { id }))
 }

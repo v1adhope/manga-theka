@@ -7,7 +7,7 @@ use crate::{
 };
 
 impl Service {
-    pub async fn register_user(&self, user: User) -> Result<(), ServiceError> {
+    pub async fn register(&self, user: User) -> Result<(), ServiceError> {
         self.database.ensure_email_available(&user.email).await?;
 
         let hasher = self.hasher.clone();

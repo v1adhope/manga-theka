@@ -22,11 +22,10 @@ use crate::{
         get_books, get_chapter, get_chapter_page, get_chapter_page_image, get_chapter_pages,
         get_chapter_release, get_chapter_releases, get_chapters, get_content_ratings, get_creator,
         get_creators, get_feedback, get_feedbacks, get_labels, get_languages, get_me, healthz,
-        list_my_sessions, login, refresh, register_user, revoke_all_sessions,
-        revoke_current_session, revoke_session, store_book, store_book_cover, store_chapter,
-        store_chapter_release, store_creator, store_feedback, update_book, update_book_main_cover,
-        update_book_visibility, update_chapter, update_creator, update_feedback_status,
-        upload_chapter_pages,
+        list_my_sessions, login, refresh, register, revoke_all_sessions, revoke_current_session,
+        revoke_session, store_book, store_book_cover, store_chapter, store_chapter_release,
+        store_creator, store_feedback, update_book, update_book_main_cover, update_book_visibility,
+        update_chapter, update_creator, update_feedback_status, upload_chapter_pages,
     },
     service::Service,
 };
@@ -74,7 +73,7 @@ impl App {
             .route("/content-ratings", get(get_content_ratings))
             .route("/languages", get(get_languages))
             .route("/labels", get(get_labels))
-            .route("/users/register", post(register_user))
+            .route("/users/register", post(register))
             .route("/users/me", get(get_me))
             .route("/sessions/login", post(login))
             .route("/sessions/refresh", post(refresh))
