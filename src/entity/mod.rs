@@ -11,7 +11,7 @@ mod book;
 #[path = "book/cover.rs"]
 mod book_cover;
 #[path = "book/filter.rs"]
-mod book_filter;
+pub(crate) mod book_filter;
 mod bounded_vec;
 mod chapter;
 mod content_rating;

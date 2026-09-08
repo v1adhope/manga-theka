@@ -101,38 +101,16 @@ impl Hasher {
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use time::{Duration, OffsetDateTime};
 
     use crate::{
         entity::{
-            BookKinds, BookLabelIds, BookSelection, BookSortField, BookStatuses, BookVisibility,
-            CreatedAtRange, FilterLookupIds, LabelFilter, LabelsMode, PublicationDemographics,
-            PublicationYearRange, SortOrder, Timestamp,
+            BookSelection, BookVisibility, CreatedAtRange, Timestamp,
+            book_filter::tests::unfiltered_selection,
         },
         hasher::Hasher,
     };
-
-    pub fn stub() -> BookSelection {
-        BookSelection {
-            visibility: BookVisibility::Listed,
-            sort_field: BookSortField::CreatedAt,
-            order: SortOrder::Desc,
-            labels: LabelFilter {
-                included: BookLabelIds::try_from(vec![]).unwrap(),
-                mode: LabelsMode::And,
-                excluded: BookLabelIds::try_from(vec![]).unwrap(),
-            },
-            kinds: BookKinds::try_from(vec![]).unwrap(),
-            statuses: BookStatuses::try_from(vec![]).unwrap(),
-            content_rating_ids: FilterLookupIds::try_from(vec![]).unwrap(),
-            publication_language_ids: FilterLookupIds::try_from(vec![]).unwrap(),
-            publication_demographics: PublicationDemographics::try_from(vec![]).unwrap(),
-            available_translated_language_ids: FilterLookupIds::try_from(vec![]).unwrap(),
-            publication_year: PublicationYearRange::try_new(None, None).unwrap(),
-            created_at: CreatedAtRange::try_new(None, None).unwrap(),
-        }
-    }
 
     fn hasher() -> Hasher {
         Hasher::new(19456, 2, 1, b"test-pepper").unwrap()
@@ -141,8 +119,8 @@ pub mod tests {
     #[test]
     fn a_hash_is_stable_across_runs() {
         assert_eq!(
-            Hasher::compute_hex_hash(&stub()).unwrap(),
-            Hasher::compute_hex_hash(&stub()).unwrap(),
+            Hasher::compute_hex_hash(&unfiltered_selection()).unwrap(),
+            Hasher::compute_hex_hash(&unfiltered_selection()).unwrap(),
         );
     }
 
@@ -150,11 +128,11 @@ pub mod tests {
     fn a_moved_facet_hashes_differently() {
         let moved = BookSelection {
             visibility: BookVisibility::Hidden,
-            ..stub()
+            ..unfiltered_selection()
         };
 
         assert_ne!(
-            Hasher::compute_hex_hash(&stub()).unwrap(),
+            Hasher::compute_hex_hash(&unfiltered_selection()).unwrap(),
             Hasher::compute_hex_hash(&moved).unwrap(),
         );
     }
@@ -166,11 +144,11 @@ pub mod tests {
 
         let one = BookSelection {
             created_at: CreatedAtRange::try_new(Some(Timestamp::from(utc)), None).unwrap(),
-            ..stub()
+            ..unfiltered_selection()
         };
         let other = BookSelection {
             created_at: CreatedAtRange::try_new(Some(Timestamp::from(shifted)), None).unwrap(),
-            ..stub()
+            ..unfiltered_selection()
         };
 
         assert_eq!(
