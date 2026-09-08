@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::{
     entity::{Book, Chapter, ChapterRelease, Entity},
-    error::error_response,
+    error::{LogInternal, error_response},
 };
 
 #[derive(Error, Debug)]
@@ -72,13 +72,17 @@ pub enum DatabaseError {
     Unknown(#[source] sqlx::Error),
 }
 
-impl DatabaseError {
-    pub fn log_internal(&self) {
+impl LogInternal for DatabaseError {
+    const MODULE: &'static str = "database";
+
+    fn log_internal(&self) {
         if matches!(self, Self::Unknown(_) | Self::InvariantCorrupted { .. }) {
-            tracing::error!(error = ?self, "internal database error");
+            tracing::error!(error = ?self, module = Self::MODULE, "internal error");
         }
     }
+}
 
+impl DatabaseError {
     pub fn not_found<T: Entity>() -> Self {
         Self::NotFound { entity: T::NAME }
     }

@@ -7,7 +7,11 @@ use serde::{Serialize, de::DeserializeOwned};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::{config, entity::Role, error::JwtError};
+use crate::{
+    config,
+    entity::Role,
+    error::{JwtError, LogInternal},
+};
 
 const ACCESS_TYP: &str = "at+jwt";
 const REFRESH_TYP: &str = "rt+jwt";

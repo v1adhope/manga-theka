@@ -13,7 +13,7 @@ use crate::{
         ContentRating, CoverUrl, CreatedAtBound, CreatorQuery, ImageExtension, Label, LabelsMode,
         Language, LinkUrl, PublicationDemographic, PublicationYearBound, Text, Timestamp,
     },
-    error::DatabaseError,
+    error::{DatabaseError, LogInternal},
 };
 
 #[derive(sqlx::FromRow)]

@@ -4,7 +4,7 @@ use axum::{
 };
 use thiserror::Error;
 
-use crate::error::{EntityError, error_response};
+use crate::error::{EntityError, LogInternal, error_response};
 
 #[derive(Debug, Error)]
 #[non_exhaustive]
@@ -22,10 +22,8 @@ pub enum CoderError {
     Cursor(#[source] EntityError),
 }
 
-impl CoderError {
-    pub fn log_internal(&self) {
-        tracing::error!(error = ?self, "internal coder error");
-    }
+impl LogInternal for CoderError {
+    const MODULE: &'static str = "coder";
 }
 
 impl IntoResponse for CoderError {

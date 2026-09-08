@@ -5,7 +5,7 @@ use argon2::{
 
 use crate::{
     entity::{BookSelection, HexHash, Password, PasswordHash, ShortHexHash},
-    error::HasherError,
+    error::{HasherError, LogInternal},
 };
 
 const JTI_PEPPER_CONTEXT: &str = "manga-theka jti pepper v1";

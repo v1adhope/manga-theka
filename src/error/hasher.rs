@@ -4,7 +4,7 @@ use axum::{
 };
 use thiserror::Error;
 
-use crate::error::{EntityError, error_response};
+use crate::error::{EntityError, LogInternal, error_response};
 
 #[derive(Debug, Error)]
 #[non_exhaustive]
@@ -31,10 +31,8 @@ pub enum HasherError {
     Phc(#[source] EntityError),
 }
 
-impl HasherError {
-    pub fn log_internal(&self) {
-        tracing::error!(error = ?self, "internal hasher error");
-    }
+impl LogInternal for HasherError {
+    const MODULE: &'static str = "hasher";
 }
 
 impl IntoResponse for HasherError {

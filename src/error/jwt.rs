@@ -4,7 +4,7 @@ use axum::{
 };
 use thiserror::Error;
 
-use crate::error::error_response;
+use crate::error::{LogInternal, error_response};
 
 #[derive(Debug, Error)]
 #[non_exhaustive]
@@ -19,10 +19,8 @@ pub enum JwtError {
     WrongTokenClass,
 }
 
-impl JwtError {
-    pub fn log_internal(&self) {
-        tracing::error!(error = ?self, "internal jwt error");
-    }
+impl LogInternal for JwtError {
+    const MODULE: &'static str = "jwt";
 }
 
 impl IntoResponse for JwtError {

@@ -1,4 +1,8 @@
-use crate::{database::Database, entity::ContentRating, error::DatabaseError};
+use crate::{
+    database::Database,
+    entity::ContentRating,
+    error::{DatabaseError, LogInternal},
+};
 
 impl Database {
     #[tracing::instrument(name = "db.content_rating.list", skip_all)]

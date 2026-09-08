@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::{
     entity::{HexHash, Session, Text, Timestamp},
-    error::{EntityError, MemoryStoreError},
+    error::{EntityError, LogInternal, MemoryStoreError},
 };
 
 use super::{MemoryStore, blob_key, sids_key};

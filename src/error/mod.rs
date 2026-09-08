@@ -26,6 +26,14 @@ use thiserror::Error;
 
 const INTERNAL_MESSAGE: &str = "Something went wrong";
 
+pub trait LogInternal: std::error::Error {
+    const MODULE: &'static str;
+
+    fn log_internal(&self) {
+        tracing::error!(error = ?self, module = Self::MODULE, "internal error");
+    }
+}
+
 pub fn error_response(status: StatusCode, message: String) -> Response {
     if status.is_server_error() {
         return (status, INTERNAL_MESSAGE.to_string()).into_response();

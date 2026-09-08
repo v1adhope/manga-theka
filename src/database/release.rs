@@ -8,7 +8,7 @@ use crate::{
         ChapterReleaseQuery, ImageExtension, Language, Ordinal, PageOrder, PageStatus, PageUrl,
         UserClaims,
     },
-    error::DatabaseError,
+    error::{DatabaseError, LogInternal},
 };
 
 struct ChapterReleaseRow {

@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     entity::{BookCursor, BookSort},
-    error::{CoderError, EntityError},
+    error::{CoderError, EntityError, LogInternal},
 };
 
 #[derive(Deserialize)]
