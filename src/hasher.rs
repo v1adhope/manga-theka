@@ -12,7 +12,7 @@ const JTI_PEPPER_CONTEXT: &str = "manga-theka jti pepper v1";
 
 #[derive(Debug, Clone)]
 pub struct Hasher {
-    params: Params,
+    argon2: Argon2<'static>,
     pepper: [u8; 32],
 }
 
@@ -21,18 +21,15 @@ impl Hasher {
         let params = Params::new(m_cost, t_cost, p_cost, None)
             .map_err(HasherError::Params)
             .inspect_err(HasherError::log_internal)?;
+        let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
         let pepper = blake3::derive_key(JTI_PEPPER_CONTEXT, secret);
 
-        Ok(Self { params, pepper })
-    }
-
-    fn argon2(&self) -> Argon2<'_> {
-        Argon2::new(Algorithm::Argon2id, Version::V0x13, self.params.clone())
+        Ok(Self { argon2, pepper })
     }
 
     pub fn hash_password(&self, password: Password) -> Result<PasswordHash, HasherError> {
         let phc = self
-            .argon2()
+            .argon2
             .hash_password(password.expose_secret().as_bytes())
             .map_err(HasherError::HashPassword)
             .inspect_err(HasherError::log_internal)?
@@ -45,7 +42,7 @@ impl Hasher {
 
     pub fn verify_password(&self, password: Password, hash: &str) -> Result<(), HasherError> {
         match self
-            .argon2()
+            .argon2
             .verify_password(password.expose_secret().as_bytes(), hash)
         {
             Ok(()) => Ok(()),
