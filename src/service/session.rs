@@ -61,13 +61,14 @@ impl Service {
         let jti = Uuid::now_v7();
 
         let session = Session {
-            jti: self.hasher.keyed_jti_hash(jti),
+            sid,
+            jti: self.hasher.keyed_jti_hash(jti)?,
             ua,
             ip,
             created_at: now.into(),
             updated_at: now.into(),
         };
-        self.memory.put_session(user.id, sid, &session).await?;
+        self.memory.put_session(user.id, session).await?;
 
         let access = self
             .jwt
@@ -90,7 +91,7 @@ impl Service {
             .await?
             .ok_or(ServiceError::InvalidCredentials)?;
 
-        if self.hasher.keyed_jti_hash(claims.jti) != session.jti {
+        if self.hasher.keyed_jti_hash(claims.jti)? != session.jti {
             // ADR-0003 rejects reuse-detection escalation: warn, no family revoke.
             tracing::warn!(sub = %claims.sub, sid = %claims.sid, "refresh jti mismatch");
             return Err(ServiceError::InvalidCredentials);
@@ -102,15 +103,14 @@ impl Service {
 
         let jti = Uuid::now_v7();
         let rotated = Session {
-            jti: self.hasher.keyed_jti_hash(jti),
+            sid: claims.sid,
+            jti: self.hasher.keyed_jti_hash(jti)?,
             ua: session.ua,
             ip: session.ip,
             created_at: session.created_at,
             updated_at: now.into(),
         };
-        self.memory
-            .put_session(claims.sub, claims.sid, &rotated)
-            .await?;
+        self.memory.put_session(claims.sub, rotated).await?;
 
         let access = self
             .jwt
@@ -123,10 +123,7 @@ impl Service {
     pub async fn list_sessions(&self, sub: Uuid) -> Result<Vec<SessionQuery>, ServiceError> {
         let sessions = self.memory.list_sessions(sub).await?;
 
-        Ok(sessions
-            .into_iter()
-            .map(|(sid, session)| SessionQuery::from_session(sid, session))
-            .collect())
+        Ok(sessions.into_iter().map(SessionQuery::from).collect())
     }
 
     /// Exempt from the 24h rule -- a freshly logged-in user can always self-logout.

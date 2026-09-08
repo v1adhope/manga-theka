@@ -55,11 +55,11 @@ mod tests {
 
     use crate::{
         coder::Coder,
-        entity::{BookCursor, BookSort, HexHash, Timestamp},
+        entity::{BookCursor, BookSort, ShortHexHash, Timestamp},
     };
 
-    fn hash() -> HexHash {
-        HexHash::try_from("0123456789abcdef".to_owned()).unwrap()
+    fn hash() -> ShortHexHash {
+        ShortHexHash::try_from("0123456789abcdef".to_owned()).unwrap()
     }
 
     fn every_sort_value() -> [BookSort; 3] {

@@ -6,7 +6,7 @@ use argon2::{
 };
 
 use crate::{
-    entity::{BookSelection, HexHash, JtiHash, PasswordHash},
+    entity::{BookSelection, HexHash, PasswordHash, ShortHexHash},
     error::HasherError,
 };
 
@@ -78,13 +78,15 @@ impl Hasher {
             .verify_password(password.as_bytes(), self.dummy_phc.as_ref());
     }
 
-    pub fn keyed_jti_hash(&self, jti: uuid::Uuid) -> JtiHash {
+    pub fn keyed_jti_hash(&self, jti: uuid::Uuid) -> Result<HexHash, HasherError> {
         let hex = blake3::keyed_hash(&self.pepper, jti.as_bytes()).to_hex();
 
-        JtiHash::from_hex(hex.to_string())
+        HexHash::try_from(hex.to_string())
+            .map_err(HasherError::Digest)
+            .inspect_err(HasherError::log_internal)
     }
 
-    pub fn compute_hex_hash(target: &BookSelection) -> Result<HexHash, HasherError> {
+    pub fn compute_hex_hash(target: &BookSelection) -> Result<ShortHexHash, HasherError> {
         const LEN: usize = 16;
 
         let json = serde_json::to_string(target)
@@ -92,7 +94,7 @@ impl Hasher {
             .inspect_err(HasherError::log_internal)?;
         let hex = blake3::hash(json.as_bytes()).to_hex();
 
-        HexHash::try_from(hex[..LEN].to_owned())
+        ShortHexHash::try_from(hex[..LEN].to_owned())
             .map_err(HasherError::Digest)
             .inspect_err(HasherError::log_internal)
     }
@@ -201,12 +203,12 @@ pub mod tests {
         let b = Hasher::new(19456, 2, 1, b"two").unwrap();
 
         assert_eq!(
-            a.keyed_jti_hash(jti).as_ref(),
-            a.keyed_jti_hash(jti).as_ref()
+            a.keyed_jti_hash(jti).unwrap().as_ref(),
+            a.keyed_jti_hash(jti).unwrap().as_ref()
         );
         assert_ne!(
-            a.keyed_jti_hash(jti).as_ref(),
-            b.keyed_jti_hash(jti).as_ref()
+            a.keyed_jti_hash(jti).unwrap().as_ref(),
+            b.keyed_jti_hash(jti).unwrap().as_ref()
         );
     }
 }

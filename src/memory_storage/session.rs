@@ -1,20 +1,58 @@
+use std::net::IpAddr;
+
 use redis::AsyncCommands;
+use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::{entity::Session, error::MemoryStoreError};
+use crate::{
+    entity::{HexHash, Session, Text, Timestamp},
+    error::MemoryStoreError,
+};
 
 use super::{MemoryStore, blob_key, sids_key};
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionBlob {
+    jti: HexHash,
+    ua: Option<Text>,
+    ip: Option<IpAddr>,
+    created_at: Timestamp,
+    updated_at: Timestamp,
+}
+
+impl From<Session> for SessionBlob {
+    fn from(session: Session) -> Self {
+        Self {
+            jti: session.jti,
+            ua: session.ua,
+            ip: session.ip,
+            created_at: session.created_at,
+            updated_at: session.updated_at,
+        }
+    }
+}
+
+impl SessionBlob {
+    fn into_session(self, sid: Uuid) -> Session {
+        Session {
+            sid,
+            jti: self.jti,
+            ua: self.ua,
+            ip: self.ip,
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+        }
+    }
+}
+
 impl MemoryStore {
-    #[instrument(name = "memory.session.put", skip_all, fields(user.id = %sub, session.id = %sid))]
-    pub async fn put_session(
-        &self,
-        sub: Uuid,
-        sid: Uuid,
-        session: &Session,
-    ) -> Result<(), MemoryStoreError> {
-        let json = serde_json::to_string(session).map_err(MemoryStoreError::Serde)?;
+    #[instrument(name = "memory.session.put", skip_all, fields(user.id = %sub, session.id = %session.sid))]
+    pub async fn put_session(&self, sub: Uuid, session: Session) -> Result<(), MemoryStoreError> {
+        let sid = session.sid;
+        let json =
+            serde_json::to_string(&SessionBlob::from(session)).map_err(MemoryStoreError::Serde)?;
         let mut conn = self.conn.clone();
         let ttl = self.refresh_ttl;
 
@@ -48,14 +86,15 @@ impl MemoryStore {
             .map_err(MemoryStoreError::from)
             .inspect_err(MemoryStoreError::log_internal)?;
 
-        json.map(|j| serde_json::from_str(&j))
+        json.map(|j| serde_json::from_str::<SessionBlob>(&j))
             .transpose()
             .map_err(MemoryStoreError::Serde)
             .inspect_err(MemoryStoreError::log_internal)
+            .map(|blob| blob.map(|b| b.into_session(sid)))
     }
 
     #[instrument(name = "memory.session.list", skip_all, fields(user.id = %sub))]
-    pub async fn list_sessions(&self, sub: Uuid) -> Result<Vec<(Uuid, Session)>, MemoryStoreError> {
+    pub async fn list_sessions(&self, sub: Uuid) -> Result<Vec<Session>, MemoryStoreError> {
         let mut conn = self.conn.clone();
 
         let sids: Vec<String> = conn
@@ -81,9 +120,9 @@ impl MemoryStore {
             match blob {
                 Some(json) => {
                     let parsed = Uuid::parse_str(&sid).map_err(MemoryStoreError::CorruptSid)?;
-                    let session: Session =
+                    let blob: SessionBlob =
                         serde_json::from_str(&json).map_err(MemoryStoreError::Serde)?;
-                    live.push((parsed, session));
+                    live.push(blob.into_session(parsed));
                 }
                 None => dead.push(sid),
             }
@@ -153,5 +192,38 @@ impl MemoryStore {
             .inspect_err(MemoryStoreError::log_internal)?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use time::OffsetDateTime;
+    use uuid::Uuid;
+
+    use super::SessionBlob;
+    use crate::entity::{HexHash, Session};
+
+    #[test]
+    fn the_blob_round_trips_and_never_stores_the_sid() {
+        let now = OffsetDateTime::now_utc();
+        let sid = Uuid::now_v7();
+        let session = Session {
+            sid,
+            jti: HexHash::try_from("a".repeat(64)).unwrap(),
+            ua: None,
+            ip: None,
+            created_at: now.into(),
+            updated_at: now.into(),
+        };
+
+        let json = serde_json::to_string(&SessionBlob::from(session)).unwrap();
+        assert!(json.contains("jti"), "the redis blob carries jti");
+        assert!(
+            !json.contains(&sid.to_string()),
+            "the sid is the key, not a field"
+        );
+
+        let blob: SessionBlob = serde_json::from_str(&json).unwrap();
+        assert_eq!(blob.into_session(sid).sid, sid);
     }
 }

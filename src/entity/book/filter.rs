@@ -3,8 +3,8 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        BookKind, BookLabelIds, BookStatus, BookVisibility, Bounded, BoundedVec, HexHash, Limit,
-        PublicationDemographic, Range, RangeBound, SortOrder, Timestamp,
+        BookKind, BookLabelIds, BookStatus, BookVisibility, Bounded, BoundedVec, Limit,
+        PublicationDemographic, Range, RangeBound, ShortHexHash, SortOrder, Timestamp,
     },
     error::EntityError,
 };
@@ -111,7 +111,7 @@ impl BookSort {
 pub struct BookCursor {
     pub id: Uuid,
     pub sort: BookSort,
-    pub selection_hash: HexHash,
+    pub selection_hash: ShortHexHash,
 }
 
 #[derive(Debug, Serialize)]
@@ -135,7 +135,7 @@ pub struct BookFilter {
     pub limit: Limit,
     pub cursor: Option<BookCursor>,
     pub selection: BookSelection,
-    pub selection_hash: HexHash,
+    pub selection_hash: ShortHexHash,
 }
 
 impl BookFilter {
@@ -162,8 +162,8 @@ mod tests {
     use crate::{
         entity::{
             BookCursor, BookFilter, BookKind, BookKinds, BookLabelIds, BookSelection, BookSort,
-            BookSortField, BookVisibility, CreatedAtRange, HexHash, LabelFilter, LabelsMode, Limit,
-            PublicationYearRange, SortOrder, Timestamp,
+            BookSortField, BookVisibility, CreatedAtRange, LabelFilter, LabelsMode, Limit,
+            PublicationYearRange, ShortHexHash, SortOrder, Timestamp,
         },
         hasher::{Hasher, tests::stub},
     };
@@ -194,7 +194,7 @@ mod tests {
         }
     }
 
-    fn hash(selection: &BookSelection) -> HexHash {
+    fn hash(selection: &BookSelection) -> ShortHexHash {
         Hasher::compute_hex_hash(selection).unwrap()
     }
 

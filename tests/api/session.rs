@@ -181,9 +181,9 @@ async fn refresh_with_an_expired_token_returns_401() {
     app.memory
         .put_session(
             sub,
-            sid,
-            &Session {
-                jti: app.hasher.keyed_jti_hash(jti),
+            Session {
+                sid,
+                jti: app.hasher.keyed_jti_hash(jti).unwrap(),
                 ua: None,
                 ip: None,
                 created_at: long_ago.into(),
