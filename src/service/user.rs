@@ -12,10 +12,9 @@ impl Service {
 
         let hasher = self.hasher.clone();
         let password = user.password.clone();
-        let password_hash =
-            tokio::task::spawn_blocking(move || hasher.hash_password(password.expose_secret()))
-                .await
-                .expect("password hashing task panicked")?;
+        let password_hash = tokio::task::spawn_blocking(move || hasher.hash_password(password))
+            .await
+            .expect("password hashing task panicked")?;
 
         self.database.store_user(user, password_hash).await?;
 

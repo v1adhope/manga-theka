@@ -6,7 +6,7 @@ use argon2::{
 };
 
 use crate::{
-    entity::{BookSelection, HexHash, PasswordHash, ShortHexHash},
+    entity::{BookSelection, HexHash, Password, PasswordHash, ShortHexHash},
     error::HasherError,
 };
 
@@ -47,10 +47,10 @@ impl Hasher {
         Argon2::new(Algorithm::Argon2id, Version::V0x13, self.params.clone())
     }
 
-    pub fn hash_password(&self, password: &str) -> Result<PasswordHash, HasherError> {
+    pub fn hash_password(&self, password: Password) -> Result<PasswordHash, HasherError> {
         let phc = self
             .argon2()
-            .hash_password(password.as_bytes())
+            .hash_password(password.expose_secret().as_bytes())
             .map_err(HasherError::HashPassword)
             .inspect_err(HasherError::log_internal)?
             .to_string();
@@ -60,8 +60,11 @@ impl Hasher {
             .inspect_err(HasherError::log_internal)
     }
 
-    pub fn verify_password(&self, password: &str, hash: &str) -> Result<bool, HasherError> {
-        match self.argon2().verify_password(password.as_bytes(), hash) {
+    pub fn verify_password(&self, password: Password, hash: &str) -> Result<bool, HasherError> {
+        match self
+            .argon2()
+            .verify_password(password.expose_secret().as_bytes(), hash)
+        {
             Ok(()) => Ok(true),
             Err(argon2::password_hash::Error::PasswordInvalid) => Ok(false),
             Err(e) => {
@@ -106,7 +109,7 @@ mod tests {
 
     use crate::{
         entity::{
-            BookSelection, BookVisibility, CreatedAtRange, Timestamp,
+            BookSelection, BookVisibility, CreatedAtRange, Password, Timestamp,
             book_filter::tests::unfiltered_selection,
         },
         hasher::Hasher,
@@ -160,16 +163,24 @@ mod tests {
     #[test]
     fn a_password_verifies_against_its_own_hash() {
         let hasher = hasher();
-        let hash = hasher.hash_password("correct horse battery").unwrap();
+        let hash = hasher
+            .hash_password(Password::try_from("correct horse battery".to_owned()).unwrap())
+            .unwrap();
 
         assert!(
             hasher
-                .verify_password("correct horse battery", hash.as_ref())
+                .verify_password(
+                    Password::try_from("correct horse battery".to_owned()).unwrap(),
+                    hash.as_ref()
+                )
                 .unwrap()
         );
         assert!(
             !hasher
-                .verify_password("wrong horse battery", hash.as_ref())
+                .verify_password(
+                    Password::try_from("wrong horse battery".to_owned()).unwrap(),
+                    hash.as_ref()
+                )
                 .unwrap()
         );
     }

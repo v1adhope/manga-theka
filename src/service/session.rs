@@ -26,7 +26,7 @@ impl Service {
         let hasher = self.hasher.clone();
         let stored = user.as_ref().map(|u| u.password_hash.as_ref().to_owned());
         let verified = tokio::task::spawn_blocking(move || match stored {
-            Some(hash) => hasher.verify_password(password.expose_secret(), &hash),
+            Some(hash) => hasher.verify_password(password, &hash),
             None => {
                 hasher.verify_dummy(password.expose_secret());
                 Ok(false)
