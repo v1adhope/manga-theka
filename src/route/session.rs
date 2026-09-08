@@ -2,10 +2,10 @@ use axum::{
     Json,
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
+    response::IntoResponse,
 };
 use axum_extra::extract::CookieJar;
 use serde::Deserialize;
-use serde_json::json;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -13,9 +13,10 @@ use crate::{
     entity::{Email, LoginForm, Password, UserClaims},
     error::{AppError, EntityError, RouteError},
     route::{
+        AccessTokenResp,
         cookie::{REFRESH_COOKIE, clear_refresh_cookie, refresh_cookie},
         header::{forwarded_ip, user_agent},
-        json_data_response,
+        json_data, json_data_response,
     },
     service::Service,
 };
@@ -52,7 +53,7 @@ pub async fn login(
     State(service): State<Service>,
     headers: HeaderMap,
     Json(req): Json<LoginFormReq>,
-) -> Result<(StatusCode, CookieJar, Json<serde_json::Value>), AppError> {
+) -> Result<(StatusCode, CookieJar, impl IntoResponse), AppError> {
     let now = OffsetDateTime::now_utc();
     let form: LoginForm = (req, headers, now).try_into()?;
 
@@ -63,14 +64,16 @@ pub async fn login(
     Ok((
         StatusCode::CREATED,
         jar,
-        Json(json!({ "data": { "accessToken": tokens.access } })),
+        json_data(AccessTokenResp {
+            access_token: tokens.access,
+        }),
     ))
 }
 
 pub async fn refresh(
     State(service): State<Service>,
     jar: CookieJar,
-) -> Result<(CookieJar, Json<serde_json::Value>), AppError> {
+) -> Result<(CookieJar, impl IntoResponse), AppError> {
     let token = jar
         .get(REFRESH_COOKIE)
         .map(|c| c.value().to_owned())
@@ -83,14 +86,16 @@ pub async fn refresh(
 
     Ok((
         jar,
-        Json(json!({ "data": { "accessToken": tokens.access } })),
+        json_data(AccessTokenResp {
+            access_token: tokens.access,
+        }),
     ))
 }
 
 pub async fn list_my_sessions(
     State(service): State<Service>,
     claims: UserClaims,
-) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
+) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let sessions = service.list_sessions(claims.id).await?;
 
     Ok(json_data_response(StatusCode::OK, sessions))
