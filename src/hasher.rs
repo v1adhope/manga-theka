@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use argon2::{
     Algorithm, Argon2, Params, Version,
     password_hash::{PasswordHasher, PasswordVerifier},
@@ -11,15 +9,11 @@ use crate::{
 };
 
 const JTI_PEPPER_CONTEXT: &str = "manga-theka jti pepper v1";
-const DUMMY_PASSWORD: &[u8] = b"manga-theka account-enumeration timing equalizer";
 
 #[derive(Debug, Clone)]
 pub struct Hasher {
     params: Params,
     pepper: [u8; 32],
-    /// Hashed once with `params` so the no-such-user login path costs the same
-    /// as a real verify regardless of the configured cost (issue #3, story 17).
-    dummy_phc: Arc<str>,
 }
 
 impl Hasher {
@@ -29,18 +23,7 @@ impl Hasher {
             .inspect_err(HasherError::log_internal)?;
         let pepper = blake3::derive_key(JTI_PEPPER_CONTEXT, secret);
 
-        let dummy_phc: Arc<str> = Argon2::new(Algorithm::Argon2id, Version::V0x13, params.clone())
-            .hash_password(DUMMY_PASSWORD)
-            .map_err(HasherError::HashPassword)
-            .inspect_err(HasherError::log_internal)?
-            .to_string()
-            .into();
-
-        Ok(Self {
-            params,
-            pepper,
-            dummy_phc,
-        })
+        Ok(Self { params, pepper })
     }
 
     fn argon2(&self) -> Argon2<'_> {
@@ -60,25 +43,21 @@ impl Hasher {
             .inspect_err(HasherError::log_internal)
     }
 
-    pub fn verify_password(&self, password: Password, hash: &str) -> Result<bool, HasherError> {
+    pub fn verify_password(&self, password: Password, hash: &str) -> Result<(), HasherError> {
         match self
             .argon2()
             .verify_password(password.expose_secret().as_bytes(), hash)
         {
-            Ok(()) => Ok(true),
-            Err(argon2::password_hash::Error::PasswordInvalid) => Ok(false),
+            Ok(()) => Ok(()),
+            Err(e @ argon2::password_hash::Error::PasswordInvalid) => {
+                Err(HasherError::PasswordMismatch(e.into()))
+            }
             Err(e) => {
                 let err = HasherError::VerifyPassword(e);
                 err.log_internal();
                 Err(err)
             }
         }
-    }
-
-    pub fn verify_dummy(&self, password: &str) {
-        let _ = self
-            .argon2()
-            .verify_password(password.as_bytes(), self.dummy_phc.as_ref());
     }
 
     pub fn keyed_jti_hash(&self, jti: uuid::Uuid) -> Result<HexHash, HasherError> {
@@ -112,6 +91,7 @@ mod tests {
             BookSelection, BookVisibility, CreatedAtRange, Password, Timestamp,
             book_filter::tests::unfiltered_selection,
         },
+        error::HasherError,
         hasher::Hasher,
     };
 
@@ -167,22 +147,20 @@ mod tests {
             .hash_password(Password::try_from("correct horse battery".to_owned()).unwrap())
             .unwrap();
 
-        assert!(
-            hasher
-                .verify_password(
-                    Password::try_from("correct horse battery".to_owned()).unwrap(),
-                    hash.as_ref()
-                )
-                .unwrap()
-        );
-        assert!(
-            !hasher
-                .verify_password(
-                    Password::try_from("wrong horse battery".to_owned()).unwrap(),
-                    hash.as_ref()
-                )
-                .unwrap()
-        );
+        hasher
+            .verify_password(
+                Password::try_from("correct horse battery".to_owned()).unwrap(),
+                hash.as_ref(),
+            )
+            .unwrap();
+
+        assert!(matches!(
+            hasher.verify_password(
+                Password::try_from("wrong horse battery".to_owned()).unwrap(),
+                hash.as_ref(),
+            ),
+            Err(HasherError::PasswordMismatch(_))
+        ));
     }
 
     #[test]

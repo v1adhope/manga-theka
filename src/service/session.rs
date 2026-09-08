@@ -21,24 +21,21 @@ impl Service {
 
         let user = self.database.get_user_by_email(&email).await?;
 
-        // Off the reactor. The no-such-user branch runs a dummy verify so timing
-        // does not reveal whether the address has an account.
+        // Verified even when no user exists, so timing does not leak account existence.
+        const PLACEHOLDER_HASH: &str = "$argon2id$v=19$m=19456,t=2,p=1$\
+            nE6GFRm4pmXbgWhIZf0QNg$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
+        let hash = match user.as_ref() {
+            Some(u) => u.password_hash.as_ref().to_owned(),
+            None => PLACEHOLDER_HASH.to_owned(),
+        };
+
         let hasher = self.hasher.clone();
-        let stored = user.as_ref().map(|u| u.password_hash.as_ref().to_owned());
-        let verified = tokio::task::spawn_blocking(move || match stored {
-            Some(hash) => hasher.verify_password(password, &hash),
-            None => {
-                hasher.verify_dummy(password.expose_secret());
-                Ok(false)
-            }
-        })
-        .await
-        .expect("password verification task panicked")?;
+        tokio::task::spawn_blocking(move || hasher.verify_password(password, &hash))
+            .await
+            .expect("password verification task panicked")?;
 
         let user = user.ok_or(ServiceError::InvalidCredentials)?;
-        if !verified {
-            return Err(ServiceError::InvalidCredentials);
-        }
 
         self.mint_session(&user, ua, ip, now).await
     }

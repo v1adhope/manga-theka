@@ -311,8 +311,7 @@ impl TestApp {
             ("APP_AUTH__JWT_REFRESH__PUBLIC_KEY", refresh_public.as_str()),
             ("APP_AUTH__JWT_REFRESH__TTL", "2592000"),
             ("APP_AUTH__PEPPER__KEY", "test-pepper"),
-            // Minimum viable Argon2 cost -- tests exercise behavior, not
-            // hardness, and every `Hasher::new` pays one hash for its dummy PHC.
+            // Minimum viable Argon2 cost.
             ("APP_AUTH__PASSWORD__M_COST", "8"),
             ("APP_AUTH__PASSWORD__T_COST", "1"),
             ("APP_AUTH__PASSWORD__P_COST", "1"),
