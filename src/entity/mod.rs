@@ -63,7 +63,7 @@ impl From<OffsetDateTime> for Timestamp {
 }
 
 impl Timestamp {
-    pub const fn into_inner(self) -> OffsetDateTime {
+    pub fn into_inner(self) -> OffsetDateTime {
         self.0
     }
 }
