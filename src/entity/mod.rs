@@ -93,6 +93,7 @@ impl Ordinal {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "String")]
 pub struct Name(String);
 
 impl TryFrom<String> for Name {
@@ -178,6 +179,7 @@ impl From<HexHash> for String {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "String")]
 pub struct Email(String);
 
 impl TryFrom<String> for Email {
@@ -207,6 +209,7 @@ impl AsRef<str> for Email {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "String")]
 pub struct Text(String);
 
 impl TryFrom<String> for Text {
