@@ -168,7 +168,7 @@ pub async fn store_book(
     Ok(json_data_response(StatusCode::CREATED, StoreResp { id }))
 }
 
-// deferred: also admit the book's `created_by` user to edit their own book
+// deferred: also admit the book's `created_by` user to edit their own Draft
 pub async fn update_book(
     State(service): State<Service>,
     Path(id): Path<Uuid>,
