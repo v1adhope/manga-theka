@@ -83,6 +83,7 @@ impl TryFrom<ChapterWithRelations> for Chapter {
     }
 }
 
+// TODO: re-shape authz
 pub async fn store_chapter(
     State(service): State<Service>,
     Path(book_id): Path<Uuid>,
@@ -103,6 +104,7 @@ pub async fn store_chapter(
     Ok(json_data_response(StatusCode::CREATED, StoreResp { id }))
 }
 
+// TODO: re-shape authz
 pub async fn update_chapter(
     State(service): State<Service>,
     Path(id): Path<Uuid>,
@@ -129,6 +131,7 @@ pub struct GetChaptersResp {
     pub next_cursor: Option<Uuid>,
 }
 
+// TODO: re-shape authz
 pub async fn get_chapters(
     State(service): State<Service>,
     Path(book_id): Path<Uuid>,

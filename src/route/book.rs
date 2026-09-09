@@ -168,7 +168,7 @@ pub async fn store_book(
     Ok(json_data_response(StatusCode::CREATED, StoreResp { id }))
 }
 
-// deferred: also admit the book's `created_by` user to edit their own Draft
+// TODO: re-shape authz
 pub async fn update_book(
     State(service): State<Service>,
     Path(id): Path<Uuid>,
@@ -281,6 +281,7 @@ impl TryFrom<(BookListQuery, Option<BookCursor>)> for BookFilter {
     }
 }
 
+// TODO: re-shape authz
 pub async fn get_books(
     State(service): State<Service>,
     claims: Option<UserClaims>,
@@ -302,7 +303,7 @@ pub async fn get_books(
     ))
 }
 
-// deferred: also admit the book's `created_by` user to read their own book
+// TODO: re-shape authz
 pub async fn get_book(
     State(service): State<Service>,
     claims: Option<UserClaims>,
@@ -341,8 +342,7 @@ impl TryFrom<BookVisibilityWithContext> for VisibilityTransition {
     }
 }
 
-// deferred: admit only the book's `created_by` user to Draft -> PendingReview;
-// until then any signed-in user may submit for review.
+// TODO: re-shape authz
 pub async fn update_book_visibility(
     State(service): State<Service>,
     claims: UserClaims,
@@ -373,6 +373,7 @@ pub async fn delete_book(
     Ok(StatusCode::NO_CONTENT)
 }
 
+// TODO: re-shape authz
 pub async fn store_book_cover(
     State(service): State<Service>,
     Path(book_id): Path<Uuid>,
@@ -394,6 +395,7 @@ pub async fn store_book_cover(
     Ok(json_data_response(StatusCode::CREATED, StoreResp { id }))
 }
 
+// TODO: re-shape authz
 pub async fn get_book_covers(
     State(service): State<Service>,
     Path(book_id): Path<Uuid>,
@@ -403,7 +405,7 @@ pub async fn get_book_covers(
     Ok(json_data_response(StatusCode::OK, covers))
 }
 
-// deferred: also admit the book's `created_by` user
+// TODO: re-shape authz
 pub async fn get_book_cover_image(
     State(service): State<Service>,
     Path(cover_id): Path<Uuid>,

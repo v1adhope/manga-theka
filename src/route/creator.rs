@@ -40,6 +40,7 @@ impl TryFrom<(CreatorReq, Uuid, OffsetDateTime)> for Creator {
     }
 }
 
+// TODO: re-shape authz
 pub async fn store_creator(
     State(service): State<Service>,
     Json(req): Json<CreatorReq>,
