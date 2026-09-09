@@ -1,3 +1,3 @@
-select f.id, f.kind, f.status, f.email, f.note, f.book_id, f.updated_at, f.created_at
-from feedback f
-where f.id = $1;
+select id, kind, status, email, note, book_id, updated_at, created_at
+from feedback
+where id = $1;
