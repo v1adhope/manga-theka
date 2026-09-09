@@ -1,6 +1,6 @@
 use argon2::{
     Algorithm, Argon2, Params, Version,
-    password_hash::{PasswordHasher, PasswordVerifier},
+    password_hash::{PasswordHasher, PasswordVerifier, try_generate_salt},
 };
 
 use crate::{
@@ -28,9 +28,13 @@ impl Hasher {
     }
 
     pub fn hash_password(&self, password: Password) -> Result<PasswordHash, HasherError> {
+        let salt = try_generate_salt()
+            .map_err(|e| HasherError::HashPassword(e.into()))
+            .inspect_err(HasherError::log_internal)?;
+
         let phc = self
             .argon2
-            .hash_password(password.expose_secret().as_bytes())
+            .hash_password_with_salt(password.expose_secret().as_bytes(), &salt)
             .map_err(HasherError::HashPassword)
             .inspect_err(HasherError::log_internal)?
             .to_string();
