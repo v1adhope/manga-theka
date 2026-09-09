@@ -6,7 +6,7 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::{
-    entity::{HexHash, Session, ShortText, Timestamp},
+    entity::{HexHash, Session, SessionQuery, ShortText, Timestamp},
     error::{EntityError, LogInternal, MemoryStoreError},
 };
 
@@ -101,7 +101,7 @@ impl MemoryStore {
     }
 
     #[instrument(name = "memory.session.list", skip_all, fields(user.id = %sub))]
-    pub async fn list_sessions(&self, sub: Uuid) -> Result<Vec<Session>, MemoryStoreError> {
+    pub async fn list_sessions(&self, sub: Uuid) -> Result<Vec<SessionQuery>, MemoryStoreError> {
         let mut conn = self.conn.clone();
 
         let members: Vec<String> = conn
@@ -137,7 +137,7 @@ impl MemoryStore {
                     let session = Session::try_from((blob, sid))
                         .map_err(MemoryStoreError::CorruptJti)
                         .inspect_err(MemoryStoreError::log_internal)?;
-                    live.push(session);
+                    live.push(SessionQuery::from(session));
                 }
                 None => dead.push(sid.to_string()),
             }

@@ -129,12 +129,9 @@ impl Service {
     }
 
     pub async fn list_sessions(&self, sub: Uuid) -> Result<Vec<SessionQuery>, ServiceError> {
-        let sessions = self.memory.list_sessions(sub).await?;
-
-        Ok(sessions.into_iter().map(SessionQuery::from).collect())
+        self.memory.list_sessions(sub).await.map_err(Into::into)
     }
 
-    /// Exempt from the 24h rule -- a freshly logged-in user can always self-logout.
     pub async fn revoke_current_session(&self, sub: Uuid, sid: Uuid) -> Result<(), ServiceError> {
         self.memory
             .revoke_session(sub, sid)
