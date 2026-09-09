@@ -154,6 +154,14 @@ mod tests {
                 hash.as_ref(),
             )
             .unwrap();
+    }
+
+    #[test]
+    fn a_wrong_password_fails_to_verify() {
+        let hasher = hasher();
+        let hash = hasher
+            .hash_password(Password::try_from("correct horse battery".to_owned()).unwrap())
+            .unwrap();
 
         assert!(matches!(
             hasher.verify_password(
@@ -165,15 +173,22 @@ mod tests {
     }
 
     #[test]
-    fn a_keyed_hex_hash_is_stable_and_key_dependent() {
+    fn a_keyed_hex_hash_is_stable_across_runs() {
         let id = uuid::Uuid::now_v7();
         let a = Hasher::new(19456, 2, 1, b"one").unwrap();
-        let b = Hasher::new(19456, 2, 1, b"two").unwrap();
 
         assert_eq!(
             a.compute_keyed_hex_hash(id).unwrap().as_ref(),
             a.compute_keyed_hex_hash(id).unwrap().as_ref()
         );
+    }
+
+    #[test]
+    fn a_keyed_hex_hash_is_key_dependent() {
+        let id = uuid::Uuid::now_v7();
+        let a = Hasher::new(19456, 2, 1, b"one").unwrap();
+        let b = Hasher::new(19456, 2, 1, b"two").unwrap();
+
         assert_ne!(
             a.compute_keyed_hex_hash(id).unwrap().as_ref(),
             b.compute_keyed_hex_hash(id).unwrap().as_ref()
