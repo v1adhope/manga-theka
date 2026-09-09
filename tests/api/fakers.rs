@@ -423,6 +423,7 @@ pub struct BookFaker {
     pub publication_demographic: Option<PublicationDemographic>,
     pub publication_year: Option<i16>,
     pub created_at: Option<OffsetDateTime>,
+    pub created_by: Option<Uuid>,
 }
 
 impl Default for BookFaker {
@@ -442,6 +443,7 @@ impl Default for BookFaker {
             publication_demographic: None,
             publication_year: None,
             created_at: None,
+            created_by: None,
         }
     }
 }
@@ -503,7 +505,7 @@ impl Dummy<BookFaker> for BookQuery {
             submitted_at: None,
             updated_at: None,
             created_at: config.created_at.unwrap_or(OffsetDateTime::UNIX_EPOCH),
-            created_by: Uuid::now_v7(),
+            created_by: config.created_by.unwrap_or_else(Uuid::now_v7),
         }
     }
 }
