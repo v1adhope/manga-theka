@@ -34,7 +34,7 @@ use uuid::Uuid;
 
 use crate::fakers::{
     ACTION, BookFaker, CONTENT_RATINGS, ChapterFaker, FANTASY, ISEKAI, LABELS, LANGUAGES,
-    LONG_STRIP, MAFIA, ROMANCE, SCHOOL_LIFE, ZOMBIES,
+    LONG_STRIP, MAFIA, ROMANCE, SCHOOL_LIFE, UserFaker, ZOMBIES,
 };
 
 static TRACING: LazyLock<()> = LazyLock::new(|| {
@@ -368,7 +368,13 @@ impl TestApp {
     /// carries no `Authorization` header of its own.
     pub async fn send(&self, mut req: Request<Body>) -> Response {
         if !req.headers().contains_key(header::AUTHORIZATION) {
-            let token = self.access_token(Uuid::now_v7(), Uuid::now_v7(), &DEFAULT_ROLES);
+            let caller: UserQuery = UserFaker {
+                roles: DEFAULT_ROLES.to_vec(),
+                ..Default::default()
+            }
+            .fake();
+            self.insert_user(&caller).await;
+            let token = self.access_token(caller.id, Uuid::now_v7(), &DEFAULT_ROLES);
             req.headers_mut().insert(
                 header::AUTHORIZATION,
                 format!("Bearer {token}").parse().unwrap(),
@@ -548,12 +554,16 @@ where b.id = $1;
     }
 
     pub async fn insert_book(&self, b: &BookQuery) {
+        let mut created_by: UserQuery = UserFaker::default().fake();
+        created_by.id = b.created_by;
+        self.insert_user(&created_by).await;
+
         sqlx::query!(
             r#"
 insert into books(id, name, description, publication_year, content_rating, status, kind,
                   publication_language, publication_demographic, visibility, note, submitted_at,
-                  updated_at, created_at)
-values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14);
+                  updated_at, created_at, created_by)
+values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15);
         "#,
             b.id,
             b.name.as_ref(),
@@ -568,7 +578,8 @@ values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14);
             b.note.as_ref().map(AsRef::as_ref) as Option<&str>,
             b.submitted_at,
             b.updated_at,
-            b.created_at
+            b.created_at,
+            b.created_by
         )
         .execute(&self.pool)
         .await
@@ -710,7 +721,7 @@ select (select b.name from books b where b.id = $1) as "name?",
             r#"
 select b.name, b.description, b.publication_year, b.status, b.kind,
        b.publication_demographic, b.visibility, b.note, b.submitted_at, b.updated_at,
-       b.created_at,
+       b.created_at, b.created_by,
        cr.id as content_rating_id, cr.name as content_rating_name, cr.code as content_rating_code,
        l.id as language_id, l.code as language_code, l.name as language_name
 from books b
@@ -851,6 +862,7 @@ order by c.id;
             submitted_at: row.submitted_at,
             updated_at: row.updated_at,
             created_at: row.created_at,
+            created_by: row.created_by,
         }
     }
 

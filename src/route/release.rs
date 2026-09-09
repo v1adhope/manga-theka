@@ -110,7 +110,7 @@ pub async fn commit_chapter_release(
     Ok(StatusCode::NO_CONTENT)
 }
 
-// deferred: also admit the book's submitter once `books` records one
+// deferred: also admit the book's `created_by` user
 pub async fn get_chapter_pages(
     State(service): State<Service>,
     Path(release_id): Path<Uuid>,
@@ -124,7 +124,7 @@ pub async fn get_chapter_pages(
     Ok(json_data_response(StatusCode::OK, pages))
 }
 
-// deferred: also admit the book's submitter once `books` records one
+// deferred: also admit the book's `created_by` user
 pub async fn get_chapter_page_image(
     State(service): State<Service>,
     Path((release_id, page_id)): Path<(Uuid, Uuid)>,
@@ -137,7 +137,7 @@ pub async fn get_chapter_page_image(
     Ok((StatusCode::FOUND, [(header::LOCATION, url)]))
 }
 
-// deferred: also admit the book's submitter once `books` records one
+// deferred: also admit the book's `created_by` user
 pub async fn get_chapter_page(
     State(service): State<Service>,
     Path((release_id, page_number)): Path<(Uuid, i32)>,

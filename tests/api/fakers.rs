@@ -176,9 +176,9 @@ impl Default for UserFaker {
 }
 
 impl Dummy<UserFaker> for UserQuery {
-    fn dummy_with_rng<R: RngExt + ?Sized>(config: &UserFaker, _rng: &mut R) -> Self {
+    fn dummy_with_rng<R: RngExt + ?Sized>(config: &UserFaker, rng: &mut R) -> Self {
         let id = Uuid::now_v7();
-        let handle = id.simple().to_string();
+        let handle = format!("{:016x}{:016x}", rng.random::<u64>(), rng.random::<u64>());
 
         UserQuery {
             id,
@@ -506,6 +506,7 @@ impl Dummy<BookFaker> for BookQuery {
             submitted_at: None,
             updated_at: None,
             created_at: config.created_at.unwrap_or(OffsetDateTime::UNIX_EPOCH),
+            created_by: Uuid::now_v7(),
         }
     }
 }

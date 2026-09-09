@@ -72,7 +72,7 @@ impl BookVisibility {
         &self,
         claims: Option<&UserClaims>,
     ) -> Result<(), EntityError> {
-        // deferred: also admit the book's submitter once `books` records one (issue #3)
+        // deferred: also admit the book's `created_by` user (issue #3)
         if *self == Self::Listed || claims.is_some_and(UserClaims::can_moderate) {
             return Ok(());
         }

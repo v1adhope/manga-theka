@@ -1,6 +1,6 @@
 # Authentication and authorization: dual JWT (access + refresh) with per-session Redis session store
 
-*Status: implemented for issue #3 (accounts, dual-JWT sessions, the OR role gate, every deferred role gate wired). The `x-user-id`/`x-user-role` dev stand-in from ADR-0009 is removed. Still deferred to a follow-up: `books.submitted_by` / `chapter_pages.uploaded_by`, so the submitter half of each gate (`// deferred` comments, narrowed) stays unenforced.*
+*Status: implemented for issue #3 (accounts, dual-JWT sessions, the OR role gate, every deferred role gate wired). The `x-user-id`/`x-user-role` dev stand-in from ADR-0009 is removed. Still deferred to a follow-up: wiring the `created_by` / `uploaded_by` gate half -- `books.created_by` has since landed (ADR-0009 follow-up) but no handler compares it, and `chapter_pages.uploaded_by` does not exist -- so that half of each gate (`// deferred` comments, narrowed) stays unenforced.*
 
 ## Amendment (issue #3): deviations from the paper design
 

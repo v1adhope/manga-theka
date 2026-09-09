@@ -4,17 +4,19 @@ use axum::{
 };
 use http_body_util::BodyExt;
 
-use crate::fakers::{BookFaker, CONTENT_RATINGS, CreatorFaker, LabelFaker};
+use crate::fakers::{BookFaker, CONTENT_RATINGS, CreatorFaker, LabelFaker, UserFaker};
 use crate::helpers::{
     RespWrapper, TestApp, assert_error, assert_stored, creator_keys, label_keys, link_keys,
     title_keys,
 };
 use fake::Fake;
-use manga_theka::entity::{BookQuery, Creator, Label};
+use manga_theka::entity::{BookQuery, Creator, Label, Role, UserQuery};
 
 #[tokio::test]
 async fn store_book_with_valid_body_passes() {
     let app = TestApp::new().await;
+    let user: UserQuery = UserFaker::default().fake();
+    app.insert_user(&user).await;
     let book: BookQuery = BookFaker {
         labels: 1..=5,
         links: 1..=5,
@@ -43,6 +45,10 @@ async fn store_book_with_valid_body_passes() {
 
     let req = Request::post("/books")
         .header(header::CONTENT_TYPE, "application/json")
+        .header(
+            header::AUTHORIZATION,
+            app.bearer(user.id, uuid::Uuid::now_v7(), &[Role::Reader]),
+        )
         .body(Body::from(body))
         .unwrap();
 
@@ -82,6 +88,7 @@ async fn store_book_with_valid_body_passes() {
     );
     assert!(got.updated_at.is_none());
     assert_ne!(got.created_at, time::OffsetDateTime::UNIX_EPOCH);
+    assert_eq!(got.created_by, user.id);
 }
 
 #[tokio::test]

@@ -16,9 +16,9 @@ _Avoid_: Author (when used to encompass artists), contributor
 An anonymous visitor with no account. Can read content and submit `Feedback`; has no `Role` and no `Session`.
 _Avoid_: Anonymous, visitor
 
-**Submitter**:
-The `User` who proposed a `Book` as a `Draft` -- one per `Book`, and the only one who can send it for review. Reads that `Book` in any `Book Visibility` and is the audience for its `Book Note`, standing that follows from having submitted rather than from any `Role`.
-_Avoid_: Owner, Proposer, Uploader (a `Role`, not a relation to one `Book`)
+**Created By**:
+The `User` recorded in a `Book`'s `created_by` -- the account that proposed it as a `Draft`, one per `Book`, and the only one who can send it for review. Reads that `Book` in any `Book Visibility` and is the audience for its `Book Note`, standing that follows from having created the `Book` rather than from any `Role`.
+_Avoid_: Submitter, Owner, Proposer, Uploader (a `Role`, not a relation to one `Book`)
 
 ## Authorization
 
@@ -147,11 +147,11 @@ _Avoid_: Draft page, Pending page, Unordered page
 ## Moderation
 
 **Book Visibility**:
-The lifecycle state of a `Book` as a catalog record, separate from `Book Status` -- `Draft` (being assembled, not yet submitted), `PendingReview` (submitted, awaiting moderation), `Listed` (approved and public), `Rejected` (declined and not retained), or `Hidden` (removed from public view by moderation). A closed, fixed set; exactly one per `Book`. Only a `Book`'s submitter can move it from `Draft` to `PendingReview`; a moderator owns every other transition. `PendingReview` is the only state that can return to `Draft`, so an approved or hidden `Book` never becomes a draft again. Writes follow the state: a `Draft` accepts its own metadata and gallery images but no `Chapter`s, a `Listed` `Book` accepts everything, and `PendingReview`, `Rejected`, and `Hidden` accept nothing. Reads follow the state as well: outside `Listed`, only a moderator or the `Book`'s submitter sees a `Book` and its contents.
+The lifecycle state of a `Book` as a catalog record, separate from `Book Status` -- `Draft` (being assembled, not yet submitted), `PendingReview` (submitted, awaiting moderation), `Listed` (approved and public), `Rejected` (declined and not retained), or `Hidden` (removed from public view by moderation). A closed, fixed set; exactly one per `Book`. Only a `Book`'s `created_by` user can move it from `Draft` to `PendingReview`; a moderator owns every other transition. `PendingReview` is the only state that can return to `Draft`, so an approved or hidden `Book` never becomes a draft again. Writes follow the state: a `Draft` accepts its own metadata and gallery images but no `Chapter`s, a `Listed` `Book` accepts everything, and `PendingReview`, `Rejected`, and `Hidden` accept nothing. Reads follow the state as well: outside `Listed`, only a moderator or the `Book`'s `created_by` user sees a `Book` and its contents.
 _Avoid_: Status, State, Scope, Publication state, Published (see `Chapter Release`), Draft/Listed/Hidden as standalone terms
 
 **Book Note**:
-The single submitter-visible message carried by a `Book`, explaining its current `Book Visibility` -- why it was `Rejected` or `Hidden`, what to change before resubmitting, or an acknowledgement that it is awaiting review. One per `Book`, replaced whenever it changes and cleared when a `Book` becomes `Listed` without a replacement. Required on any move into `Draft`, `Rejected`, or `Hidden`; written by the system on submission. Can also be replaced on its own, leaving the `Book Visibility` unchanged. Not a private staff annotation.
+The single message carried by a `Book` and visible to its `created_by` user, explaining its current `Book Visibility` -- why it was `Rejected` or `Hidden`, what to change before resubmitting, or an acknowledgement that it is awaiting review. One per `Book`, replaced whenever it changes and cleared when a `Book` becomes `Listed` without a replacement. Required on any move into `Draft`, `Rejected`, or `Hidden`; written by the system on submission. Can also be replaced on its own, leaving the `Book Visibility` unchanged. Not a private staff annotation.
 _Avoid_: Review note, Comment, Reason, Moderation note, Internal note
 
 **Feedback**:

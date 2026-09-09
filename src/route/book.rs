@@ -72,6 +72,7 @@ struct BookWithRelations {
     id: Uuid,
     updated_at: Option<OffsetDateTime>,
     created_at: OffsetDateTime,
+    created_by: Uuid,
 }
 
 impl TryFrom<BookWithRelations> for Book {
@@ -83,6 +84,7 @@ impl TryFrom<BookWithRelations> for Book {
             id,
             updated_at,
             created_at,
+            created_by,
         } = item;
 
         let BookReq {
@@ -140,13 +142,14 @@ impl TryFrom<BookWithRelations> for Book {
             creators: BookCreators::try_from(creators)?,
             updated_at,
             created_at,
+            created_by,
         })
     }
 }
 
-// deferred: record the caller as the submitter
 pub async fn store_book(
     State(service): State<Service>,
+    claims: UserClaims,
     Json(req): Json<BookReq>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let id = Uuid::now_v7();
@@ -156,6 +159,7 @@ pub async fn store_book(
         id,
         updated_at: None,
         created_at,
+        created_by: claims.id,
     }
     .try_into()?;
 
@@ -164,7 +168,7 @@ pub async fn store_book(
     Ok(json_data_response(StatusCode::CREATED, StoreResp { id }))
 }
 
-// deferred: also admit the book's submitter to edit their own Draft
+// deferred: also admit the book's `created_by` user to edit their own Draft
 pub async fn update_book(
     State(service): State<Service>,
     Path(id): Path<Uuid>,
@@ -176,6 +180,7 @@ pub async fn update_book(
         id,
         updated_at: Some(updated_at),
         created_at: OffsetDateTime::UNIX_EPOCH,
+        created_by: Uuid::nil(),
     }
     .try_into()?;
 
@@ -339,8 +344,8 @@ impl TryFrom<BookVisibilityWithContext> for VisibilityTransition {
     }
 }
 
-// deferred: admit only the book's submitter to Draft -> PendingReview once
-// `books` records one; until then any signed-in user may submit for review.
+// deferred: admit only the book's `created_by` user to Draft -> PendingReview;
+// until then any signed-in user may submit for review.
 pub async fn update_book_visibility(
     State(service): State<Service>,
     claims: UserClaims,
@@ -403,7 +408,7 @@ pub async fn get_book_covers(
     Ok(json_data_response(StatusCode::OK, covers))
 }
 
-// deferred: also admit the book's submitter once `books` records one
+// deferred: also admit the book's `created_by` user
 pub async fn get_book_cover_image(
     State(service): State<Service>,
     Path(cover_id): Path<Uuid>,
