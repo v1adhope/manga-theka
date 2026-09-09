@@ -299,12 +299,14 @@ pub async fn get_books(
     ))
 }
 
-// deferred: also admit the book's submitter to non-Listed metadata reads
+// A book outside `Listed` lives in the moderation queue; only Moderator/Admin
+// may read its metadata, and a withheld book reads as a missing one (404).
 pub async fn get_book(
     State(service): State<Service>,
+    claims: Option<UserClaims>,
     Path(id): Path<Uuid>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    let book = service.get_book(id).await?;
+    let book = service.get_book(id, claims.as_ref()).await?;
     Ok(json_data_response(StatusCode::OK, book))
 }
 

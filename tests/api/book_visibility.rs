@@ -85,22 +85,69 @@ async fn get_books_with_an_unknown_visibility_returns_400() {
 }
 
 #[tokio::test]
-async fn get_book_serves_every_visibility() {
+async fn get_book_serves_a_listed_book_to_anyone() {
+    let app = TestApp::new().await;
+    let id = app
+        .insert_book_with_visibility(BookVisibility::Listed)
+        .await;
+
+    let (status, _) = app.get_body(&format!("/books/{id}")).await;
+
+    assert_eq!(status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn get_book_reads_a_book_in_every_visibility_for_a_moderator() {
     let app = TestApp::new().await;
 
     for visibility in EVERY_VISIBILITY {
         let id = app.insert_book_with_visibility(visibility).await;
 
-        let req = Request::get(format!("/books/{id}"))
-            .body(Body::empty())
-            .unwrap();
-        let resp = app.send(req).await;
+        let resp = app.get_as_moderator(&format!("/books/{id}")).await;
 
         assert_eq!(
             resp.status(),
             StatusCode::OK,
-            "{visibility} must stay linkable"
+            "{visibility} must stay linkable for a moderator"
         );
+    }
+}
+
+#[tokio::test]
+async fn get_book_outside_listed_reads_as_missing_for_non_moderators() {
+    let app = TestApp::new().await;
+    let absent = uuid::Uuid::now_v7();
+
+    for visibility in EVERY_VISIBILITY {
+        if visibility == BookVisibility::Listed {
+            continue;
+        }
+
+        let id = app.insert_book_with_visibility(visibility).await;
+
+        let anon = app.get_body(&format!("/books/{id}")).await;
+        let reader = {
+            let req = Request::get(format!("/books/{id}"))
+                .header(
+                    header::AUTHORIZATION,
+                    app.bearer(
+                        uuid::Uuid::now_v7(),
+                        uuid::Uuid::now_v7(),
+                        &[Role::Reader, Role::Uploader],
+                    ),
+                )
+                .body(Body::empty())
+                .unwrap();
+            let resp = app.send_raw(req).await;
+            let status = resp.status();
+            let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+            (status, String::from_utf8_lossy(&bytes).into_owned())
+        };
+        let missing = app.get_body(&format!("/books/{absent}")).await;
+
+        assert_eq!(anon.0, StatusCode::NOT_FOUND, "anon while {visibility}");
+        assert_eq!(reader.0, StatusCode::NOT_FOUND, "reader while {visibility}");
+        assert_eq!(anon, missing, "{visibility} must not reveal that it exists");
     }
 }
 
