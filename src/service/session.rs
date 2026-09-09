@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::{
     entity::{
         Email, LoginForm, Password, Session, SessionQuery, SessionTokens, ShortText, UserClaims,
-        UserQuery,
+        UserCredentials,
     },
     error::ServiceError,
     service::Service,
@@ -42,8 +42,8 @@ impl Service {
         &self,
         email: &Email,
         password: Password,
-    ) -> Result<UserQuery, ServiceError> {
-        let user = self.database.get_user_by_email(email).await?;
+    ) -> Result<UserCredentials, ServiceError> {
+        let user = self.database.get_user_credentials_by_email(email).await?;
 
         const PLACEHOLDER_HASH: &str = "$argon2id$v=19$m=19456,t=2,p=1$\
             nE6GFRm4pmXbgWhIZf0QNg$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
@@ -63,7 +63,7 @@ impl Service {
 
     async fn mint_session(
         &self,
-        user: &UserQuery,
+        user: &UserCredentials,
         ua: Option<ShortText>,
         ip: Option<IpAddr>,
         now: OffsetDateTime,

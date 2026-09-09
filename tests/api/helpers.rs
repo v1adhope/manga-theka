@@ -416,7 +416,7 @@ values($1, $2, $3, $4, $5, $6, $7);
             user.id,
             user.email.as_ref(),
             user.username.as_ref(),
-            user.password_hash.as_ref(),
+            KNOWN_PASSWORD_PHC,
             &roles,
             user.verified_at.map(Timestamp::into_inner),
             user.created_at.into_inner(),

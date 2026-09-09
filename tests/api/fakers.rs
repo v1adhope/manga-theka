@@ -11,13 +11,11 @@ use manga_theka::entity::{
     AlternativeTitle, BookKind, BookLink, BookLinkKind, BookName, BookQuery, BookStatus,
     BookVisibility, Chapter, ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume,
     ContentRating, Creator, CreatorQuery, CreatorRole, Email, Feedback, FeedbackKind,
-    FeedbackStatus, Label, LabelKind, Language, LinkUrl, Name, PasswordHash,
-    PublicationDemographic, Role, Text, UserQuery, Username,
+    FeedbackStatus, Label, LabelKind, Language, LinkUrl, Name, PublicationDemographic, Role, Text,
+    UserQuery, Username,
 };
 use time::OffsetDateTime;
 use uuid::{Uuid, uuid};
-
-use crate::helpers::KNOWN_PASSWORD_PHC;
 
 pub const COVER_JPG: &[u8] = include_bytes!("fixtures/cover.jpg");
 pub const COVER_PNG: &[u8] = include_bytes!("fixtures/cover.png");
@@ -184,7 +182,6 @@ impl Dummy<UserFaker> for UserQuery {
             id,
             email: Email::try_from(format!("{}@example.test", &handle[..12])).unwrap(),
             username: Username::try_from(format!("u{}", &handle[..16])).unwrap(),
-            password_hash: PasswordHash::try_from(KNOWN_PASSWORD_PHC.to_owned()).unwrap(),
             roles: config.roles.clone().try_into().unwrap(),
             verified_at: config
                 .verified

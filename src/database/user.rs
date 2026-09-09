@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     database::{Database, Invariant},
-    entity::{Email, PasswordHash, Roles, User, UserQuery, Username},
+    entity::{Email, PasswordHash, Roles, User, UserCredentials, UserQuery, Username},
     error::{DatabaseError, LogInternal},
 };
 
@@ -13,7 +13,6 @@ struct UserRow {
     id: Uuid,
     email: String,
     username: String,
-    password_hash: String,
     roles: Vec<String>,
     verified_at: Option<OffsetDateTime>,
     created_at: OffsetDateTime,
@@ -25,17 +24,36 @@ impl TryFrom<UserRow> for UserQuery {
     fn try_from(row: UserRow) -> Result<Self, Self::Error> {
         let email = Email::try_from(row.email).or_corrupted("email")?;
         let username = Username::try_from(row.username).or_corrupted("username")?;
-        let password_hash =
-            PasswordHash::try_from(row.password_hash).or_corrupted("password_hash")?;
 
         Ok(UserQuery {
             id: row.id,
             email,
             username,
-            password_hash,
             roles: Roles::try_from(row.roles).or_corrupted("roles")?,
             verified_at: row.verified_at.map(Into::into),
             created_at: row.created_at.into(),
+        })
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct CredentialsRow {
+    id: Uuid,
+    password_hash: String,
+    roles: Vec<String>,
+}
+
+impl TryFrom<CredentialsRow> for UserCredentials {
+    type Error = DatabaseError;
+
+    fn try_from(row: CredentialsRow) -> Result<Self, Self::Error> {
+        let password_hash =
+            PasswordHash::try_from(row.password_hash).or_corrupted("password_hash")?;
+
+        Ok(UserCredentials {
+            id: row.id,
+            password_hash,
+            roles: Roles::try_from(row.roles).or_corrupted("roles")?,
         })
     }
 }
@@ -99,25 +117,29 @@ impl Database {
         }
     }
 
-    #[instrument(name = "db.user.get_by_email", skip_all)]
-    pub async fn get_user_by_email(
+    #[instrument(name = "db.user.get_credentials_by_email", skip_all)]
+    pub async fn get_user_credentials_by_email(
         &self,
         email: &Email,
-    ) -> Result<Option<UserQuery>, DatabaseError> {
-        self.get_user_by_email_inner(email)
+    ) -> Result<Option<UserCredentials>, DatabaseError> {
+        self.get_user_credentials_by_email_inner(email)
             .await
             .inspect_err(DatabaseError::log_internal)
     }
 
-    async fn get_user_by_email_inner(
+    async fn get_user_credentials_by_email_inner(
         &self,
         email: &Email,
-    ) -> Result<Option<UserQuery>, DatabaseError> {
-        let row = sqlx::query_file_as!(UserRow, "queries/get_user_by_email.sql", email.as_ref())
-            .fetch_optional(&self.pool)
-            .await?;
+    ) -> Result<Option<UserCredentials>, DatabaseError> {
+        let row = sqlx::query_file_as!(
+            CredentialsRow,
+            "queries/get_user_credentials_by_email.sql",
+            email.as_ref()
+        )
+        .fetch_optional(&self.pool)
+        .await?;
 
-        row.map(UserQuery::try_from).transpose()
+        row.map(UserCredentials::try_from).transpose()
     }
 
     #[instrument(name = "db.user.ensure_identity_available", skip_all)]

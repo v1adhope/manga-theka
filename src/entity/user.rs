@@ -157,11 +157,16 @@ pub struct UserQuery {
     pub id: Uuid,
     pub email: Email,
     pub username: Username,
-    #[serde(skip_serializing)]
-    pub password_hash: PasswordHash,
     pub roles: Roles,
     pub verified_at: Option<Timestamp>,
     pub created_at: Timestamp,
+}
+
+#[derive(Debug)]
+pub struct UserCredentials {
+    pub id: Uuid,
+    pub password_hash: PasswordHash,
+    pub roles: Roles,
 }
 
 #[derive(Debug, Clone)]
@@ -183,12 +188,9 @@ impl UserClaims {
 
 #[cfg(test)]
 mod tests {
-    use time::OffsetDateTime;
     use uuid::Uuid;
 
-    use crate::entity::{
-        Email, MAX_USER_ROLES, Password, PasswordHash, Role, Roles, UserClaims, UserQuery, Username,
-    };
+    use crate::entity::{MAX_USER_ROLES, Password, Role, Roles, UserClaims, Username};
 
     fn claims(roles: &[Role]) -> UserClaims {
         UserClaims {
@@ -196,33 +198,6 @@ mod tests {
             sid: Uuid::now_v7(),
             roles: roles.to_vec(),
         }
-    }
-
-    #[test]
-    fn serializing_a_user_never_exposes_the_password_hash() {
-        let user = UserQuery {
-            id: Uuid::now_v7(),
-            email: Email::try_from("reader@example.com".to_owned()).unwrap(),
-            username: Username::try_from("reader".to_owned()).unwrap(),
-            password_hash: PasswordHash::try_from(
-                "$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$aGFzaA".to_owned(),
-            )
-            .unwrap(),
-            roles: Roles::try_from(vec![Role::Reader]).unwrap(),
-            verified_at: None,
-            created_at: OffsetDateTime::now_utc().into(),
-        };
-
-        let json = serde_json::to_value(&user).unwrap();
-
-        assert!(
-            json.get("passwordHash").is_none(),
-            "camelCase key must be absent"
-        );
-        assert!(
-            !serde_json::to_string(&user).unwrap().contains("aGFzaA"),
-            "the hash value must not leak under any key"
-        );
     }
 
     #[test]
