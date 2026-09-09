@@ -76,8 +76,18 @@ impl LogInternal for DatabaseError {
     const MODULE: &'static str = "database";
 
     fn log_internal(&self) {
-        if matches!(self, Self::Unknown(_) | Self::InvariantCorrupted { .. }) {
-            tracing::error!(error = ?self, module = Self::MODULE, "internal error");
+        match self {
+            Self::NotFound { .. }
+            | Self::AlreadyExists { .. }
+            | Self::Taken { .. }
+            | Self::InUse { .. }
+            | Self::BookCoverMainConflict(_)
+            | Self::OutOfRange { .. }
+            | Self::DoesNotExist { .. }
+            | Self::Duplication { .. }
+            | Self::ChapterReleaseLanguageIsPublicationLanguage
+            | Self::PageOrderIsForeign => {}
+            _ => tracing::error!(error = ?self, module = Self::MODULE, "internal error"),
         }
     }
 }
@@ -414,7 +424,6 @@ impl From<sqlx::Error> for DatabaseError {
 impl IntoResponse for DatabaseError {
     fn into_response(self) -> Response {
         let status = match self {
-            Self::Unknown(_) | Self::InvariantCorrupted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Self::NotFound { .. } => StatusCode::NOT_FOUND,
             Self::AlreadyExists { .. }
             | Self::Taken { .. }
@@ -425,6 +434,7 @@ impl IntoResponse for DatabaseError {
             | Self::Duplication { .. }
             | Self::ChapterReleaseLanguageIsPublicationLanguage
             | Self::PageOrderIsForeign => StatusCode::UNPROCESSABLE_ENTITY,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
 
         error_response(status, self.to_string())
