@@ -7,12 +7,18 @@ use uuid::Uuid;
 
 use crate::config;
 
-fn blob_key(sub: Uuid, sid: &str) -> String {
+/// Per-session blob key. One key each so every session gets its own native
+/// Redis TTL; a single per-user hash can't, since expiry is per-key not
+/// per-field.
+fn blob_key(sub: Uuid, sid: Uuid) -> String {
     format!("refresh-tokens:{sub}:{sid}")
 }
 
+/// Per-user index: a SET of every `sid`. Lets callers enumerate a user's
+/// sessions without a keyspace `SCAN` over the scattered [`blob_key`]s. A
+/// superset filtered on read; a blob's TTL can lapse before its entry is pruned.
 fn sids_key(sub: Uuid) -> String {
-    format!("sids:{sub}")
+    format!("refresh-tokens:sids:{sub}")
 }
 
 pub async fn connection(cfg: &config::Redis) -> redis::aio::ConnectionManager {

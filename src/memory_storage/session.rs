@@ -60,7 +60,7 @@ impl MemoryStore {
 
         redis::pipe()
             .atomic()
-            .set_ex(blob_key(sub, &sid.to_string()), json, ttl)
+            .set_ex(blob_key(sub, sid), json, ttl)
             .ignore()
             .sadd(sids_key(sub), sid.to_string())
             .ignore()
@@ -83,7 +83,7 @@ impl MemoryStore {
         let mut conn = self.conn.clone();
 
         let json: Option<String> = conn
-            .get(blob_key(sub, &sid.to_string()))
+            .get(blob_key(sub, sid))
             .await
             .map_err(MemoryStoreError::from)
             .inspect_err(MemoryStoreError::log_internal)?;
@@ -104,17 +104,23 @@ impl MemoryStore {
     pub async fn list_sessions(&self, sub: Uuid) -> Result<Vec<Session>, MemoryStoreError> {
         let mut conn = self.conn.clone();
 
-        let sids: Vec<String> = conn
+        let members: Vec<String> = conn
             .smembers(sids_key(sub))
             .await
             .map_err(MemoryStoreError::from)
             .inspect_err(MemoryStoreError::log_internal)?;
 
-        if sids.is_empty() {
+        if members.is_empty() {
             return Ok(Vec::new());
         }
 
-        let keys: Vec<String> = sids.iter().map(|s| blob_key(sub, s)).collect();
+        let sids: Vec<Uuid> = members
+            .iter()
+            .map(|s| Uuid::parse_str(s))
+            .collect::<Result<_, _>>()
+            .map_err(MemoryStoreError::CorruptSid)?;
+
+        let keys: Vec<String> = sids.iter().map(|sid| blob_key(sub, *sid)).collect();
         let blobs: Vec<Option<String>> = conn
             .mget(&keys)
             .await
@@ -126,21 +132,18 @@ impl MemoryStore {
         for (sid, blob) in sids.into_iter().zip(blobs) {
             match blob {
                 Some(json) => {
-                    let parsed = Uuid::parse_str(&sid).map_err(MemoryStoreError::CorruptSid)?;
                     let blob: SessionBlob =
                         serde_json::from_str(&json).map_err(MemoryStoreError::Serde)?;
-                    let session = Session::try_from((blob, parsed))
+                    let session = Session::try_from((blob, sid))
                         .map_err(MemoryStoreError::CorruptJti)
                         .inspect_err(MemoryStoreError::log_internal)?;
                     live.push(session);
                 }
-                None => dead.push(sid),
+                None => dead.push(sid.to_string()),
             }
         }
 
         if !dead.is_empty() {
-            // Native TTL can clear a blob before the index catches up, so the
-            // SET is a superset filtered on read.
             let _: () = conn
                 .srem(sids_key(sub), dead)
                 .await
@@ -167,7 +170,7 @@ impl MemoryStore {
 
         redis::pipe()
             .atomic()
-            .del(blob_key(sub, &sid.to_string()))
+            .del(blob_key(sub, sid))
             .ignore()
             .srem(sids_key(sub), sid.to_string())
             .ignore()
@@ -189,14 +192,15 @@ impl MemoryStore {
             .map_err(MemoryStoreError::from)
             .inspect_err(MemoryStoreError::log_internal)?;
 
-        let mut pipe = redis::pipe();
-        pipe.atomic();
-        for sid in &sids {
-            pipe.del(blob_key(sub, sid)).ignore();
-        }
-        pipe.del(sids_key(sub)).ignore();
+        let mut keys: Vec<String> = sids
+            .iter()
+            .map(|s| Uuid::parse_str(s).map(|sid| blob_key(sub, sid)))
+            .collect::<Result<_, _>>()
+            .map_err(MemoryStoreError::CorruptSid)?;
+        keys.push(sids_key(sub));
 
-        pipe.query_async::<()>(&mut conn)
+        let _: () = conn
+            .del(keys)
             .await
             .map_err(MemoryStoreError::from)
             .inspect_err(MemoryStoreError::log_internal)?;
