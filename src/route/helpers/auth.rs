@@ -19,9 +19,6 @@ pub const CONTENT_WRITERS: &[Role] = &[Role::Uploader, Role::Moderator, Role::Ad
 pub const MODERATORS: &[Role] = &[Role::Moderator, Role::Admin];
 pub const SIGNED_IN: &[Role] = &[Role::Reader, Role::Uploader, Role::Moderator, Role::Admin];
 
-/// Both extractors read the `Extension<Option<UserClaims>>` the global auth
-/// middleware populates from the access JWT -- absent header -> `None`, present
-/// but invalid -> the middleware already short-circuited 401.
 impl<S: Send + Sync> FromRequestParts<S> for UserClaims {
     type Rejection = RouteError;
 
@@ -50,12 +47,6 @@ impl<S: Send + Sync> OptionalFromRequestParts<S> for UserClaims {
     }
 }
 
-/// The one global layer. Reads `Authorization: Bearer <jwt>` (scheme match is
-/// case-insensitive, RFC 9110 s11.1) and inserts `Extension<Option<UserClaims>>`.
-/// It never short-circuits: an absent, non-Bearer, or unverifiable token all
-/// yield `None`, which `require_roles` / the `UserClaims` extractor turn into 401
-/// on protected routes. A stale token riding along on a refresh or a public read
-/// therefore does not lock the caller out.
 pub async fn authenticate(
     State(service): State<Service>,
     mut req: Request,
