@@ -26,8 +26,8 @@ impl LogInternal for JwtError {
 impl IntoResponse for JwtError {
     fn into_response(self) -> Response {
         let status = match self {
-            Self::Sign(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Self::Verify(_) | Self::WrongTokenClass => StatusCode::UNAUTHORIZED,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
 
         error_response(status, self.to_string())
