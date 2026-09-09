@@ -22,9 +22,6 @@ pub enum DatabaseError {
     #[error("Declared page order names a page outside the release")]
     PageOrderIsForeign,
 
-    #[error("User email already exists")]
-    UserEmailTaken,
-
     // Generic, reused across fields
     #[error("{field} is out of range")]
     OutOfRange {
@@ -53,6 +50,9 @@ pub enum DatabaseError {
         #[source]
         source: sqlx::Error,
     },
+
+    #[error("{field} is already taken")]
+    Taken { field: &'static str },
 
     #[error("{field} is in use")]
     InUse {
@@ -85,6 +85,10 @@ impl LogInternal for DatabaseError {
 impl DatabaseError {
     pub fn not_found<T: Entity>() -> Self {
         Self::NotFound { entity: T::NAME }
+    }
+
+    pub fn taken(field: &'static str) -> Self {
+        Self::Taken { field }
     }
 
     pub fn invariant_corrupted(field: &'static str, msg: impl std::error::Error) -> Self {
@@ -413,9 +417,9 @@ impl IntoResponse for DatabaseError {
             Self::Unknown(_) | Self::InvariantCorrupted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Self::NotFound { .. } => StatusCode::NOT_FOUND,
             Self::AlreadyExists { .. }
+            | Self::Taken { .. }
             | Self::InUse { .. }
-            | Self::BookCoverMainConflict(_)
-            | Self::UserEmailTaken => StatusCode::CONFLICT,
+            | Self::BookCoverMainConflict(_) => StatusCode::CONFLICT,
             Self::OutOfRange { .. }
             | Self::DoesNotExist { .. }
             | Self::Duplication { .. }

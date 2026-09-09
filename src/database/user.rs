@@ -102,16 +102,28 @@ impl Database {
         row.map(UserQuery::try_from).transpose()
     }
 
-    #[instrument(name = "db.user.ensure_email_available", skip_all)]
-    pub async fn ensure_email_available(&self, email: &Email) -> Result<(), DatabaseError> {
-        let taken = sqlx::query_file_scalar!("queries/user_email_exists.sql", email.as_ref())
-            .fetch_one(&self.pool)
-            .await
-            .map_err(DatabaseError::from)
-            .inspect_err(DatabaseError::log_internal)?;
+    #[instrument(name = "db.user.ensure_identity_available", skip_all)]
+    pub async fn ensure_identity_available(
+        &self,
+        email: &Email,
+        username: &Username,
+    ) -> Result<(), DatabaseError> {
+        let row = sqlx::query_file!(
+            "queries/user_identity_available.sql",
+            email.as_ref(),
+            username.as_ref(),
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(DatabaseError::from)
+        .inspect_err(DatabaseError::log_internal)?;
 
-        if taken {
-            return Err(DatabaseError::UserEmailTaken);
+        if row.email_taken {
+            return Err(DatabaseError::taken("email"));
+        }
+
+        if row.username_taken {
+            return Err(DatabaseError::taken("username"));
         }
 
         Ok(())

@@ -8,7 +8,9 @@ use crate::{
 
 impl Service {
     pub async fn register(&self, user: User) -> Result<(), ServiceError> {
-        self.database.ensure_email_available(&user.email).await?;
+        self.database
+            .ensure_identity_available(&user.email, &user.username)
+            .await?;
 
         let hasher = self.hasher.clone();
         let password = user.password.clone();
