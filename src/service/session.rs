@@ -4,7 +4,10 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
-    entity::{LoginForm, Session, SessionQuery, SessionTokens, ShortText, UserClaims, UserQuery},
+    entity::{
+        Email, LoginForm, Password, Session, SessionQuery, SessionTokens, ShortText, UserClaims,
+        UserQuery,
+    },
     error::{EntityError, ServiceError},
     service::Service,
 };
@@ -29,9 +32,19 @@ impl Service {
             now,
         } = form;
 
-        let user = self.database.get_user_by_email(&email).await?;
+        let user = self.authenticate(&email, password).await?;
 
-        // Verified even when no user exists, so timing does not leak account existence.
+        self.mint_session(&user, ua, ip, now).await
+    }
+
+    /// Runs verification even for an unknown email, so timing does not leak account existence.
+    async fn authenticate(
+        &self,
+        email: &Email,
+        password: Password,
+    ) -> Result<UserQuery, ServiceError> {
+        let user = self.database.get_user_by_email(email).await?;
+
         const PLACEHOLDER_HASH: &str = "$argon2id$v=19$m=19456,t=2,p=1$\
             nE6GFRm4pmXbgWhIZf0QNg$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
@@ -45,9 +58,7 @@ impl Service {
             .await
             .expect("password verification task panicked")?;
 
-        let user = user.ok_or(ServiceError::InvalidCredentials)?;
-
-        self.mint_session(&user, ua, ip, now).await
+        user.ok_or(ServiceError::InvalidCredentials)
     }
 
     async fn mint_session(
