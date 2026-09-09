@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select u.id, u.email, u.username, u.roles, u.verified_at, u.created_at\nfrom users u\nwhere u.id = $1;\n",
+  "query": "select id, email, username, roles, verified_at, created_at\nfrom users\nwhere id = $1;\n",
   "describe": {
     "columns": [
       {
@@ -84,5 +84,5 @@
       false
     ]
   },
-  "hash": "212fb5a384b8d2d9224719cffcdeb47650635bb653c610338540afd8f3dcaa7c"
+  "hash": "4d8242dc3327c162930c1d2dd73c8d55f456a124c968110afb9e5f7c3d82b816"
 }

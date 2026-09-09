@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select u.roles\nfrom users u\nwhere u.id = $1;\n",
+  "query": "select roles\nfrom users\nwhere id = $1;\n",
   "describe": {
     "columns": [
       {
@@ -24,5 +24,5 @@
       false
     ]
   },
-  "hash": "3259d1ca14bba80202bb41a0a9dbb37386e5214e4bd162056b07c6504b6cc7b8"
+  "hash": "da2eecc433c153514195425e4311485e074f1060c58c923d91cafb1a2b19246c"
 }

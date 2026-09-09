@@ -1,3 +1,3 @@
-select u.id, u.password_hash, u.roles
-from users u
-where u.email = $1;
+select id, password_hash, roles
+from users
+where email = $1;

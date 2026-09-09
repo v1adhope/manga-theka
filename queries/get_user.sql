@@ -1,3 +1,3 @@
-select u.id, u.email, u.username, u.roles, u.verified_at, u.created_at
-from users u
-where u.id = $1;
+select id, email, username, roles, verified_at, created_at
+from users
+where id = $1;

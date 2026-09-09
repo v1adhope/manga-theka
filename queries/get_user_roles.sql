@@ -1,3 +1,3 @@
-select u.roles
-from users u
-where u.id = $1;
+select roles
+from users
+where id = $1;
