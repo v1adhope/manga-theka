@@ -154,30 +154,22 @@ impl MemoryStore {
         Ok(live)
     }
 
-    #[instrument(name = "memory.session.owns", skip_all, fields(user.id = %sub, session.id = %sid))]
-    pub async fn owns_session(&self, sub: Uuid, sid: Uuid) -> Result<bool, MemoryStoreError> {
-        let mut conn = self.conn.clone();
-
-        conn.sismember(sids_key(sub), sid.to_string())
-            .await
-            .map_err(MemoryStoreError::from)
-            .inspect_err(MemoryStoreError::log_internal)
-    }
-
     #[instrument(name = "memory.session.revoke", skip_all, fields(user.id = %sub, session.id = %sid))]
     pub async fn revoke_session(&self, sub: Uuid, sid: Uuid) -> Result<(), MemoryStoreError> {
         let mut conn = self.conn.clone();
 
-        redis::pipe()
+        let (_, removed): (i64, i64) = redis::pipe()
             .atomic()
             .del(blob_key(sub, sid))
-            .ignore()
             .srem(sids_key(sub), sid.to_string())
-            .ignore()
-            .query_async::<()>(&mut conn)
+            .query_async(&mut conn)
             .await
             .map_err(MemoryStoreError::from)
             .inspect_err(MemoryStoreError::log_internal)?;
+
+        if removed == 0 {
+            return Err(MemoryStoreError::SessionNotFound);
+        }
 
         Ok(())
     }

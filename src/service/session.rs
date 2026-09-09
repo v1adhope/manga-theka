@@ -8,7 +8,7 @@ use crate::{
         Email, LoginForm, Password, Session, SessionQuery, SessionTokens, ShortText, UserClaims,
         UserQuery,
     },
-    error::{EntityError, ServiceError},
+    error::ServiceError,
     service::Service,
 };
 
@@ -147,10 +147,6 @@ impl Service {
         now: OffsetDateTime,
     ) -> Result<(), ServiceError> {
         self.ensure_revoker(sub, current_sid, now).await?;
-
-        if !self.memory.owns_session(sub, target_sid).await? {
-            return Err(EntityError::not_readable::<Session>().into());
-        }
 
         self.memory
             .revoke_session(sub, target_sid)

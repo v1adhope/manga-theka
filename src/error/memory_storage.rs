@@ -20,14 +20,29 @@ pub enum MemoryStoreError {
 
     #[error("Stored session jti is not a well-formed hash")]
     CorruptJti(#[source] EntityError),
+
+    #[error("Session not found")]
+    SessionNotFound,
 }
 
 impl LogInternal for MemoryStoreError {
     const MODULE: &'static str = "memory store";
+
+    fn log_internal(&self) {
+        match self {
+            Self::SessionNotFound => {}
+            _ => tracing::error!(error = ?self, module = Self::MODULE, "internal error"),
+        }
+    }
 }
 
 impl IntoResponse for MemoryStoreError {
     fn into_response(self) -> Response {
-        error_response(StatusCode::INTERNAL_SERVER_ERROR, self.to_string())
+        let status = match self {
+            Self::SessionNotFound => StatusCode::NOT_FOUND,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+
+        error_response(status, self.to_string())
     }
 }
