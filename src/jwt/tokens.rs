@@ -6,11 +6,13 @@ use uuid::Uuid;
 
 use crate::{config, entity::Role, error::JwtError};
 
-use super::{ACCESS_TYP, Keys, REFRESH_TYP, sign, verify};
+use super::{ACCESS_TYP, Keys, REALM, REFRESH_TYP, sign, verify};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AccessClaims {
+    pub iss: String,
     pub sub: Uuid,
+    pub aud: String,
     pub sid: Uuid,
     pub roles: Vec<Role>,
     pub iat: i64,
@@ -19,7 +21,9 @@ pub struct AccessClaims {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RefreshClaims {
+    pub iss: String,
     pub sub: Uuid,
+    pub aud: String,
     pub sid: Uuid,
     pub jti: Uuid,
     pub iat: i64,
@@ -59,7 +63,9 @@ impl Jwt {
     ) -> Result<String, JwtError> {
         let iat = now.unix_timestamp();
         let claims = AccessClaims {
+            iss: REALM.to_owned(),
             sub,
+            aud: REALM.to_owned(),
             sid,
             roles: roles.to_vec(),
             iat,
@@ -78,7 +84,9 @@ impl Jwt {
     ) -> Result<String, JwtError> {
         let iat = now.unix_timestamp();
         let claims = RefreshClaims {
+            iss: REALM.to_owned(),
             sub,
+            aud: REALM.to_owned(),
             sid,
             jti,
             iat,

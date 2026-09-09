@@ -15,6 +15,8 @@ use crate::{
 const ACCESS_TYP: &str = "at+jwt";
 const REFRESH_TYP: &str = "rt+jwt";
 
+const REALM: &str = "manga-theka";
+
 #[derive(Clone)]
 struct Keys {
     encoding: EncodingKey,
@@ -36,6 +38,9 @@ impl Keys {
         let mut validation = Validation::new(Algorithm::EdDSA);
         validation.leeway = 0;
         validation.validate_exp = true;
+        validation.set_required_spec_claims(&["exp", "iss", "aud"]);
+        validation.set_issuer(&[REALM]);
+        validation.set_audience(&[REALM]);
 
         Self {
             encoding,
@@ -58,8 +63,6 @@ fn sign<T: Serialize>(keys: &Keys, typ: &str, claims: &T) -> Result<String, JwtE
 fn verify<T: DeserializeOwned>(keys: &Keys, typ: &str, token: &str) -> Result<T, JwtError> {
     let data = decode::<T>(token, &keys.decoding, &keys.validation).map_err(JwtError::Verify)?;
 
-    // `jsonwebtoken::Validation` has no `typ` check, so cross-class rejection
-    // is enforced here.
     if data.header.typ.as_deref() != Some(typ) {
         return Err(JwtError::WrongTokenClass);
     }
