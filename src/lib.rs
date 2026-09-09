@@ -6,7 +6,6 @@ pub mod error;
 pub mod hasher;
 pub mod jwt;
 pub mod memory_storage;
-pub mod middleware;
 pub mod object_storage;
 pub mod route;
 pub mod service;

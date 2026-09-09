@@ -10,29 +10,25 @@ use tokio::signal;
 use crate::{
     config::Config,
     database::{self, Database},
-    entity::{DEFAULT_IMAGE_MAX_BYTES, Role, UPLOAD_MAX_BYTES},
+    entity::{DEFAULT_IMAGE_MAX_BYTES, UPLOAD_MAX_BYTES},
     hasher::Hasher,
     jwt::Jwt,
     memory_storage::{self, MemoryStore},
-    middleware::{authenticate, require_roles},
     object_storage::{self, ObjectStorage},
     route::{
-        commit_chapter_release, delete_book, delete_book_cover, delete_chapter,
-        delete_chapter_release, delete_creator, get_book, get_book_cover_image, get_book_covers,
-        get_books, get_chapter, get_chapter_page, get_chapter_page_image, get_chapter_pages,
-        get_chapter_release, get_chapter_releases, get_chapters, get_content_ratings, get_creator,
-        get_creators, get_feedback, get_feedbacks, get_labels, get_languages, get_me, healthz,
-        list_my_sessions, login, refresh, register, revoke_all_sessions, revoke_current_session,
-        revoke_session, store_book, store_book_cover, store_chapter, store_chapter_release,
-        store_creator, store_feedback, update_book, update_book_main_cover, update_book_visibility,
-        update_chapter, update_creator, update_feedback_status, upload_chapter_pages,
+        CONTENT_WRITERS, MODERATORS, SIGNED_IN, authenticate, commit_chapter_release, delete_book,
+        delete_book_cover, delete_chapter, delete_chapter_release, delete_creator, get_book,
+        get_book_cover_image, get_book_covers, get_books, get_chapter, get_chapter_page,
+        get_chapter_page_image, get_chapter_pages, get_chapter_release, get_chapter_releases,
+        get_chapters, get_content_ratings, get_creator, get_creators, get_feedback, get_feedbacks,
+        get_labels, get_languages, get_me, healthz, list_my_sessions, login, refresh, register,
+        require_roles, revoke_all_sessions, revoke_current_session, revoke_session, store_book,
+        store_book_cover, store_chapter, store_chapter_release, store_creator, store_feedback,
+        update_book, update_book_main_cover, update_book_visibility, update_chapter,
+        update_creator, update_feedback_status, upload_chapter_pages,
     },
     service::Service,
 };
-
-const CONTENT_WRITERS: &[Role] = &[Role::Uploader, Role::Moderator, Role::Admin];
-const MODERATORS: &[Role] = &[Role::Moderator, Role::Admin];
-const SIGNED_IN: &[Role] = &[Role::Reader, Role::Uploader, Role::Moderator, Role::Admin];
 
 pub struct App {
     router: Router,

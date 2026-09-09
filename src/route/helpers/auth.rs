@@ -3,8 +3,8 @@ use std::pin::Pin;
 
 use axum::{
     Extension,
-    extract::{Request, State},
-    http::header,
+    extract::{FromRequestParts, OptionalFromRequestParts, Request, State},
+    http::{header, request::Parts},
     middleware::{FromFnLayer, Next, from_fn_with_state},
     response::{IntoResponse, Response},
 };
@@ -14,6 +14,41 @@ use crate::{
     error::RouteError,
     service::Service,
 };
+
+pub const CONTENT_WRITERS: &[Role] = &[Role::Uploader, Role::Moderator, Role::Admin];
+pub const MODERATORS: &[Role] = &[Role::Moderator, Role::Admin];
+pub const SIGNED_IN: &[Role] = &[Role::Reader, Role::Uploader, Role::Moderator, Role::Admin];
+
+/// Both extractors read the `Extension<Option<UserClaims>>` the global auth
+/// middleware populates from the access JWT -- absent header -> `None`, present
+/// but invalid -> the middleware already short-circuited 401.
+impl<S: Send + Sync> FromRequestParts<S> for UserClaims {
+    type Rejection = RouteError;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        parts
+            .extensions
+            .get::<Option<UserClaims>>()
+            .cloned()
+            .flatten()
+            .ok_or(RouteError::InvalidCredentials)
+    }
+}
+
+impl<S: Send + Sync> OptionalFromRequestParts<S> for UserClaims {
+    type Rejection = RouteError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        _state: &S,
+    ) -> Result<Option<Self>, Self::Rejection> {
+        Ok(parts
+            .extensions
+            .get::<Option<UserClaims>>()
+            .cloned()
+            .flatten())
+    }
+}
 
 /// The one global layer. Reads `Authorization: Bearer <jwt>` (scheme match is
 /// case-insensitive, RFC 9110 s11.1) and inserts `Extension<Option<UserClaims>>`.

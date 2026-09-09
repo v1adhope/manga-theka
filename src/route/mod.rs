@@ -10,8 +10,8 @@ mod release;
 mod session;
 mod user;
 
-#[path = "helpers/authz.rs"]
-mod authz;
+#[path = "helpers/auth.rs"]
+mod auth;
 #[path = "helpers/cookie.rs"]
 mod cookie;
 #[path = "helpers/header.rs"]
@@ -23,6 +23,7 @@ mod pagination;
 #[path = "helpers/response.rs"]
 mod response;
 
+pub use auth::*;
 pub use book::*;
 pub use chapter::*;
 pub use content_rating::*;
