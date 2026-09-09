@@ -14,6 +14,7 @@ HTTP contract conventions for this repo.
 - `nextCursor` is always present on list responses (no `skip_serializing_if`), `null` at end of list.
 - JSON keys are `camelCase`; enum values serialize verbatim as `PascalCase`.
 - Timestamps serialize as RFC 3339.
+- Durations are integer seconds, not RFC 3339 -- `POST /sessions/login` and `POST /sessions/refresh` return `expiresIn` (the access token's lifetime) next to `accessToken` in the `data` envelope. The refresh token is not in the body; it rides in a `Set-Cookie` whose `Max-Age` is its own lifetime.
 - Requests carry only ids for nested entities (attach-by-reference). A request-body field holding a bare id takes the `Id` suffix (`labelIds`, `creatorId`); the same concept in a response or a query-string facet takes no suffix (`labels`, `contentRating`).
 - Error bodies are plain text (`"Creator not found"`), not JSON.
 

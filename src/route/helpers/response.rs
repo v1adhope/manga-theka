@@ -13,6 +13,7 @@ pub struct StoreResp {
 #[serde(rename_all = "camelCase")]
 pub struct AccessTokenResp {
     pub access_token: String,
+    pub expires_in: i64,
 }
 
 pub fn json_response<T: Serialize>(status: StatusCode, body: T) -> (StatusCode, Json<T>) {

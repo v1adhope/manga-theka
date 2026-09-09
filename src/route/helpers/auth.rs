@@ -63,13 +63,7 @@ pub async fn authenticate(
         .map(|(_, token)| token.trim())
         .filter(|token| !token.is_empty());
 
-    let access = token.and_then(|token| service.jwt.verify_access(token).ok());
-
-    let claims = access.map(|access| UserClaims {
-        id: access.sub,
-        sid: access.sid,
-        roles: access.roles,
-    });
+    let claims = token.and_then(|token| service.authenticate_access(token));
 
     req.extensions_mut().insert::<Option<UserClaims>>(claims);
     next.run(req).await

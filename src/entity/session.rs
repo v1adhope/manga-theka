@@ -18,9 +18,14 @@ pub struct LoginForm {
     pub now: OffsetDateTime,
 }
 
+pub struct Token {
+    pub value: String,
+    pub ttl: i64,
+}
+
 pub struct SessionTokens {
-    pub access: String,
-    pub refresh: String,
+    pub access: Token,
+    pub refresh: Token,
 }
 
 #[derive(Debug)]

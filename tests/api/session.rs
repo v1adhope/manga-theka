@@ -142,7 +142,8 @@ async fn refresh_succeeds_even_with_a_stale_access_token_still_attached() {
             &[Role::Reader],
             OffsetDateTime::now_utc() - Duration::hours(1),
         )
-        .unwrap();
+        .unwrap()
+        .value;
 
     let req = Request::post("/sessions/refresh")
         .header(header::COOKIE, cookie)
@@ -193,7 +194,11 @@ async fn refresh_with_an_expired_token_returns_401() {
         .await
         .unwrap();
 
-    let token = app.jwt.issue_refresh(sub, sid, jti, long_ago).unwrap();
+    let token = app
+        .jwt
+        .issue_refresh(sub, sid, jti, long_ago)
+        .unwrap()
+        .value;
 
     assert_error(
         post_refresh(&app, &format!("refresh_token={token}")).await,
@@ -225,7 +230,8 @@ async fn a_refresh_token_presented_as_an_access_token_is_rejected() {
             Uuid::now_v7(),
             OffsetDateTime::now_utc(),
         )
-        .unwrap();
+        .unwrap()
+        .value;
 
     let req = Request::get("/users/me")
         .header(header::AUTHORIZATION, format!("Bearer {refresh}"))

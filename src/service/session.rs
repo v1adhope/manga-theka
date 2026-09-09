@@ -4,12 +4,22 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
-    entity::{LoginForm, Session, SessionQuery, SessionTokens, ShortText, UserQuery},
+    entity::{LoginForm, Session, SessionQuery, SessionTokens, ShortText, UserClaims, UserQuery},
     error::{EntityError, ServiceError},
     service::Service,
 };
 
 impl Service {
+    pub fn authenticate_access(&self, access_token: &str) -> Option<UserClaims> {
+        let claims = self.jwt.verify_access(access_token).ok()?;
+
+        Some(UserClaims {
+            id: claims.sub,
+            sid: claims.sid,
+            roles: claims.roles,
+        })
+    }
+
     pub async fn login(&self, form: LoginForm) -> Result<SessionTokens, ServiceError> {
         let LoginForm {
             email,

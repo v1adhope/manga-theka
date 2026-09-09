@@ -59,13 +59,14 @@ pub async fn login(
 
     let tokens = service.login(form).await?;
 
-    let jar = CookieJar::new().add(refresh_cookie(tokens.refresh, service.jwt.refresh_ttl()));
+    let jar = CookieJar::new().add(refresh_cookie(tokens.refresh.value, tokens.refresh.ttl));
 
     Ok((
         StatusCode::CREATED,
         jar,
         json_data(AccessTokenResp {
-            access_token: tokens.access,
+            access_token: tokens.access.value,
+            expires_in: tokens.access.ttl,
         }),
     ))
 }
@@ -82,12 +83,13 @@ pub async fn refresh(
 
     let tokens = service.refresh_session(&token, now).await?;
 
-    let jar = jar.add(refresh_cookie(tokens.refresh, service.jwt.refresh_ttl()));
+    let jar = jar.add(refresh_cookie(tokens.refresh.value, tokens.refresh.ttl));
 
     Ok((
         jar,
         json_data(AccessTokenResp {
-            access_token: tokens.access,
+            access_token: tokens.access.value,
+            expires_in: tokens.access.ttl,
         }),
     ))
 }

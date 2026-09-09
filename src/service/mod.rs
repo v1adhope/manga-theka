@@ -17,11 +17,11 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct Service {
-    pub database: Database,
-    pub storage: ObjectStorage,
-    pub hasher: Hasher,
-    pub jwt: Jwt,
-    pub memory: MemoryStore,
+    database: Database,
+    storage: ObjectStorage,
+    hasher: Hasher,
+    jwt: Jwt,
+    memory: MemoryStore,
 }
 
 impl Service {

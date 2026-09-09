@@ -4,7 +4,11 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::{config, entity::Role, error::JwtError};
+use crate::{
+    config,
+    entity::{Role, Token},
+    error::JwtError,
+};
 
 use super::{ACCESS_TYP, Keys, REALM, REFRESH_TYP, sign, verify};
 
@@ -50,17 +54,13 @@ impl Jwt {
         }
     }
 
-    pub fn refresh_ttl(&self) -> i64 {
-        self.refresh.ttl
-    }
-
     pub fn issue_access(
         &self,
         sub: Uuid,
         sid: Uuid,
         roles: &[Role],
         now: OffsetDateTime,
-    ) -> Result<String, JwtError> {
+    ) -> Result<Token, JwtError> {
         let iat = now.unix_timestamp();
         let claims = AccessClaims {
             iss: REALM.to_owned(),
@@ -72,7 +72,12 @@ impl Jwt {
             exp: iat + self.access.ttl,
         };
 
-        sign(&self.access, ACCESS_TYP, &claims)
+        let value = sign(&self.access, ACCESS_TYP, &claims)?;
+
+        Ok(Token {
+            value,
+            ttl: self.access.ttl,
+        })
     }
 
     pub fn issue_refresh(
@@ -81,7 +86,7 @@ impl Jwt {
         sid: Uuid,
         jti: Uuid,
         now: OffsetDateTime,
-    ) -> Result<String, JwtError> {
+    ) -> Result<Token, JwtError> {
         let iat = now.unix_timestamp();
         let claims = RefreshClaims {
             iss: REALM.to_owned(),
@@ -93,7 +98,12 @@ impl Jwt {
             exp: iat + self.refresh.ttl,
         };
 
-        sign(&self.refresh, REFRESH_TYP, &claims)
+        let value = sign(&self.refresh, REFRESH_TYP, &claims)?;
+
+        Ok(Token {
+            value,
+            ttl: self.refresh.ttl,
+        })
     }
 
     pub fn verify_access(&self, token: &str) -> Result<AccessClaims, JwtError> {
@@ -174,7 +184,8 @@ mod tests {
         let token = jwt
             .issue_access(sub, sid, &[Role::Reader, Role::Admin], now)
             .unwrap();
-        let claims = jwt.verify_access(&token).unwrap();
+        assert_eq!(token.ttl, ACCESS_TTL);
+        let claims = jwt.verify_access(&token.value).unwrap();
 
         assert_eq!(claims.sub, sub);
         assert_eq!(claims.sid, sid);
@@ -194,7 +205,8 @@ mod tests {
         let now = OffsetDateTime::now_utc();
 
         let token = jwt.issue_refresh(sub, sid, jti, now).unwrap();
-        let claims = jwt.verify_refresh(&token).unwrap();
+        assert_eq!(token.ttl, REFRESH_TTL);
+        let claims = jwt.verify_refresh(&token.value).unwrap();
 
         assert_eq!(claims.sub, sub);
         assert_eq!(claims.sid, sid);
@@ -217,12 +229,7 @@ mod tests {
             )
             .unwrap();
 
-        assert!(jwt.verify_access(&token).unwrap().roles.is_empty());
-    }
-
-    #[test]
-    fn refresh_ttl_reports_the_configured_value() {
-        assert_eq!(jwt().refresh_ttl(), REFRESH_TTL);
+        assert!(jwt.verify_access(&token.value).unwrap().roles.is_empty());
     }
 
     #[test]
@@ -237,7 +244,7 @@ mod tests {
             )
             .unwrap();
 
-        assert!(jwt.verify_refresh(&token).is_err());
+        assert!(jwt.verify_refresh(&token.value).is_err());
     }
 
     #[test]
@@ -252,7 +259,7 @@ mod tests {
             )
             .unwrap();
 
-        assert!(jwt.verify_access(&token).is_err());
+        assert!(jwt.verify_access(&token.value).is_err());
     }
 
     #[test]
@@ -263,7 +270,7 @@ mod tests {
             .issue_access(Uuid::now_v7(), Uuid::now_v7(), &[Role::Reader], long_ago)
             .unwrap();
 
-        assert!(jwt.verify_access(&token).is_err());
+        assert!(jwt.verify_access(&token.value).is_err());
     }
 
     #[test]
@@ -279,7 +286,7 @@ mod tests {
             )
             .unwrap();
 
-        assert!(verifier.verify_access(&token).is_err());
+        assert!(verifier.verify_access(&token.value).is_err());
     }
 
     #[test]
@@ -294,7 +301,7 @@ mod tests {
             )
             .unwrap();
 
-        let (header, rest) = token.split_once('.').unwrap();
+        let (header, rest) = token.value.split_once('.').unwrap();
         let (payload, sig) = rest.split_once('.').unwrap();
         let mut bytes = payload.as_bytes().to_vec();
         let last = bytes.last_mut().unwrap();

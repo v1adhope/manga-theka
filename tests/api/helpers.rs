@@ -393,6 +393,7 @@ impl TestApp {
         self.jwt
             .issue_access(sub, sid, roles, time::OffsetDateTime::now_utc())
             .expect("failed to issue a test access token")
+            .value
     }
 
     pub fn bearer(&self, sub: Uuid, sid: Uuid, roles: &[Role]) -> String {
