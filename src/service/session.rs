@@ -5,8 +5,8 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        Email, LoginForm, Password, Session, SessionQuery, SessionTokens, ShortText, UserClaims,
-        UserCredentials,
+        Email, LoginForm, Password, Role, Session, SessionQuery, SessionTokens, ShortText,
+        UserClaims, UserCredentials,
     },
     error::ServiceError,
     service::Service,
@@ -68,23 +68,34 @@ impl Service {
         ip: Option<IpAddr>,
         now: OffsetDateTime,
     ) -> Result<SessionTokens, ServiceError> {
-        let sid = Uuid::now_v7();
         let jti = Uuid::now_v7();
 
         let session = Session {
-            sid,
+            sid: Uuid::now_v7(),
             jti: self.hasher.compute_keyed_hex_hash(jti)?,
             ua,
             ip,
             created_at: now.into(),
             updated_at: now.into(),
         };
-        self.memory.put_session(user.id, session).await?;
 
-        let access = self
-            .jwt
-            .issue_access(user.id, sid, user.roles.as_slice(), now)?;
-        let refresh = self.jwt.issue_refresh(user.id, sid, jti, now)?;
+        self.issue_tokens(user.id, session, jti, user.roles.as_slice(), now)
+            .await
+    }
+
+    async fn issue_tokens(
+        &self,
+        sub: Uuid,
+        session: Session,
+        jti: Uuid,
+        roles: &[Role],
+        now: OffsetDateTime,
+    ) -> Result<SessionTokens, ServiceError> {
+        let sid = session.sid;
+        self.memory.put_session(sub, session).await?;
+
+        let access = self.jwt.issue_access(sub, sid, roles, now)?;
+        let refresh = self.jwt.issue_refresh(sub, sid, jti, now)?;
 
         Ok(SessionTokens { access, refresh })
     }
@@ -118,14 +129,9 @@ impl Service {
             created_at: session.created_at,
             updated_at: now.into(),
         };
-        self.memory.put_session(claims.sub, rotated).await?;
 
-        let access = self
-            .jwt
-            .issue_access(claims.sub, claims.sid, roles.as_slice(), now)?;
-        let refresh = self.jwt.issue_refresh(claims.sub, claims.sid, jti, now)?;
-
-        Ok(SessionTokens { access, refresh })
+        self.issue_tokens(claims.sub, rotated, jti, roles.as_slice(), now)
+            .await
     }
 
     pub async fn list_sessions(&self, sub: Uuid) -> Result<Vec<SessionQuery>, ServiceError> {
