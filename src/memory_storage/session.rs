@@ -6,7 +6,7 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::{
-    entity::{HexHash, Session, Text, Timestamp},
+    entity::{HexHash, Session, ShortText, Timestamp},
     error::{EntityError, LogInternal, MemoryStoreError},
 };
 
@@ -16,7 +16,7 @@ use super::{MemoryStore, blob_key, sids_key};
 #[serde(rename_all = "camelCase")]
 struct SessionBlob {
     jti: String,
-    ua: Option<Text>,
+    ua: Option<ShortText>,
     ip: Option<IpAddr>,
     created_at: Timestamp,
     updated_at: Timestamp,

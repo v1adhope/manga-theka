@@ -5,7 +5,7 @@ use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
 use crate::{
-    entity::{Email, Entity, HexHash, Password, Text, Timestamp},
+    entity::{Email, Entity, HexHash, Password, ShortText, Timestamp},
     error::EntityError,
 };
 
@@ -13,7 +13,7 @@ use crate::{
 pub struct LoginForm {
     pub email: Email,
     pub password: Password,
-    pub ua: Option<Text>,
+    pub ua: Option<ShortText>,
     pub ip: Option<IpAddr>,
     pub now: OffsetDateTime,
 }
@@ -27,7 +27,7 @@ pub struct SessionTokens {
 pub struct Session {
     pub sid: Uuid,
     pub jti: HexHash,
-    pub ua: Option<Text>,
+    pub ua: Option<ShortText>,
     pub ip: Option<IpAddr>,
     pub created_at: Timestamp,
     pub updated_at: Timestamp,
@@ -53,7 +53,7 @@ impl Session {
 #[serde(rename_all = "camelCase")]
 pub struct SessionQuery {
     pub sid: Uuid,
-    pub ua: Option<Text>,
+    pub ua: Option<ShortText>,
     pub ip: Option<IpAddr>,
     pub created_at: Timestamp,
     pub updated_at: Timestamp,

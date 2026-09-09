@@ -67,8 +67,8 @@ pub enum EntityError {
     #[error("Text can't be empty or whitespace")]
     TextIsEmptyOrWhitespace,
 
-    #[error("Text exceeds the 2000-character limit")]
-    TextExceedsCharLimit,
+    #[error("Text exceeds the {0}-character limit")]
+    TextExceedsCharLimit(usize),
 
     #[error("Email is not a well-formed address")]
     EmailIsMalformed,
