@@ -1,7 +1,10 @@
 use axum::{Json, http::StatusCode};
+use axum_extra::extract::CookieJar;
 use serde::Serialize;
 use serde_json::json;
 use uuid::Uuid;
+
+use crate::{entity::SessionTokens, route::cookie::refresh_cookie};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -29,4 +32,17 @@ pub fn json_data_response<T: Serialize>(
     data: T,
 ) -> (StatusCode, Json<serde_json::Value>) {
     (status, json_data(data))
+}
+
+pub fn session_tokens_response(
+    jar: CookieJar,
+    tokens: SessionTokens,
+) -> (CookieJar, Json<serde_json::Value>) {
+    let jar = jar.add(refresh_cookie(tokens.refresh.value, tokens.refresh.ttl));
+    let body = json_data(AccessTokenResp {
+        access_token: tokens.access.value,
+        expires_in: tokens.access.ttl,
+    });
+
+    (jar, body)
 }

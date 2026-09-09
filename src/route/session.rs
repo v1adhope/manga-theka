@@ -13,10 +13,9 @@ use crate::{
     entity::{Email, LoginForm, Password, UserClaims},
     error::{AppError, EntityError, RouteError},
     route::{
-        AccessTokenResp,
-        cookie::{REFRESH_COOKIE, clear_refresh_cookie, refresh_cookie},
+        cookie::{REFRESH_COOKIE, clear_refresh_cookie},
         header::{forwarded_ip, user_agent},
-        json_data, json_data_response,
+        json_data_response, session_tokens_response,
     },
     service::Service,
 };
@@ -59,16 +58,9 @@ pub async fn login(
 
     let tokens = service.login(form).await?;
 
-    let jar = CookieJar::new().add(refresh_cookie(tokens.refresh.value, tokens.refresh.ttl));
+    let (jar, body) = session_tokens_response(CookieJar::new(), tokens);
 
-    Ok((
-        StatusCode::CREATED,
-        jar,
-        json_data(AccessTokenResp {
-            access_token: tokens.access.value,
-            expires_in: tokens.access.ttl,
-        }),
-    ))
+    Ok((StatusCode::CREATED, jar, body))
 }
 
 pub async fn refresh(
@@ -83,15 +75,7 @@ pub async fn refresh(
 
     let tokens = service.refresh_session(&token, now).await?;
 
-    let jar = jar.add(refresh_cookie(tokens.refresh.value, tokens.refresh.ttl));
-
-    Ok((
-        jar,
-        json_data(AccessTokenResp {
-            access_token: tokens.access.value,
-            expires_in: tokens.access.ttl,
-        }),
-    ))
+    Ok(session_tokens_response(jar, tokens))
 }
 
 pub async fn list_my_sessions(
