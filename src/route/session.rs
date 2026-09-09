@@ -121,12 +121,15 @@ pub async fn revoke_session(
         .revoke_session(claims.id, claims.sid, sid, OffsetDateTime::now_utc())
         .await?;
 
-    // Revoking one's own session by id must also drop the now-dead cookie.
-    let jar = if sid == claims.sid {
+    let jar = clear_cookie_for_own_session(jar, sid, claims.sid);
+
+    Ok((StatusCode::NO_CONTENT, jar))
+}
+
+fn clear_cookie_for_own_session(jar: CookieJar, revoked_sid: Uuid, current_sid: Uuid) -> CookieJar {
+    if revoked_sid == current_sid {
         clear_refresh_cookie(jar)
     } else {
         jar
-    };
-
-    Ok((StatusCode::NO_CONTENT, jar))
+    }
 }
