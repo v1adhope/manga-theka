@@ -81,6 +81,24 @@ impl Database {
         }
     }
 
+    #[instrument(name = "db.user.get_roles", skip_all, fields(user.id = %id))]
+    pub async fn get_user_roles(&self, id: Uuid) -> Result<Roles, DatabaseError> {
+        self.get_user_roles_inner(id)
+            .await
+            .inspect_err(DatabaseError::log_internal)
+    }
+
+    async fn get_user_roles_inner(&self, id: Uuid) -> Result<Roles, DatabaseError> {
+        let roles = sqlx::query_file_scalar!("queries/get_user_roles.sql", id)
+            .fetch_optional(&self.pool)
+            .await?;
+
+        match roles {
+            Some(roles) => Roles::try_from(roles).or_corrupted("roles"),
+            None => Err(DatabaseError::not_found::<User>()),
+        }
+    }
+
     #[instrument(name = "db.user.get_by_email", skip_all)]
     pub async fn get_user_by_email(
         &self,

@@ -103,14 +103,11 @@ impl Service {
             .ok_or(ServiceError::InvalidCredentials)?;
 
         if self.hasher.compute_keyed_hex_hash(claims.jti)? != session.jti {
-            // ADR-0003 rejects reuse-detection escalation: warn, no family revoke.
             tracing::warn!(sub = %claims.sub, sid = %claims.sid, "refresh jti mismatch");
             return Err(ServiceError::InvalidCredentials);
         }
 
-        // No compare-and-swap on the jti, so two refreshes racing on one cookie
-        // both pass and the loser re-logs-in -- accepted per ADR-0003.
-        let user = self.database.get_user(claims.sub).await?;
+        let roles = self.database.get_user_roles(claims.sub).await?;
 
         let jti = Uuid::now_v7();
         let rotated = Session {
@@ -125,7 +122,7 @@ impl Service {
 
         let access = self
             .jwt
-            .issue_access(claims.sub, claims.sid, user.roles.as_slice(), now)?;
+            .issue_access(claims.sub, claims.sid, roles.as_slice(), now)?;
         let refresh = self.jwt.issue_refresh(claims.sub, claims.sid, jti, now)?;
 
         Ok(SessionTokens { access, refresh })

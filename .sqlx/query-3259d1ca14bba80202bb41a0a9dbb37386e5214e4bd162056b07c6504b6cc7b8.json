@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select u.roles\nfrom users u\nwhere u.id = $1;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "roles",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "roles"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3259d1ca14bba80202bb41a0a9dbb37386e5214e4bd162056b07c6504b6cc7b8"
+}
