@@ -168,7 +168,7 @@ pub async fn store_book(
     Ok(json_data_response(StatusCode::CREATED, StoreResp { id }))
 }
 
-// deferred: also admit the book's `created_by` user to edit their own Draft
+// deferred: also admit the book's `created_by` user to edit their own book
 pub async fn update_book(
     State(service): State<Service>,
     Path(id): Path<Uuid>,
@@ -286,8 +286,6 @@ pub async fn get_books(
     claims: Option<UserClaims>,
     Query(query): Query<BookListQuery>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    // The list is public and defaults to `Listed`; the `?visibility=` override
-    // that reaches into the moderation queue is Moderator/Admin only.
     if query.visibility.is_some() && !claims.is_some_and(|c| c.can_moderate()) {
         return Err(RouteError::Forbidden.into());
     }
@@ -304,8 +302,7 @@ pub async fn get_books(
     ))
 }
 
-// A book outside `Listed` lives in the moderation queue; only Moderator/Admin
-// may read its metadata, and a withheld book reads as a missing one (404).
+// deferred: also admit the book's `created_by` user to read their own book
 pub async fn get_book(
     State(service): State<Service>,
     claims: Option<UserClaims>,
@@ -352,8 +349,6 @@ pub async fn update_book_visibility(
     Path(id): Path<Uuid>,
     Json(req): Json<BookVisibilityReq>,
 ) -> Result<StatusCode, AppError> {
-    // A `PendingReview` target is a signed-in user's own submit move (the domain
-    // guard refuses it from any state but `Draft` / itself); all else is moderation.
     if req.visibility != BookVisibility::PendingReview && !claims.can_moderate() {
         return Err(RouteError::Forbidden.into());
     }
