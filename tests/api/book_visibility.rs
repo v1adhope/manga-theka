@@ -132,7 +132,7 @@ async fn get_book_carries_its_review_fields() {
     let req = Request::get(format!("/books/{id}"))
         .body(Body::empty())
         .unwrap();
-    let resp = app.send(req).await;
+    let resp = app.send_authed(req).await;
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
     let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
 

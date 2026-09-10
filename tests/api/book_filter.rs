@@ -284,7 +284,7 @@ async fn get_books_embeds_each_books_own_arrays() {
     app.insert_book(&full).await;
 
     let req = Request::get("/books").body(Body::empty()).unwrap();
-    let resp = app.send(req).await;
+    let resp = app.send_authed(req).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -327,7 +327,7 @@ async fn get_books_returns_default_limit_and_next_cursor() {
     }
 
     let req = Request::get("/books").body(Body::empty()).unwrap();
-    let resp = app.send(req).await;
+    let resp = app.send_authed(req).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -373,7 +373,7 @@ async fn get_books_desc_order_confirmed() {
     ids.sort_by(|a, b| b.cmp(a));
 
     let req = Request::get("/books").body(Body::empty()).unwrap();
-    let resp = app.send(req).await;
+    let resp = app.send_authed(req).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -640,7 +640,7 @@ async fn get_books_accepts_duplicates_that_fit_after_deduping() {
     let req = Request::get(format!("/books?a=1{repeated}"))
         .body(Body::empty())
         .unwrap();
-    let resp = app.send(req).await;
+    let resp = app.send_authed(req).await;
 
     assert_eq!(resp.status(), StatusCode::OK);
 }

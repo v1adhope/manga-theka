@@ -26,7 +26,7 @@ async fn store_book_cover_is_sniffed_not_trusted_from_content_type() {
         .body(Body::from(form))
         .unwrap();
 
-    let resp = app.send(req).await;
+    let resp = app.send_authed(req).await;
     let cover_id = assert_stored(resp).await;
     let content_type = app.object_content_type(&app.covers_bucket, cover_id).await;
 
@@ -97,7 +97,7 @@ async fn store_book_cover_with_malformed_book_id_returns_400() {
         .body(Body::from(COVER_PNG))
         .unwrap();
 
-    let resp = app.send(req).await;
+    let resp = app.send_authed(req).await;
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
 

@@ -28,9 +28,6 @@ static TRACING: LazyLock<()> = LazyLock::new(|| {
     telemetry::init_subscriber("info");
 });
 
-/// Four Ed25519 PEM files (two keypairs) written once per test process into a
-/// temp dir, derived from fixed literal seeds so no key material is committed
-/// and CI needs no openssl.
 pub static KEYS: LazyLock<TestKeys> = LazyLock::new(TestKeys::generate);
 
 pub struct TestKeys {
@@ -76,11 +73,9 @@ impl TestKeys {
     }
 }
 
-/// The default token every write helper attaches: a caller holding every
-/// content-writing role.
 pub const DEFAULT_ROLES: [Role; 3] = [Role::Uploader, Role::Moderator, Role::Admin];
 
-// TODO: migrate this to axum_test::TestServer/TestResponse.
+// TODO: migrate this to axum_test::TestServer/TestResponse?
 pub struct TestApp {
     pub pool: PgPool,
     pub router: Router,
@@ -183,9 +178,7 @@ impl TestApp {
         database::pool(cfg).await
     }
 
-    /// Dispatch a request, attaching a default all-roles bearer token when it
-    /// carries no `Authorization` header of its own.
-    pub async fn send(&self, mut req: Request<Body>) -> Response {
+    pub async fn send_authed(&self, mut req: Request<Body>) -> Response {
         if !req.headers().contains_key(header::AUTHORIZATION) {
             let caller: UserQuery = UserFaker {
                 roles: DEFAULT_ROLES.to_vec(),
@@ -203,7 +196,6 @@ impl TestApp {
         self.router.clone().oneshot(req).await.unwrap()
     }
 
-    /// Dispatch a request exactly as given -- no token injection.
     pub async fn send_raw(&self, req: Request<Body>) -> Response {
         self.router.clone().oneshot(req).await.unwrap()
     }

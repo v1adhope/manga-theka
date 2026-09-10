@@ -51,7 +51,7 @@ async fn store_book_with_valid_body_passes() {
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.send(req).await;
+    let resp = app.send_authed(req).await;
     let id = assert_stored(resp).await;
 
     let got = app.fetch_book(id).await;

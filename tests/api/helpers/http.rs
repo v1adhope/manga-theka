@@ -62,7 +62,7 @@ impl TestApp {
     }
 
     pub async fn delete_authed(&self, path: &str) -> Response {
-        self.send(Request::delete(path).body(Body::empty()).unwrap())
+        self.send_authed(Request::delete(path).body(Body::empty()).unwrap())
             .await
     }
 
@@ -80,7 +80,7 @@ impl TestApp {
             .body(Body::from(body.to_owned()))
             .unwrap();
 
-        self.send(req).await
+        self.send_authed(req).await
     }
 
     async fn json_authed(&self, method: Method, path: &str, body: serde_json::Value) -> Response {
@@ -91,7 +91,7 @@ impl TestApp {
             .body(Body::from(body.to_string()))
             .unwrap();
 
-        self.send(req).await
+        self.send_authed(req).await
     }
 
     async fn multipart_authed(&self, path: &str, parts: &[&[u8]]) -> Response {
@@ -101,7 +101,7 @@ impl TestApp {
             .body(Body::from(form))
             .unwrap();
 
-        self.send(req).await
+        self.send_authed(req).await
     }
 
     fn multipart_body(parts: &[&[u8]]) -> MultipartForm {
