@@ -17,14 +17,15 @@ pub fn labels(ids: &[Uuid]) -> Vec<Label> {
         .collect()
 }
 
-pub fn label_keys(labels: &[Label]) -> Vec<(Uuid, &str, &str)> {
-    let mut keys: Vec<(Uuid, &str, &str)> = labels
-        .iter()
-        .map(|l| (l.id, l.name.as_str(), l.kind.as_ref()))
-        .collect();
+fn sorted_keys<'a, T, K: Ord>(items: &'a [T], to_key: impl FnMut(&'a T) -> K) -> Vec<K> {
+    let mut keys: Vec<K> = items.iter().map(to_key).collect();
     keys.sort();
 
     keys
+}
+
+pub fn label_keys(labels: &[Label]) -> Vec<(Uuid, &str, &str)> {
+    sorted_keys(labels, |l| (l.id, l.name.as_str(), l.kind.as_ref()))
 }
 
 pub fn day(n: i64) -> time::OffsetDateTime {
@@ -51,45 +52,21 @@ pub fn sorted(mut v: Vec<Uuid>) -> Vec<Uuid> {
 }
 
 pub fn link_keys(links: &[BookLink]) -> Vec<(&str, &str)> {
-    let mut keys: Vec<(&str, &str)> = links
-        .iter()
-        .map(|l| (l.kind.as_ref(), l.url.as_ref()))
-        .collect();
-    keys.sort();
-
-    keys
+    sorted_keys(links, |l| (l.kind.as_ref(), l.url.as_ref()))
 }
 
 pub fn title_keys(titles: &[AlternativeTitle]) -> Vec<(Uuid, &str)> {
-    let mut keys: Vec<(Uuid, &str)> = titles
-        .iter()
-        .map(|t| (t.language_id, t.name.as_ref()))
-        .collect();
-    keys.sort();
-
-    keys
+    sorted_keys(titles, |t| (t.language_id, t.name.as_ref()))
 }
 
 pub fn creator_keys(creators: &[CreatorQuery]) -> Vec<(Uuid, &str, &str, Vec<&str>)> {
-    let mut keys: Vec<(Uuid, &str, &str, Vec<&str>)> = creators
-        .iter()
-        .map(|c| {
-            let mut roles: Vec<&str> = c.roles.iter().map(AsRef::as_ref).collect();
-            roles.sort();
-            (c.id, c.first_name.as_ref(), c.last_name.as_ref(), roles)
-        })
-        .collect();
-    keys.sort();
-
-    keys
+    sorted_keys(creators, |c| {
+        let mut roles: Vec<&str> = c.roles.iter().map(AsRef::as_ref).collect();
+        roles.sort();
+        (c.id, c.first_name.as_ref(), c.last_name.as_ref(), roles)
+    })
 }
 
 pub fn localization_keys(localizations: &[ChapterLocalization]) -> Vec<(Uuid, &str)> {
-    let mut keys: Vec<(Uuid, &str)> = localizations
-        .iter()
-        .map(|l| (l.language_id, l.name.as_ref()))
-        .collect();
-    keys.sort();
-
-    keys
+    sorted_keys(localizations, |l| (l.language_id, l.name.as_ref()))
 }
