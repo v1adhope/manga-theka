@@ -982,7 +982,7 @@ where f.id = $1;
 
             for release_language in releases {
                 let chapter_id = self.db_insert_random_chapter(book.id).await;
-                self.db_insert_release(chapter_id, release_language.id)
+                self.db_insert_release_as(chapter_id, release_language.id, self.super_user_id)
                     .await;
             }
 
@@ -1010,11 +1010,6 @@ where id = $1;
             .map(|l| l.id)
             .find(|id| *id != publication)
             .expect("the language catalog must hold a translation language")
-    }
-
-    pub async fn db_insert_release(&self, chapter_id: Uuid, language_id: Uuid) -> Uuid {
-        self.db_insert_release_as(chapter_id, language_id, self.super_user_id)
-            .await
     }
 
     pub async fn db_insert_release_as(
@@ -1047,7 +1042,8 @@ where c.id = $2;
     pub async fn db_insert_random_release(&self, book_id: Uuid, chapter_id: Uuid) -> Uuid {
         let language_id = self.db_non_publication_language(book_id).await;
 
-        self.db_insert_release(chapter_id, language_id).await
+        self.db_insert_release_as(chapter_id, language_id, self.super_user_id)
+            .await
     }
 
     pub async fn db_seed_super_user(&self) {
