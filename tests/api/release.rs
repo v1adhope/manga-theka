@@ -414,11 +414,9 @@ async fn get_chapter_releases_lists_a_release_that_was_never_committed() {
     let draft_id = app.insert_random_release(book_id, chapter_id).await;
     app.insert_page(draft_id, None, COVER_PNG).await;
 
-    let resp = app.get_releases(chapter_id).await;
-    assert_eq!(resp.status(), StatusCode::OK);
-
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<ChapterReleaseQuery>> = serde_json::from_slice(&bytes).unwrap();
+    let wrapper: RespWrapper<Vec<ChapterReleaseQuery>> = app
+        .get_ok_json(&format!("/chapters/{chapter_id}/releases"))
+        .await;
 
     assert_eq!(wrapper.data.len(), 1);
     assert_eq!(wrapper.data[0].id, draft_id);
@@ -436,11 +434,9 @@ async fn get_chapter_releases_lists_a_committed_release_with_all_its_fields() {
     app.insert_page(release_id, Some(1), COVER_PNG).await;
     app.insert_page(release_id, Some(2), COVER_JPG).await;
 
-    let resp = app.get_releases(chapter_id).await;
-    assert_eq!(resp.status(), StatusCode::OK);
-
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<ChapterReleaseQuery>> = serde_json::from_slice(&bytes).unwrap();
+    let wrapper: RespWrapper<Vec<ChapterReleaseQuery>> = app
+        .get_ok_json(&format!("/chapters/{chapter_id}/releases"))
+        .await;
 
     assert_eq!(wrapper.data.len(), 1);
 
@@ -480,11 +476,9 @@ async fn get_chapter_pages_lists_a_committed_page_with_all_its_fields() {
     let committed_id = app.insert_page(release_id, Some(1), COVER_PNG).await;
     app.insert_page(release_id, None, COVER_WEBP).await;
 
-    let resp = app.get_pages(release_id).await;
-    assert_eq!(resp.status(), StatusCode::OK);
-
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<ChapterPageQuery>> = serde_json::from_slice(&bytes).unwrap();
+    let wrapper: RespWrapper<Vec<ChapterPageQuery>> = app
+        .get_ok_json(&format!("/releases/{release_id}/pages"))
+        .await;
     assert_eq!(wrapper.data.len(), 1);
 
     let first_page = Ordinal::try_from(1).unwrap();
@@ -526,11 +520,9 @@ async fn get_staged_chapter_pages_lists_a_staged_page_with_all_its_fields() {
     app.insert_page(release_id, Some(1), COVER_PNG).await;
     let staged_id = app.insert_page(release_id, None, COVER_WEBP).await;
 
-    let resp = app.get_staged(release_id).await;
-    assert_eq!(resp.status(), StatusCode::OK);
-
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<ChapterPageQuery>> = serde_json::from_slice(&bytes).unwrap();
+    let wrapper: RespWrapper<Vec<ChapterPageQuery>> = app
+        .get_ok_json(&format!("/releases/{release_id}/pages?status=Staged"))
+        .await;
 
     assert_eq!(wrapper.data.len(), 1);
     let ChapterPageQuery::Staged { id, extension } = wrapper.data.into_iter().next().unwrap()
@@ -688,12 +680,9 @@ async fn get_chapter_page_at_a_position_that_is_not_a_number_returns_400() {
 
     app.insert_page(release_id, Some(1), COVER_PNG).await;
 
-    let req = axum::http::Request::get(format!("/releases/{release_id}/pages/first"))
-        .body(axum::body::Body::empty())
-        .unwrap();
-    let resp = tower::ServiceExt::oneshot(app.router.clone(), req)
-        .await
-        .unwrap();
+    let resp = app
+        .get_raw(&format!("/releases/{release_id}/pages/first"))
+        .await;
 
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
@@ -862,12 +851,7 @@ returning id;
 async fn release_routes_with_a_malformed_identifier_return_400() {
     let app = TestApp::new().await;
 
-    let req = axum::http::Request::get("/releases/not-a-uuid")
-        .body(axum::body::Body::empty())
-        .unwrap();
-    let resp = tower::ServiceExt::oneshot(app.router.clone(), req)
-        .await
-        .unwrap();
+    let resp = app.get_raw("/releases/not-a-uuid").await;
 
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
