@@ -59,9 +59,10 @@ tasks:
       - task: test
 
   up:
-    desc: Build and start docker compose services in detached mode
+    desc: Build and start docker compose services in detached mode, then apply migrations
     cmds:
       - docker compose up -d --build
+      - task: migration-up
 
   down:
     desc: Stop and remove docker compose services
