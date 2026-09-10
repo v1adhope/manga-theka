@@ -579,7 +579,7 @@ async fn get_chapter_releases_lists_a_committed_release_with_all_its_fields() {
     assert!(!release.language.name.is_empty());
     assert_eq!(release.page_count, 2);
     assert_eq!(release.version.as_i32(), 1);
-    assert_eq!(release.created_by, app.caller_id);
+    assert_eq!(release.created_by, app.super_user_id);
 }
 
 #[tokio::test]

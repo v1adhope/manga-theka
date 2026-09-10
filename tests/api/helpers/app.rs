@@ -8,7 +8,7 @@ use axum::response::Response;
 use manga_theka::{
     config::{Config, Database},
     database,
-    entity::Role,
+    entity::{MAX_USER_ROLES, Role},
     hasher::Hasher,
     jwt::Jwt,
     memory_storage::{self, MemoryStore},
@@ -70,7 +70,9 @@ impl TestKeys {
     }
 }
 
-pub const DEFAULT_ROLES: [Role; 3] = [Role::Uploader, Role::Moderator, Role::Admin];
+// One entry per `Role` variant; adding a variant must update this.
+pub const ALL_ROLES: [Role; MAX_USER_ROLES] =
+    [Role::Reader, Role::Uploader, Role::Moderator, Role::Admin];
 
 // TODO: migrate this to axum_test::TestServer/TestResponse?
 pub struct TestApp {
@@ -82,8 +84,8 @@ pub struct TestApp {
     pub jwt: Jwt,
     pub memory: MemoryStore,
     pub hasher: Hasher,
-    pub caller_id: Uuid,
-    pub caller_sid: Uuid,
+    pub super_user_id: Uuid,
+    pub super_user_sid: Uuid,
 }
 
 impl TestApp {
@@ -147,7 +149,7 @@ impl TestApp {
         )
         .unwrap();
 
-        let test_app = TestApp {
+        let app = TestApp {
             pool,
             router: app.router(),
             s3,
@@ -156,12 +158,12 @@ impl TestApp {
             jwt,
             memory,
             hasher,
-            caller_id: Uuid::now_v7(),
-            caller_sid: Uuid::now_v7(),
+            super_user_id: Uuid::now_v7(),
+            super_user_sid: Uuid::now_v7(),
         };
-        test_app.db_seed_caller().await;
+        app.db_seed_super_user().await;
 
-        test_app
+        app
     }
 
     async fn configure_db(cfg: &Database) -> PgPool {
@@ -184,7 +186,7 @@ impl TestApp {
 
     pub async fn send_authed(&self, mut req: Request<Body>) -> Response {
         if !req.headers().contains_key(header::AUTHORIZATION) {
-            let token = self.access_token(self.caller_id, self.caller_sid, &DEFAULT_ROLES);
+            let token = self.access_token(self.super_user_id, self.super_user_sid, &ALL_ROLES);
             req.headers_mut().insert(
                 header::AUTHORIZATION,
                 format!("Bearer {token}").parse().unwrap(),

@@ -10,7 +10,7 @@ use manga_theka::entity::{
 };
 use uuid::Uuid;
 
-use super::app::{DEFAULT_ROLES, TestApp};
+use super::app::{ALL_ROLES, TestApp};
 use super::fakers::{
     ACTION, BookFaker, CONTENT_RATINGS, ChapterFaker, FANTASY, ISEKAI, LANGUAGES, LONG_STRIP,
     MAFIA, ROMANCE, SCHOOL_LIFE, UserFaker, ZOMBIES,
@@ -1013,7 +1013,7 @@ where id = $1;
     }
 
     pub async fn db_insert_release(&self, chapter_id: Uuid, language_id: Uuid) -> Uuid {
-        self.db_insert_release_as(chapter_id, language_id, self.caller_id)
+        self.db_insert_release_as(chapter_id, language_id, self.super_user_id)
             .await
     }
 
@@ -1050,13 +1050,13 @@ where c.id = $2;
         self.db_insert_release(chapter_id, language_id).await
     }
 
-    pub async fn db_seed_caller(&self) {
+    pub async fn db_seed_super_user(&self) {
         let mut user: UserQuery = UserFaker {
-            roles: DEFAULT_ROLES.to_vec(),
+            roles: ALL_ROLES.to_vec(),
             verified: true,
         }
         .fake();
-        user.id = self.caller_id;
+        user.id = self.super_user_id;
 
         self.db_insert_user(&user).await;
     }
