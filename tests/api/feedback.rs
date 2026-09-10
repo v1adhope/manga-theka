@@ -1,7 +1,4 @@
-use axum::{
-    body::Body,
-    http::{Request, StatusCode},
-};
+use axum::http::StatusCode;
 use http_body_util::BodyExt;
 use time::OffsetDateTime;
 
@@ -181,12 +178,8 @@ async fn store_feedback_with_a_malformed_book_id_returns_422() {
 async fn store_feedback_with_broken_json_returns_400() {
     let app = TestApp::new().await;
 
-    let req = Request::post("/feedbacks")
-        .header(axum::http::header::CONTENT_TYPE, "application/json")
-        .body(Body::from("{not json"))
-        .unwrap();
+    let resp = app.post_raw("/feedbacks", "{not json").await;
 
-    let resp = app.send(req).await;
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
 
@@ -538,10 +531,9 @@ async fn feedback_has_no_delete_route() {
     let feedback: Feedback = FeedbackFaker::default().fake();
     app.insert_feedback(&feedback).await;
 
-    let req = Request::delete(format!("/feedbacks/{}", feedback.id))
-        .body(Body::empty())
-        .unwrap();
-    let resp = app.send(req).await;
+    let resp = app
+        .delete_authed(&format!("/feedbacks/{}", feedback.id))
+        .await;
 
     assert_eq!(resp.status(), StatusCode::METHOD_NOT_ALLOWED);
     assert_eq!(app.count_feedback().await, 1);
