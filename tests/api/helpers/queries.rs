@@ -10,7 +10,7 @@ use manga_theka::entity::{
 };
 use uuid::Uuid;
 
-use super::app::TestApp;
+use super::app::{DEFAULT_ROLES, TestApp};
 use super::fakers::{
     ACTION, BookFaker, CONTENT_RATINGS, ChapterFaker, FANTASY, ISEKAI, LANGUAGES, LONG_STRIP,
     MAFIA, ROMANCE, SCHOOL_LIFE, UserFaker, ZOMBIES,
@@ -1013,18 +1013,29 @@ where id = $1;
     }
 
     pub async fn db_insert_release(&self, chapter_id: Uuid, language_id: Uuid) -> Uuid {
+        self.db_insert_release_as(chapter_id, language_id, self.caller_id)
+            .await
+    }
+
+    pub async fn db_insert_release_as(
+        &self,
+        chapter_id: Uuid,
+        language_id: Uuid,
+        created_by: Uuid,
+    ) -> Uuid {
         let id = Uuid::now_v7();
 
         sqlx::query!(
             r#"
-insert into chapter_releases(id, chapter_id, book_id, language_id, version)
-select $1, $2, c.book_id, $3, 1
+insert into chapter_releases(id, chapter_id, book_id, language_id, version, created_by)
+select $1, $2, c.book_id, $3, 1, $4
 from chapters c
 where c.id = $2;
         "#,
             id,
             chapter_id,
-            language_id
+            language_id,
+            created_by
         )
         .execute(&self.pool)
         .await
@@ -1037,6 +1048,17 @@ where c.id = $2;
         let language_id = self.db_non_publication_language(book_id).await;
 
         self.db_insert_release(chapter_id, language_id).await
+    }
+
+    pub async fn db_seed_caller(&self) {
+        let mut user: UserQuery = UserFaker {
+            roles: DEFAULT_ROLES.to_vec(),
+            verified: true,
+        }
+        .fake();
+        user.id = self.caller_id;
+
+        self.db_insert_user(&user).await;
     }
 
     pub async fn fixture_insert_page(

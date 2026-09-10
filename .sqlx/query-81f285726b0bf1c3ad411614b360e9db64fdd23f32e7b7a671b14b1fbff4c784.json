@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select r.id, r.chapter_id, r.version,\n       l.id as language_id, l.code as language_code, l.name as language_name,\n       (select count(*)\n        from chapter_pages p\n        where p.release_id = r.id and p.sort_order is not null) as \"page_count!\"\nfrom chapter_releases r\njoin languages l on l.id = r.language_id\nwhere r.id = $1;\n",
+  "query": "select r.id, r.chapter_id, r.version, r.created_by,\n       l.id as language_id, l.code as language_code, l.name as language_name,\n       (select count(*)\n        from chapter_pages p\n        where p.release_id = r.id and p.sort_order is not null) as \"page_count!\"\nfrom chapter_releases r\njoin languages l on l.id = r.language_id\nwhere r.id = $1;\n",
   "describe": {
     "columns": [
       {
@@ -38,6 +38,17 @@
       },
       {
         "ordinal": 3,
+        "name": "created_by",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "chapter_releases",
+            "name": "created_by"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
         "name": "language_id",
         "type_info": "Uuid",
         "origin": {
@@ -48,7 +59,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "language_code",
         "type_info": "Text",
         "origin": {
@@ -59,7 +70,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "language_name",
         "type_info": "Text",
         "origin": {
@@ -70,7 +81,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "page_count!",
         "type_info": "Int8",
         "origin": "Expression"
@@ -88,8 +99,9 @@
       false,
       false,
       false,
+      false,
       null
     ]
   },
-  "hash": "0ee4415d986eb8d8f47cb76c017d2639a51f1b85ea766c383ad75e2111c414bd"
+  "hash": "81f285726b0bf1c3ad411614b360e9db64fdd23f32e7b7a671b14b1fbff4c784"
 }

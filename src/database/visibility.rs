@@ -5,7 +5,7 @@ use crate::{
     database::{Database, Invariant},
     entity::{
         Book, BookCover, BookVisibility, BookVisibilityUpdate, Chapter, ChapterPage,
-        ChapterRelease, Entity,
+        ChapterRelease, Entity, ReleaseAccess,
     },
     error::{DatabaseError, LogInternal},
 };
@@ -86,17 +86,28 @@ impl Database {
             .and_then(require_visibility::<Chapter>)
     }
 
-    #[instrument(name = "db.chapter_release.visibility", skip_all, fields(release.id = %id))]
-    pub async fn get_book_visibility_by_release(
-        &self,
-        id: Uuid,
-    ) -> Result<BookVisibility, DatabaseError> {
-        sqlx::query_file_scalar!("queries/book_visibility_by_release.sql", id)
+    #[instrument(name = "db.chapter_release.access", skip_all, fields(release.id = %id))]
+    pub async fn get_release_access(&self, id: Uuid) -> Result<ReleaseAccess, DatabaseError> {
+        let row = sqlx::query_file!("queries/release_access.sql", id)
             .fetch_optional(&self.pool)
             .await
             .map_err(DatabaseError::from)
-            .inspect_err(DatabaseError::log_internal)
-            .and_then(require_visibility::<ChapterRelease>)
+            .inspect_err(DatabaseError::log_internal)?;
+
+        let Some(row) = row else {
+            return Err(DatabaseError::not_found::<ChapterRelease>());
+        };
+
+        let visibility = row
+            .visibility
+            .parse()
+            .or_corrupted("visibility")
+            .inspect_err(DatabaseError::log_internal)?;
+
+        Ok(ReleaseAccess {
+            visibility,
+            created_by: row.created_by,
+        })
     }
 
     #[instrument(name = "db.chapter_page.visibility", skip_all, fields(release.id = %release_id, page.id = %id))]

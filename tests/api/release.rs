@@ -2,7 +2,8 @@ use axum::http::StatusCode;
 use fake::Fake;
 use http_body_util::BodyExt;
 use manga_theka::entity::{
-    BookQuery, ChapterPageQuery, ChapterReleaseQuery, ImageExtension, Ordinal, PageUrl, ResourceUrl,
+    BookQuery, BookVisibility, ChapterPageQuery, ChapterReleaseQuery, ImageExtension, Ordinal,
+    PageUrl, ResourceUrl, Role,
 };
 use uuid::Uuid;
 
@@ -196,6 +197,25 @@ async fn upload_chapter_pages_for_unknown_release_returns_404() {
 }
 
 #[tokio::test]
+async fn upload_chapter_pages_by_a_user_who_is_not_the_creator_returns_403() {
+    let app = TestApp::new().await;
+    let book_id = app.db_insert_random_book().await;
+    let chapter_id = app.db_insert_random_chapter(book_id).await;
+    let release_id = app.db_insert_random_release(book_id, chapter_id).await;
+
+    let resp = app
+        .post_upload_pages_as(
+            release_id,
+            &[COVER_PNG],
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+            &[Role::Uploader],
+        )
+        .await;
+    assert_error(resp, StatusCode::FORBIDDEN).await;
+}
+
+#[tokio::test]
 async fn upload_chapter_pages_over_the_release_row_budget_returns_422() {
     let app = TestApp::new().await;
     let book_id = app.db_insert_random_book().await;
@@ -320,6 +340,50 @@ async fn commit_chapter_release_for_unknown_release_returns_404() {
 
     let resp = app.post_commit(Uuid::now_v7(), &[Uuid::now_v7()]).await;
     assert_error(resp, StatusCode::NOT_FOUND).await;
+}
+
+#[tokio::test]
+async fn commit_chapter_release_by_a_user_who_is_not_the_creator_returns_403() {
+    let app = TestApp::new().await;
+    let book_id = app.db_insert_random_book().await;
+    let chapter_id = app.db_insert_random_chapter(book_id).await;
+    let release_id = app.db_insert_random_release(book_id, chapter_id).await;
+    let staged = app
+        .fixture_insert_staged_pages(release_id, &[COVER_PNG])
+        .await;
+
+    let resp = app
+        .post_commit_as(
+            release_id,
+            &staged,
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+            &[Role::Uploader],
+        )
+        .await;
+    assert_error(resp, StatusCode::FORBIDDEN).await;
+}
+
+#[tokio::test]
+async fn commit_chapter_release_by_a_moderator_who_is_not_the_creator_succeeds() {
+    let app = TestApp::new().await;
+    let book_id = app.db_insert_random_book().await;
+    let chapter_id = app.db_insert_random_chapter(book_id).await;
+    let release_id = app.db_insert_random_release(book_id, chapter_id).await;
+    let staged = app
+        .fixture_insert_staged_pages(release_id, &[COVER_PNG])
+        .await;
+
+    let resp = app
+        .post_commit_as(
+            release_id,
+            &staged,
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+            &[Role::Moderator],
+        )
+        .await;
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 }
 
 #[tokio::test]
@@ -515,6 +579,7 @@ async fn get_chapter_releases_lists_a_committed_release_with_all_its_fields() {
     assert!(!release.language.name.is_empty());
     assert_eq!(release.page_count, 2);
     assert_eq!(release.version.as_i32(), 1);
+    assert_eq!(release.created_by, app.caller_id);
 }
 
 #[tokio::test]
@@ -828,6 +893,70 @@ async fn delete_chapter_release_twice_returns_404() {
         let resp = app.delete_release(release_id).await;
         assert_eq!(resp.status(), expected_status);
     }
+}
+
+#[tokio::test]
+async fn delete_chapter_release_by_a_user_who_is_not_the_creator_returns_403() {
+    let app = TestApp::new().await;
+    let book_id = app.db_insert_random_book().await;
+    let chapter_id = app.db_insert_random_chapter(book_id).await;
+    let release_id = app.db_insert_random_release(book_id, chapter_id).await;
+
+    let resp = app
+        .delete_authed_as(
+            &format!("/releases/{release_id}"),
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+            &[Role::Uploader],
+        )
+        .await;
+    assert_error(resp, StatusCode::FORBIDDEN).await;
+}
+
+#[tokio::test]
+async fn delete_chapter_release_for_an_unknown_release_by_a_non_creator_returns_404() {
+    let app = TestApp::new().await;
+
+    let resp = app
+        .delete_authed_as(
+            &format!("/releases/{}", Uuid::now_v7()),
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+            &[Role::Uploader],
+        )
+        .await;
+    assert_error(resp, StatusCode::NOT_FOUND).await;
+}
+
+#[tokio::test]
+async fn delete_chapter_release_by_a_moderator_who_is_not_the_creator_succeeds() {
+    let app = TestApp::new().await;
+    let book_id = app.db_insert_random_book().await;
+    let chapter_id = app.db_insert_random_chapter(book_id).await;
+    let release_id = app.db_insert_random_release(book_id, chapter_id).await;
+
+    let resp = app
+        .delete_authed_as(
+            &format!("/releases/{release_id}"),
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+            &[Role::Moderator],
+        )
+        .await;
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn delete_chapter_release_whose_book_is_not_listed_returns_409() {
+    let app = TestApp::new().await;
+    let book_id = app
+        .db_insert_book_with_visibility(BookVisibility::Hidden)
+        .await;
+    let chapter_id = app.db_insert_random_chapter(book_id).await;
+    let release_id = app.db_insert_random_release(book_id, chapter_id).await;
+
+    let resp = app.delete_release(release_id).await;
+    assert_error(resp, StatusCode::CONFLICT).await;
 }
 
 #[tokio::test]

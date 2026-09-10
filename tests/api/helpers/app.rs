@@ -5,11 +5,10 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, header};
 use axum::response::Response;
-use fake::Fake;
 use manga_theka::{
     config::{Config, Database},
     database,
-    entity::{Role, UserQuery},
+    entity::Role,
     hasher::Hasher,
     jwt::Jwt,
     memory_storage::{self, MemoryStore},
@@ -21,8 +20,6 @@ use sqlx::{AssertSqlSafe, ConnectOptions, Connection, Executor, PgConnection, Pg
 use tower::ServiceExt;
 use tracing_log::log::LevelFilter;
 use uuid::Uuid;
-
-use super::fakers::UserFaker;
 
 static TRACING: LazyLock<()> = LazyLock::new(|| {
     telemetry::init_subscriber("info");
@@ -85,6 +82,8 @@ pub struct TestApp {
     pub jwt: Jwt,
     pub memory: MemoryStore,
     pub hasher: Hasher,
+    pub caller_id: Uuid,
+    pub caller_sid: Uuid,
 }
 
 impl TestApp {
@@ -148,7 +147,7 @@ impl TestApp {
         )
         .unwrap();
 
-        TestApp {
+        let test_app = TestApp {
             pool,
             router: app.router(),
             s3,
@@ -157,7 +156,12 @@ impl TestApp {
             jwt,
             memory,
             hasher,
-        }
+            caller_id: Uuid::now_v7(),
+            caller_sid: Uuid::now_v7(),
+        };
+        test_app.db_seed_caller().await;
+
+        test_app
     }
 
     async fn configure_db(cfg: &Database) -> PgPool {
@@ -180,13 +184,7 @@ impl TestApp {
 
     pub async fn send_authed(&self, mut req: Request<Body>) -> Response {
         if !req.headers().contains_key(header::AUTHORIZATION) {
-            let caller: UserQuery = UserFaker {
-                roles: DEFAULT_ROLES.to_vec(),
-                ..Default::default()
-            }
-            .fake();
-            self.db_insert_user(&caller).await;
-            let token = self.access_token(caller.id, Uuid::now_v7(), &DEFAULT_ROLES);
+            let token = self.access_token(self.caller_id, self.caller_sid, &DEFAULT_ROLES);
             req.headers_mut().insert(
                 header::AUTHORIZATION,
                 format!("Bearer {token}").parse().unwrap(),

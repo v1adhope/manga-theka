@@ -23,10 +23,10 @@ pub struct ChapterReleaseReq {
     pub language_id: Uuid,
 }
 
-// TODO: re-shape authz
 pub async fn store_chapter_release(
     State(service): State<Service>,
     Path(chapter_id): Path<Uuid>,
+    claims: UserClaims,
     Json(req): Json<ChapterReleaseReq>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let id = Uuid::now_v7();
@@ -34,6 +34,7 @@ pub async fn store_chapter_release(
         id,
         chapter_id,
         language_id: req.language_id,
+        created_by: claims.id,
     };
 
     service.store_chapter_release(release).await?;
@@ -61,13 +62,15 @@ pub async fn get_chapter_release(
     Ok(json_data_response(StatusCode::OK, release))
 }
 
-// TODO: re-shape authz
 pub async fn upload_chapter_pages(
     State(service): State<Service>,
     Path(release_id): Path<Uuid>,
+    claims: UserClaims,
     mut multipart: Multipart,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    service.ensure_chapter_release_writable(release_id).await?;
+    service
+        .ensure_chapter_release_writable(release_id, &claims)
+        .await?;
 
     let mut images = Vec::with_capacity(MAX_PARTS_PER_REQUEST);
 
@@ -89,7 +92,7 @@ pub async fn upload_chapter_pages(
         .map(|image| image.id)
         .collect();
 
-    service.store_chapter_pages(pages).await?;
+    service.store_chapter_pages(pages, &claims).await?;
 
     Ok(json_data_response(StatusCode::CREATED, ids))
 }
@@ -100,15 +103,15 @@ pub struct CommitReq {
     pub page_order: Vec<Uuid>,
 }
 
-// TODO: re-shape authz
 pub async fn commit_chapter_release(
     State(service): State<Service>,
     Path(id): Path<Uuid>,
+    claims: UserClaims,
     Json(req): Json<CommitReq>,
 ) -> Result<StatusCode, AppError> {
     let order = PageOrder::try_from(req.page_order)?;
 
-    service.commit_chapter_release(id, &order).await?;
+    service.commit_chapter_release(id, &order, &claims).await?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -155,12 +158,12 @@ pub async fn get_chapter_page(
     Ok((StatusCode::FOUND, [(header::LOCATION, url)]))
 }
 
-// TODO: re-shape authz
 pub async fn delete_chapter_release(
     State(service): State<Service>,
     Path(id): Path<Uuid>,
+    claims: UserClaims,
 ) -> Result<StatusCode, AppError> {
-    service.delete_chapter_release(id).await?;
+    service.delete_chapter_release(id, &claims).await?;
 
     Ok(StatusCode::NO_CONTENT)
 }

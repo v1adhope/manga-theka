@@ -17,8 +17,12 @@ An anonymous visitor with no account. Can read content and submit `Feedback`; ha
 _Avoid_: Anonymous, visitor
 
 **Created By**:
-The `User` who proposed a `Book` as a `Draft` -- one per `Book`, and the only one who can send it for review. Reads that `Book` in any `Book Visibility` and is the audience for its `Book Note`, standing that follows from having created the `Book` rather than from any `Role`.
-_Avoid_: Submitter, Owner, Proposer, Uploader (a `Role`, not a relation to one `Book`)
+The `User` who brought an entity into being, holding change-and-delete standing over it that follows from having created it, not from any `Role`. Applies to two entities:
+
+- A `Book`: the `User` who proposed it as a `Draft` -- one per `Book`, the only one who can send it for review, reads it in any `Book Visibility`, and is the audience for its `Book Note`.
+- A `Chapter Release`: the `User` who created it -- one per `Chapter Release`; a `Moderator` aside, the only one who can stage `Chapter Page`s into it, commit it, or delete it.
+
+_Avoid_: Submitter, Owner, Proposer, Uploader (a `Role`, not a relation to one entity)
 
 ## Authorization
 
@@ -30,11 +34,11 @@ _Avoid_: Permission, scope, claim
 The default `Role` on signup; gates personal features -- creating and managing bookmark lists, managing one's own account, and proposing a new `Book` as a `Draft` and sending it for review (see `Book Visibility`).
 
 **Uploader**:
-A `Role` gating content writes -- editing an already-`Listed` `Book` and uploading its `Chapter`s, `Chapter Release`s, and `Chapter Page`s, none of which requires moderation.
+A `Role` gating content writes -- editing an already-`Listed` `Book` and uploading its `Chapter`s, `Chapter Release`s, and `Chapter Page`s, none of which requires moderation. Any `Uploader` may create a `Chapter Release`, but only its `Created By` (or a `Moderator`) may then stage pages into it, commit it, or delete it -- an `Uploader` cannot change or delete another `User`'s `Chapter Release`.
 _Avoid_: Mod, Contributor (as a separate concept)
 
 **Moderator**:
-A content-supervisor `Role` gating content moderation -- reviewing, hiding, handling reports -- and the only `Role` besides `Admin` that can change another User's role -- specifically, can grant or revoke the `Uploader` role.
+A content-supervisor `Role` gating content moderation -- reviewing, hiding, handling reports -- and the only `Role` besides `Admin` that can change another User's role -- specifically, can grant or revoke the `Uploader` role. Overrides the `Created By` restriction on a `Chapter Release`: may change or delete any one, not only its own.
 _Avoid_: Mod
 
 **Admin**:
@@ -133,7 +137,7 @@ The physical position of a `Chapter Page` within its `Chapter Release`, starting
 _Avoid_: Number, Position, Rank (see `Chapter Number` for the semantic counterpart)
 
 **Chapter Release**:
-A single-language, ordered set of `Chapter Page`s belonging to a `Chapter`. A `Chapter` may have multiple Releases -- different languages, or competing releases in the same language. Its `Chapter` and language are fixed after creation; its pages are changed by declaring a new whole order. Carries a revision counter starting at 1, bumped once each time a new order is committed and never on upload; it is never set by hand. Published once it holds at least one `Chapter Page`; listed for its `Chapter` from creation regardless, so one that has never been committed appears with a zero page count. Always a translation -- its language can never be the `Book`'s original publication language.
+A single-language, ordered set of `Chapter Page`s belonging to a `Chapter`. A `Chapter` may have multiple Releases -- different languages, or competing releases in the same language. Its `Chapter` and language are fixed after creation; its pages are changed by declaring a new whole order. Carries a revision counter starting at 1, bumped once each time a new order is committed and never on upload; it is never set by hand. Published once it holds at least one `Chapter Page`; listed for its `Chapter` from creation regardless, so one that has never been committed appears with a zero page count. Always a translation -- its language can never be the `Book`'s original publication language. Carries a `Created By` fixed at creation -- the `User` who, a `Moderator` aside, alone may change or delete it.
 _Avoid_: Scan, Scanlation, Version, Draft (for an unpublished one)
 
 **Chapter Page**:

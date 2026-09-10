@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into chapter_releases(id, chapter_id, book_id, language_id, version, created_by)\nselect $1, $2, c.book_id, $3, 1, $4\nfrom chapters c\nwhere c.id = $2;\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "71ffb43fe2328e94192ba84a7cd46ba651b1f9329c90f951ed021a1b19f9ec9c"
+}
