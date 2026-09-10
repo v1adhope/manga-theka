@@ -1,7 +1,11 @@
+use std::net::IpAddr;
+
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
+use fake::Fake;
+use fake::faker::internet::en::{IP, UserAgent};
 use http_body_util::BodyExt;
-use manga_theka::entity::{Role, Session};
+use manga_theka::entity::{Role, Session, SessionQuery, ShortText};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
@@ -9,6 +13,16 @@ use crate::helpers::{
     AccessTokenBody, KNOWN_PASSWORD, RespWrapper, TestApp, assert_error, cookie_pair,
     refresh_cookie,
 };
+
+async fn login_and_get_cookie(app: &TestApp) -> String {
+    let user = app.db_seed_reader().await;
+    let resp = app.post_login(user.email.as_ref(), KNOWN_PASSWORD).await;
+    cookie_pair(&refresh_cookie(&resp))
+}
+
+fn creator_body() -> serde_json::Value {
+    serde_json::json!({ "firstName": "Gate", "lastName": "Probe" })
+}
 
 #[tokio::test]
 async fn login_with_valid_credentials_returns_201_a_token_and_a_scoped_cookie() {
@@ -69,12 +83,6 @@ async fn login_with_an_unknown_email_returns_401() {
     .await;
 }
 
-async fn login_and_get_cookie(app: &TestApp) -> String {
-    let user = app.db_seed_reader().await;
-    let resp = app.post_login(user.email.as_ref(), KNOWN_PASSWORD).await;
-    cookie_pair(&refresh_cookie(&resp))
-}
-
 #[tokio::test]
 async fn refresh_succeeds_even_with_a_stale_access_token_still_attached() {
     let app = TestApp::new().await;
@@ -97,7 +105,8 @@ async fn refresh_succeeds_even_with_a_stale_access_token_still_attached() {
         .body(Body::empty())
         .unwrap();
 
-    assert_eq!(app.send_raw(req).await.status(), StatusCode::OK);
+    let refreshed = app.send_raw(req).await;
+    assert_eq!(refreshed.status(), StatusCode::OK);
 }
 
 #[tokio::test]
@@ -110,9 +119,11 @@ async fn refresh_rotates_the_cookie_and_invalidates_the_presented_one() {
     let second = cookie_pair(&refresh_cookie(&rotated));
     assert_ne!(first, second, "refresh must mint a fresh cookie value");
 
-    assert_error(app.post_refresh(&first).await, StatusCode::UNAUTHORIZED).await;
+    let replayed_first = app.post_refresh(&first).await;
+    assert_error(replayed_first, StatusCode::UNAUTHORIZED).await;
 
-    assert_eq!(app.post_refresh(&second).await.status(), StatusCode::OK);
+    let replayed_second = app.post_refresh(&second).await;
+    assert_eq!(replayed_second.status(), StatusCode::OK);
 }
 
 #[tokio::test]
@@ -186,15 +197,32 @@ async fn a_refresh_token_presented_as_an_access_token_is_rejected() {
 }
 
 #[tokio::test]
-async fn list_my_sessions_returns_every_live_session_without_the_jti() {
+async fn list_my_sessions_returns_every_live_session_with_the_full_read_shape() {
     let app = TestApp::new().await;
     let sub = Uuid::now_v7();
     let current = Uuid::now_v7();
-    let other = Uuid::now_v7();
-    let now = OffsetDateTime::now_utc();
+    let bare = Uuid::now_v7();
+    let expected_ua: String = UserAgent().fake();
+    let expected_ip: IpAddr = IP().fake();
+    let created_at = OffsetDateTime::now_utc() - Duration::hours(2);
+    let updated_at = OffsetDateTime::now_utc() - Duration::minutes(5);
 
-    app.memory_insert_session(sub, current, now).await;
-    app.memory_insert_session(sub, other, now).await;
+    app.memory
+        .put_session(
+            sub,
+            Session {
+                sid: current,
+                jti: app.hasher.compute_keyed_hex_hash(Uuid::now_v7()).unwrap(),
+                ua: Some(ShortText::try_from(expected_ua.clone()).unwrap()),
+                ip: Some(expected_ip),
+                created_at: created_at.into(),
+                updated_at: updated_at.into(),
+            },
+        )
+        .await
+        .unwrap();
+    app.memory_insert_session(sub, bare, OffsetDateTime::now_utc())
+        .await;
 
     let req = Request::get("/sessions/me")
         .header(
@@ -207,14 +235,21 @@ async fn list_my_sessions_returns_every_live_session_without_the_jti() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    let rows = v["data"].as_array().unwrap();
-    assert_eq!(rows.len(), 2);
-    for row in rows {
-        assert!(row.get("sid").is_some());
-        assert!(row.get("createdAt").is_some());
-        assert!(row.get("jti").is_none(), "the read shape must scrub jti");
-    }
+    let body: RespWrapper<Vec<SessionQuery>> = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body.data.len(), 2);
+
+    let row = body
+        .data
+        .iter()
+        .find(|s| s.sid == current)
+        .expect("the populated session must be listed");
+    assert_eq!(
+        row.ua.as_ref().map(|ua| ua.as_ref()),
+        Some(expected_ua.as_str())
+    );
+    assert_eq!(row.ip, Some(expected_ip));
+    assert_eq!(row.created_at.into_inner(), created_at);
+    assert_eq!(row.updated_at.into_inner(), updated_at);
 }
 
 #[tokio::test]
@@ -340,10 +375,6 @@ async fn deleting_all_sessions_from_an_aged_session_passes_and_from_a_fresh_one_
         StatusCode::CONFLICT,
     )
     .await;
-}
-
-fn creator_body() -> serde_json::Value {
-    serde_json::json!({ "firstName": "Gate", "lastName": "Probe" })
 }
 
 #[tokio::test]
