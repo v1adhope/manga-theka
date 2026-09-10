@@ -66,9 +66,6 @@ impl BookVisibility {
     }
 }
 
-/// A book's read/write standing: its visibility paired with the id of the
-/// `User` who created it. Record-tier reads (the book row, its chapters, its
-/// covers) and `Draft`-state writes both key on this owner.
 #[derive(Debug)]
 pub struct BookAccess {
     pub visibility: BookVisibility,
@@ -80,8 +77,6 @@ impl BookAccess {
         claims.is_some_and(|c| c.has_standing_over(self.created_by))
     }
 
-    /// Record tier: readable by anyone while the book is publicly listable
-    /// (`Listed` or `Hidden`), otherwise by a `Moderator+` or the book's creator.
     pub fn ensure_readable<T: Entity>(
         &self,
         claims: Option<&UserClaims>,
@@ -93,9 +88,6 @@ impl BookAccess {
         Err(EntityError::not_readable::<T>(self.visibility))
     }
 
-    /// `Draft`-state book and cover writes are the creator's or a `Moderator+`'s
-    /// alone; a `Listed` book is open to any content writer; every other state
-    /// is frozen.
     pub fn ensure_book_writable(&self, claims: &UserClaims) -> Result<(), EntityError> {
         match self.visibility {
             BookVisibility::Draft if claims.has_standing_over(self.created_by) => Ok(()),
@@ -105,8 +97,6 @@ impl BookAccess {
         }
     }
 
-    /// A move to `PendingReview` is the book creator's alone, with no
-    /// `Moderator+` path; every other target is a `Moderator+` action.
     pub fn ensure_visibility_settable(
         &self,
         target: BookVisibility,

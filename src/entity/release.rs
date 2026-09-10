@@ -96,9 +96,6 @@ impl ReleaseAccess {
         self.visibility.ensure_content_writable()
     }
 
-    /// Release-record tier (`GET /releases/{id}`): readable by anyone while the
-    /// book is publicly listable, otherwise by a `Moderator+` or the release's
-    /// own creator -- the book's creator has no standing here.
     pub fn ensure_record_readable(&self, claims: Option<&UserClaims>) -> Result<(), EntityError> {
         if self.visibility.is_publicly_listable() || self.admits(claims) {
             return Ok(());
@@ -107,9 +104,6 @@ impl ReleaseAccess {
         Err(EntityError::not_readable::<ChapterRelease>(self.visibility))
     }
 
-    /// Page-content tier (committed page list, page by number, page image):
-    /// readable by anyone only while the book is `Listed`, otherwise by a
-    /// `Moderator+` or the release's creator.
     pub fn ensure_content_readable(&self, claims: Option<&UserClaims>) -> Result<(), EntityError> {
         if self.visibility == BookVisibility::Listed || self.admits(claims) {
             return Ok(());
@@ -118,9 +112,6 @@ impl ReleaseAccess {
         Err(EntityError::not_readable::<ChapterPage>(self.visibility))
     }
 
-    /// Staged page list (`?status=Staged`): the release's creator or a
-    /// `Moderator+` in every state, `Listed` included -- a staging area is not
-    /// reader-facing.
     pub fn ensure_staged_readable(&self, claims: Option<&UserClaims>) -> Result<(), EntityError> {
         if self.admits(claims) {
             return Ok(());
