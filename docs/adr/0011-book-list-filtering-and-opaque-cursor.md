@@ -24,7 +24,7 @@ order=Asc|Desc                            default Desc
 cursor=<opaque base64>                    replaces ?after=<uuid>
 limit=1..100                              default 20
 
-visibility=<BookVisibility>              Moderator/Admin only (ADR-0009)
+visibility=<BookVisibility>              default Listed; =Hidden public; other values Moderator/Admin only (ADR-0009)
 ```
 
 **Combination.** Facets AND between them, OR within them. `labels` is the only exception, because it is the only facet where one `Book` holds many values at once -- `kind`/`status` are single-valued per book, so "all of Manga and Manhwa" is unsatisfiable and no mode could mean anything. That asymmetry is why `labelsMode` exists and the enums have no equivalent. `excludedLabels` takes no mode either, a rejection not an omission: exclusion is a blocklist and a blocklist is inherently "any of these". An `excludedLabelsMode=And` would hide only books carrying *every* excluded value at once, so a book tagged just `Gore` would still reach a reader who asked to exclude gore.
@@ -53,6 +53,10 @@ The chosen design is the least clever one that covers the cases, and can grow in
 **Naming.** `?after=<uuid>` becomes `?cursor=<opaque>`. `labelIds` on `POST`/`PUT /books` keeps its name -- the `Id` suffix disambiguates against the *response*, where `labels` is an array of hydrated `Label` objects while the request body carries bare UUIDs (as `contentRatingId`/`contentRating` and `publicationLanguageId`/`publicationLanguage` already do). The rule: responses and filter facets name the concept, request-body fields carrying a bare id suffix it `Id`; a facet needs no suffix because a query string cannot carry an object. Values stay UUIDs throughout (ADR-0010 rejected a slug column), so a filter query string is UUID soup and debugging one starts with `GET /labels`.
 
 **Loose end.** `Filter.sort_order` and `effective_sort_order()` already existed and were called in `database/book.rs`, but `BookListQuery` never parsed a sort parameter, so every list had silently been `Desc`. The `order` parameter finishes that path.
+
+## Amendment: Hidden is publicly listable (ADR-0009)
+
+ADR-0009's read model makes a `Hidden` `Book` readable by anyone holding its id -- hiding a book is a soft takedown of its pages, not its catalog record. `GET /books?visibility=Hidden` follows: it is public, not `Moderator+`-gated. The default stays `Listed` only, and `?visibility=Draft|PendingReview|Rejected` stays `Moderator+` only, with no `created_by` path (a global list is not scoped to one caller's submissions). `selectionHash` still covers `visibility`, so a `Hidden` page and a `Listed` page never share a cursor.
 
 ## Amendment: the label AND-match, measured
 
