@@ -5,7 +5,7 @@ use http_body_util::BodyExt;
 use manga_theka::entity::{Role, UserQuery};
 use uuid::Uuid;
 
-use crate::fakers::UserFaker;
+use crate::helpers::fakers::UserFaker;
 use crate::helpers::{TestApp, assert_error, assert_stored};
 
 async fn register(app: &TestApp, body: serde_json::Value) -> axum::response::Response {

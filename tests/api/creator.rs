@@ -5,7 +5,7 @@ use axum::{
 use http_body_util::BodyExt;
 use time::OffsetDateTime;
 
-use crate::fakers::CreatorFaker;
+use crate::helpers::fakers::CreatorFaker;
 use crate::helpers::{RespWrapper, TestApp, assert_error, assert_stored};
 use fake::Fake;
 use manga_theka::entity::{Creator, CreatorQuery, CreatorRole};

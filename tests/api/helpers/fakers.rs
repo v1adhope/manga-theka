@@ -17,9 +17,9 @@ use manga_theka::entity::{
 use time::OffsetDateTime;
 use uuid::{Uuid, uuid};
 
-pub const COVER_JPG: &[u8] = include_bytes!("fixtures/cover.jpg");
-pub const COVER_PNG: &[u8] = include_bytes!("fixtures/cover.png");
-pub const COVER_WEBP: &[u8] = include_bytes!("fixtures/cover.webp");
+pub const COVER_JPG: &[u8] = include_bytes!("../fixtures/cover.jpg");
+pub const COVER_PNG: &[u8] = include_bytes!("../fixtures/cover.png");
+pub const COVER_WEBP: &[u8] = include_bytes!("../fixtures/cover.webp");
 
 pub const EVERY_VISIBILITY: [BookVisibility; 5] = [
     BookVisibility::Draft,

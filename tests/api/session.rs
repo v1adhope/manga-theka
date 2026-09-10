@@ -6,7 +6,7 @@ use manga_theka::entity::{Role, Session, UserQuery};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
-use crate::fakers::UserFaker;
+use crate::helpers::fakers::UserFaker;
 use crate::helpers::{KNOWN_PASSWORD, TestApp, assert_error};
 
 async fn post_login(app: &TestApp, email: &str, password: &str) -> axum::response::Response {

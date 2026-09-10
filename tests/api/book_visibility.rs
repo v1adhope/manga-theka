@@ -4,7 +4,7 @@ use fake::Fake;
 use http_body_util::BodyExt;
 use manga_theka::entity::{BookQuery, BookVisibility, Role};
 
-use crate::fakers::{BookFaker, COVER_JPG, COVER_PNG, EVERY_VISIBILITY};
+use crate::helpers::fakers::{BookFaker, COVER_JPG, COVER_PNG, EVERY_VISIBILITY};
 use crate::helpers::{RespWrapper, TestApp, assert_error};
 
 #[tokio::test]

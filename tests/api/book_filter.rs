@@ -4,7 +4,7 @@ use axum::{
 };
 use http_body_util::BodyExt;
 
-use crate::fakers::{
+use crate::helpers::fakers::{
     ACTION, BookFaker, CONTENT_RATINGS, FANTASY, ISEKAI, LABELS, LANGUAGES, LONG_STRIP, MAFIA,
     ROMANCE, SCHOOL_LIFE, ZOMBIES,
 };

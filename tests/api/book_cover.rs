@@ -7,7 +7,7 @@ use http_body_util::BodyExt;
 use manga_theka::entity::{BookCoverQuery, ImageExtension};
 use uuid::Uuid;
 
-use crate::fakers::{COVER_JPG, COVER_PNG, COVER_WEBP};
+use crate::helpers::fakers::{COVER_JPG, COVER_PNG, COVER_WEBP};
 use crate::helpers::{RespWrapper, TestApp, assert_error, assert_stored};
 
 #[tokio::test]

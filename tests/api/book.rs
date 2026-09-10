@@ -4,7 +4,7 @@ use axum::{
 };
 use http_body_util::BodyExt;
 
-use crate::fakers::{BookFaker, CONTENT_RATINGS, CreatorFaker, LabelFaker, UserFaker};
+use crate::helpers::fakers::{BookFaker, CONTENT_RATINGS, CreatorFaker, LabelFaker, UserFaker};
 use crate::helpers::{
     RespWrapper, TestApp, assert_error, assert_stored, creator_keys, label_keys, link_keys,
     title_keys,

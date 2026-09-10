@@ -4,7 +4,7 @@ use axum::{
 };
 use http_body_util::BodyExt;
 
-use crate::fakers::{ChapterFaker, LANGUAGES};
+use crate::helpers::fakers::{ChapterFaker, LANGUAGES};
 use crate::helpers::{RespWrapper, TestApp, assert_error, assert_stored, localization_keys};
 use fake::Fake;
 use manga_theka::entity::{Chapter, ChapterNumber};

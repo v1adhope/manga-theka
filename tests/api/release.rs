@@ -6,7 +6,7 @@ use manga_theka::entity::{
 };
 use uuid::Uuid;
 
-use crate::fakers::{BookFaker, COVER_JPG, COVER_PNG, COVER_WEBP};
+use crate::helpers::fakers::{BookFaker, COVER_JPG, COVER_PNG, COVER_WEBP};
 use crate::helpers::{RespWrapper, TestApp, assert_error, assert_stored, redirect_target};
 
 #[tokio::test]
