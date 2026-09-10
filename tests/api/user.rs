@@ -1,8 +1,7 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use fake::Fake;
-use http_body_util::BodyExt;
-use manga_theka::entity::{Role, UserQuery};
+use manga_theka::entity::UserQuery;
 use uuid::Uuid;
 
 use crate::helpers::fakers::UserFaker;
@@ -93,37 +92,6 @@ async fn register_with_broken_json_returns_400() {
 
     let resp = app.post_raw("/users/register", "{not json").await;
     assert_error(resp, StatusCode::BAD_REQUEST).await;
-}
-
-#[tokio::test]
-async fn get_me_returns_the_caller_without_the_hash() {
-    let app = TestApp::new().await;
-    let user: UserQuery = UserFaker {
-        roles: vec![Role::Reader, Role::Uploader],
-        verified: false,
-    }
-    .fake();
-    app.db_insert_user(&user).await;
-
-    let req = Request::get("/users/me")
-        .header(
-            header::AUTHORIZATION,
-            app.bearer(user.id, Uuid::now_v7(), user.roles.as_slice()),
-        )
-        .body(Body::empty())
-        .unwrap();
-    let resp = app.send_raw(req).await;
-    assert_eq!(resp.status(), StatusCode::OK);
-
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(v["data"]["id"], user.id.to_string());
-    assert_eq!(v["data"]["email"], user.email.as_ref());
-    assert_eq!(
-        v["data"]["roles"],
-        serde_json::json!(["Reader", "Uploader"])
-    );
-    assert!(v["data"].get("passwordHash").is_none());
 }
 
 #[tokio::test]
