@@ -124,6 +124,14 @@ impl TestApp {
         serde_json::from_slice(&bytes).expect("failed to parse response body")
     }
 
+    pub async fn get_ok_json_as<T: DeserializeOwned>(&self, path: &str, roles: &[Role]) -> T {
+        let resp = self.get_as(path, roles).await;
+        assert_eq!(resp.status(), StatusCode::OK, "{path}");
+
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        serde_json::from_slice(&bytes).expect("failed to parse response body")
+    }
+
     pub async fn put_visibility(&self, id: Uuid, visibility: &str, note: Option<&str>) -> Response {
         let body = match note {
             Some(note) => serde_json::json!({ "visibility": visibility, "note": note }),

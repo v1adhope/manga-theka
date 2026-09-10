@@ -1,11 +1,10 @@
 use axum::http::StatusCode;
-use http_body_util::BodyExt;
 use time::OffsetDateTime;
 
 use crate::helpers::fakers::FeedbackFaker;
 use crate::helpers::{RespWrapper, TestApp, assert_error, assert_stored};
 use fake::Fake;
-use manga_theka::entity::{Feedback, FeedbackKind, FeedbackStatus};
+use manga_theka::entity::{Feedback, FeedbackKind, FeedbackStatus, Role};
 
 fn general_body() -> serde_json::Value {
     serde_json::json!({
@@ -206,14 +205,12 @@ async fn get_feedbacks_filters_by_kind() {
         app.insert_feedback(&feedback).await;
     }
 
-    let resp = app.get_feedbacks("/feedbacks?kind=Report").await;
-    assert_eq!(resp.status(), StatusCode::OK);
+    let page: RespWrapper<Vec<Feedback>> = app
+        .get_ok_json_as("/feedbacks?kind=Report", &[Role::Moderator])
+        .await;
 
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<Feedback>> = serde_json::from_slice(&bytes).unwrap();
-
-    assert_eq!(wrapper.data.len(), 1);
-    assert_eq!(wrapper.data[0].kind, FeedbackKind::Report);
+    assert_eq!(page.data.len(), 1);
+    assert_eq!(page.data[0].kind, FeedbackKind::Report);
 }
 
 #[tokio::test]
@@ -233,14 +230,12 @@ async fn get_feedbacks_filters_by_status() {
         app.insert_feedback(&feedback).await;
     }
 
-    let resp = app.get_feedbacks("/feedbacks?status=Dismissed").await;
-    assert_eq!(resp.status(), StatusCode::OK);
+    let page: RespWrapper<Vec<Feedback>> = app
+        .get_ok_json_as("/feedbacks?status=Dismissed", &[Role::Moderator])
+        .await;
 
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<Feedback>> = serde_json::from_slice(&bytes).unwrap();
-
-    assert_eq!(wrapper.data.len(), 1);
-    assert_eq!(wrapper.data[0].status, FeedbackStatus::Dismissed);
+    assert_eq!(page.data.len(), 1);
+    assert_eq!(page.data[0].status, FeedbackStatus::Dismissed);
 }
 
 #[tokio::test]
@@ -266,17 +261,13 @@ async fn get_feedbacks_combines_kind_and_status_filters() {
         app.insert_feedback(&feedback).await;
     }
 
-    let resp = app
-        .get_feedbacks("/feedbacks?kind=Report&status=Open")
+    let page: RespWrapper<Vec<Feedback>> = app
+        .get_ok_json_as("/feedbacks?kind=Report&status=Open", &[Role::Moderator])
         .await;
-    assert_eq!(resp.status(), StatusCode::OK);
 
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<Feedback>> = serde_json::from_slice(&bytes).unwrap();
-
-    assert_eq!(wrapper.data.len(), 1);
-    assert_eq!(wrapper.data[0].kind, FeedbackKind::Report);
-    assert_eq!(wrapper.data[0].status, FeedbackStatus::Open);
+    assert_eq!(page.data.len(), 1);
+    assert_eq!(page.data[0].kind, FeedbackKind::Report);
+    assert_eq!(page.data[0].status, FeedbackStatus::Open);
 }
 
 #[tokio::test]
@@ -290,14 +281,14 @@ async fn get_feedbacks_orders_by_submission_date() {
         app.insert_feedback(&feedback).await;
     }
 
-    let resp = app.get_feedbacks("/feedbacks?order=Asc").await;
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let asc: RespWrapper<Vec<Feedback>> = serde_json::from_slice(&bytes).unwrap();
+    let asc: RespWrapper<Vec<Feedback>> = app
+        .get_ok_json_as("/feedbacks?order=Asc", &[Role::Moderator])
+        .await;
     let asc_ids: Vec<uuid::Uuid> = asc.data.iter().map(|f| f.id).collect();
 
-    let resp = app.get_feedbacks("/feedbacks?order=Desc").await;
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let desc: RespWrapper<Vec<Feedback>> = serde_json::from_slice(&bytes).unwrap();
+    let desc: RespWrapper<Vec<Feedback>> = app
+        .get_ok_json_as("/feedbacks?order=Desc", &[Role::Moderator])
+        .await;
     let desc_ids: Vec<uuid::Uuid> = desc.data.iter().map(|f| f.id).collect();
 
     ids.sort();
@@ -316,14 +307,11 @@ async fn get_feedbacks_returns_default_limit_and_next_cursor() {
         app.insert_feedback(&feedback).await;
     }
 
-    let resp = app.get_feedbacks("/feedbacks").await;
-    assert_eq!(resp.status(), StatusCode::OK);
+    let page: RespWrapper<Vec<Feedback>> =
+        app.get_ok_json_as("/feedbacks", &[Role::Moderator]).await;
 
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<Feedback>> = serde_json::from_slice(&bytes).unwrap();
-
-    assert_eq!(wrapper.data.len(), 20);
-    assert!(wrapper.next_cursor.is_some());
+    assert_eq!(page.data.len(), 20);
+    assert!(page.next_cursor.is_some());
 }
 
 #[tokio::test]
@@ -335,18 +323,19 @@ async fn get_feedbacks_with_after_and_limit_3_returns_next_page() {
         app.insert_feedback(&feedback).await;
     }
 
-    let resp = app.get_feedbacks("/feedbacks?limit=3").await;
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let first: RespWrapper<Vec<Feedback>> = serde_json::from_slice(&bytes).unwrap();
+    let first: RespWrapper<Vec<Feedback>> = app
+        .get_ok_json_as("/feedbacks?limit=3", &[Role::Moderator])
+        .await;
 
     let ids: Vec<uuid::Uuid> = first.data.iter().map(|f| f.id).collect();
     let cursor = first.next_cursor.unwrap();
 
-    let resp = app
-        .get_feedbacks(&format!("/feedbacks?limit=3&after={cursor}"))
+    let second: RespWrapper<Vec<Feedback>> = app
+        .get_ok_json_as(
+            &format!("/feedbacks?limit=3&after={cursor}"),
+            &[Role::Moderator],
+        )
         .await;
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let second: RespWrapper<Vec<Feedback>> = serde_json::from_slice(&bytes).unwrap();
 
     let second_ids: Vec<uuid::Uuid> = second.data.iter().map(|f| f.id).collect();
 
@@ -396,15 +385,13 @@ async fn get_feedback_with_valid_id_passes() {
         .fake();
         app.insert_feedback(&feedback).await;
 
-        let resp = app.get_feedback(feedback.id).await;
-        assert_eq!(resp.status(), StatusCode::OK);
+        let got: RespWrapper<Feedback> = app
+            .get_ok_json_as(&format!("/feedbacks/{}", feedback.id), &[Role::Moderator])
+            .await;
 
-        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-        let wrapper: RespWrapper<Feedback> = serde_json::from_slice(&bytes).unwrap();
-
-        assert_eq!(wrapper.data.id, feedback.id);
-        assert_eq!(wrapper.data.email.as_ref(), feedback.email.as_ref());
-        assert_eq!(wrapper.data.note.as_ref(), feedback.note.as_ref());
+        assert_eq!(got.data.id, feedback.id);
+        assert_eq!(got.data.email.as_ref(), feedback.email.as_ref());
+        assert_eq!(got.data.note.as_ref(), feedback.note.as_ref());
     }
 }
 
