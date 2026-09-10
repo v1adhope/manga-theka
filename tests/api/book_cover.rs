@@ -3,7 +3,6 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use axum_test::multipart::{MultipartForm, Part};
-use http_body_util::BodyExt;
 use manga_theka::entity::{BookCoverQuery, ImageExtension};
 use uuid::Uuid;
 
@@ -123,11 +122,8 @@ async fn get_book_covers_without_uploads_returns_an_empty_gallery() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
 
-    let resp = app.get_covers(book_id).await;
-    assert_eq!(resp.status(), StatusCode::OK);
-
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<BookCoverQuery>> = serde_json::from_slice(&bytes).unwrap();
+    let wrapper: RespWrapper<Vec<BookCoverQuery>> =
+        app.get_ok_json(&format!("/books/{book_id}/covers")).await;
     assert!(wrapper.data.is_empty());
 }
 
@@ -148,11 +144,8 @@ async fn get_book_covers_lists_uploads_in_upload_order() {
     let second_id = app.insert_cover(book_id, COVER_JPG).await;
     let third_id = app.insert_cover(book_id, COVER_WEBP).await;
 
-    let resp = app.get_covers(book_id).await;
-    assert_eq!(resp.status(), StatusCode::OK);
-
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<BookCoverQuery>> = serde_json::from_slice(&bytes).unwrap();
+    let wrapper: RespWrapper<Vec<BookCoverQuery>> =
+        app.get_ok_json(&format!("/books/{book_id}/covers")).await;
 
     let cover_ids: Vec<Uuid> = wrapper.data.iter().map(|c| c.id).collect();
     assert_eq!(cover_ids, vec![first_id, second_id, third_id]);
@@ -164,11 +157,8 @@ async fn get_book_covers_returns_all_fields() {
     let book_id = app.insert_random_book().await;
     let cover_id = app.insert_cover(book_id, COVER_PNG).await;
 
-    let resp = app.get_covers(book_id).await;
-    assert_eq!(resp.status(), StatusCode::OK);
-
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<BookCoverQuery>> = serde_json::from_slice(&bytes).unwrap();
+    let wrapper: RespWrapper<Vec<BookCoverQuery>> =
+        app.get_ok_json(&format!("/books/{book_id}/covers")).await;
     let cover = &wrapper.data[0];
     let expected_url = format!("/covers/{cover_id}/image");
 
@@ -324,11 +314,7 @@ async fn delete_book_removes_its_covers_and_purges_their_objects() {
     let first_id = app.insert_cover(book_id, COVER_PNG).await;
     let second_id = app.insert_cover(book_id, COVER_JPG).await;
 
-    let req = Request::delete(format!("/books/{book_id}"))
-        .body(Body::empty())
-        .unwrap();
-
-    let resp = app.send(req).await;
+    let resp = app.delete_book(book_id).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let resp = app.get_covers(book_id).await;
