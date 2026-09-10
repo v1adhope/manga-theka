@@ -1,5 +1,3 @@
-//! Structs read back from the database and asserted against in tests.
-
 #[derive(Debug)]
 pub struct BookSample {
     pub name: Option<String>,
