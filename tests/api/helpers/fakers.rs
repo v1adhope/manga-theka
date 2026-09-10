@@ -176,12 +176,12 @@ impl Default for UserFaker {
 impl Dummy<UserFaker> for UserQuery {
     fn dummy_with_rng<R: RngExt + ?Sized>(config: &UserFaker, rng: &mut R) -> Self {
         let id = Uuid::now_v7();
-        let handle = format!("{:016x}{:016x}", rng.random::<u64>(), rng.random::<u64>());
+        let nonce = format!("{:016x}{:016x}", rng.random::<u64>(), rng.random::<u64>());
 
         UserQuery {
             id,
-            email: Email::try_from(format!("{}@example.test", &handle[..12])).unwrap(),
-            username: Username::try_from(format!("u{}", &handle[..16])).unwrap(),
+            email: Email::try_from(format!("{}@example.test", &nonce[..12])).unwrap(),
+            username: Username::try_from(format!("u{}", &nonce[..16])).unwrap(),
             roles: config.roles.clone().try_into().unwrap(),
             verified_at: config
                 .verified
