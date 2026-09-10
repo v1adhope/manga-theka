@@ -8,15 +8,6 @@ use uuid::Uuid;
 use crate::helpers::fakers::UserFaker;
 use crate::helpers::{TestApp, assert_error, assert_stored};
 
-async fn register(app: &TestApp, body: serde_json::Value) -> axum::response::Response {
-    let req = Request::post("/users/register")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body.to_string()))
-        .unwrap();
-
-    app.send_raw(req).await
-}
-
 fn valid_body() -> serde_json::Value {
     serde_json::json!({
         "email": format!("{}@example.test", Uuid::now_v7().simple()),
@@ -30,7 +21,8 @@ async fn register_with_a_valid_body_returns_201_and_persists_a_hashed_reader() {
     let app = TestApp::new().await;
     let body = valid_body();
 
-    let id = assert_stored(register(&app, body.clone()).await).await;
+    let resp = app.post_json("/users/register", body.clone()).await;
+    let id = assert_stored(resp).await;
 
     let row = sqlx::query!(
         "select id, roles, password_hash from users where email = $1",
@@ -53,7 +45,8 @@ async fn register_with_a_taken_email_returns_409() {
     let mut body = valid_body();
     body["email"] = serde_json::json!(existing.email.as_ref());
 
-    assert_error(register(&app, body).await, StatusCode::CONFLICT).await;
+    let resp = app.post_json("/users/register", body).await;
+    assert_error(resp, StatusCode::CONFLICT).await;
 }
 
 #[tokio::test]
@@ -65,7 +58,8 @@ async fn register_with_a_taken_username_returns_409() {
     let mut body = valid_body();
     body["username"] = serde_json::json!(existing.username.as_ref());
 
-    assert_error(register(&app, body).await, StatusCode::CONFLICT).await;
+    let resp = app.post_json("/users/register", body).await;
+    assert_error(resp, StatusCode::CONFLICT).await;
 }
 
 #[tokio::test]
@@ -88,19 +82,17 @@ async fn register_with_semantically_invalid_fields_returns_422() {
         };
         body[key] = override_value;
 
-        assert_error(register(&app, body).await, StatusCode::UNPROCESSABLE_ENTITY).await;
+        let resp = app.post_json("/users/register", body).await;
+        assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
     }
 }
 
 #[tokio::test]
 async fn register_with_broken_json_returns_400() {
     let app = TestApp::new().await;
-    let req = Request::post("/users/register")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from("{not json"))
-        .unwrap();
 
-    assert_error(app.send_raw(req).await, StatusCode::BAD_REQUEST).await;
+    let resp = app.post_raw("/users/register", "{not json").await;
+    assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
 
 #[tokio::test]
@@ -137,9 +129,9 @@ async fn get_me_returns_the_caller_without_the_hash() {
 #[tokio::test]
 async fn get_me_without_a_token_returns_401() {
     let app = TestApp::new().await;
-    let req = Request::get("/users/me").body(Body::empty()).unwrap();
 
-    assert_error(app.send_raw(req).await, StatusCode::UNAUTHORIZED).await;
+    let resp = app.get_raw("/users/me").await;
+    assert_error(resp, StatusCode::UNAUTHORIZED).await;
 }
 
 #[tokio::test]
