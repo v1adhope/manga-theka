@@ -1,66 +1,18 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
-use fake::Fake;
 use http_body_util::BodyExt;
-use manga_theka::entity::{Role, Session, UserQuery};
+use manga_theka::entity::{Role, Session};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
-use crate::helpers::fakers::UserFaker;
-use crate::helpers::{KNOWN_PASSWORD, TestApp, assert_error};
-
-async fn post_login(app: &TestApp, email: &str, password: &str) -> axum::response::Response {
-    let body = serde_json::json!({ "email": email, "password": password }).to_string();
-    let req = Request::post("/sessions/login")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    app.send_raw(req).await
-}
-
-fn refresh_cookie(resp: &axum::response::Response) -> String {
-    resp.headers()
-        .get_all(header::SET_COOKIE)
-        .iter()
-        .map(|v| v.to_str().unwrap())
-        .find(|v| v.starts_with("refresh_token="))
-        .expect("a login response must set the refresh cookie")
-        .to_owned()
-}
-
-fn cookie_pair(set_cookie: &str) -> String {
-    set_cookie
-        .split(';')
-        .next()
-        .expect("a Set-Cookie must carry a name=value pair")
-        .to_owned()
-}
-
-async fn body_json(resp: axum::response::Response) -> serde_json::Value {
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    serde_json::from_slice(&bytes).unwrap()
-}
-
-async fn seeded_user(app: &TestApp) -> UserQuery {
-    let user: UserQuery = UserFaker {
-        roles: vec![Role::Reader],
-        verified: true,
-    }
-    .fake();
-    app.db_insert_user(&user).await;
-
-    user
-}
-
-// -- POST /sessions/login --------------------------------------------------
+use crate::helpers::{KNOWN_PASSWORD, TestApp, assert_error, cookie_pair, refresh_cookie};
 
 #[tokio::test]
 async fn login_with_valid_credentials_returns_201_a_token_and_a_scoped_cookie() {
     let app = TestApp::new().await;
-    let user = seeded_user(&app).await;
+    let user = app.db_seed_reader().await;
 
-    let resp = post_login(&app, user.email.as_ref(), KNOWN_PASSWORD).await;
+    let resp = app.post_login(user.email.as_ref(), KNOWN_PASSWORD).await;
     assert_eq!(resp.status(), StatusCode::CREATED);
 
     let set_cookie = refresh_cookie(&resp);
@@ -78,7 +30,8 @@ async fn login_with_valid_credentials_returns_201_a_token_and_a_scoped_cookie() 
         );
     }
 
-    let v = body_json(resp).await;
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert!(
         v["data"]["accessToken"]
             .as_str()
@@ -90,10 +43,11 @@ async fn login_with_valid_credentials_returns_201_a_token_and_a_scoped_cookie() 
 #[tokio::test]
 async fn login_with_a_wrong_password_returns_401() {
     let app = TestApp::new().await;
-    let user = seeded_user(&app).await;
+    let user = app.db_seed_reader().await;
 
     assert_error(
-        post_login(&app, user.email.as_ref(), "the wrong passphrase!!").await,
+        app.post_login(user.email.as_ref(), "the wrong passphrase!!")
+            .await,
         StatusCode::UNAUTHORIZED,
     )
     .await;
@@ -104,17 +58,15 @@ async fn login_with_an_unknown_email_returns_401() {
     let app = TestApp::new().await;
 
     assert_error(
-        post_login(&app, "nobody@example.test", KNOWN_PASSWORD).await,
+        app.post_login("nobody@example.test", KNOWN_PASSWORD).await,
         StatusCode::UNAUTHORIZED,
     )
     .await;
 }
 
-// -- POST /sessions/refresh ---------------------------------------------------
-
 async fn login_and_get_cookie(app: &TestApp) -> String {
-    let user = seeded_user(app).await;
-    let resp = post_login(app, user.email.as_ref(), KNOWN_PASSWORD).await;
+    let user = app.db_seed_reader().await;
+    let resp = app.post_login(user.email.as_ref(), KNOWN_PASSWORD).await;
     cookie_pair(&refresh_cookie(&resp))
 }
 
@@ -132,8 +84,6 @@ async fn refresh_succeeds_even_with_a_stale_access_token_still_attached() {
     let app = TestApp::new().await;
     let cookie = login_and_get_cookie(&app).await;
 
-    // The SPA pattern keeps the access token on every request; an expired one
-    // riding along on the refresh call must not block the renewal.
     let stale = app
         .jwt
         .issue_access(
@@ -164,10 +114,8 @@ async fn refresh_rotates_the_cookie_and_invalidates_the_presented_one() {
     let second = cookie_pair(&refresh_cookie(&rotated));
     assert_ne!(first, second, "refresh must mint a fresh cookie value");
 
-    // The replayed original now fails the stored-jti comparison.
     assert_error(post_refresh(&app, &first).await, StatusCode::UNAUTHORIZED).await;
 
-    // The rotated cookie still works.
     assert_eq!(post_refresh(&app, &second).await.status(), StatusCode::OK);
 }
 
@@ -241,8 +189,6 @@ async fn a_refresh_token_presented_as_an_access_token_is_rejected() {
     assert_error(app.send_raw(req).await, StatusCode::UNAUTHORIZED).await;
 }
 
-// -- GET /sessions/me -------------------------------------------------------
-
 #[tokio::test]
 async fn list_my_sessions_returns_every_live_session_without_the_jti() {
     let app = TestApp::new().await;
@@ -264,7 +210,8 @@ async fn list_my_sessions_returns_every_live_session_without_the_jti() {
     let resp = app.send_raw(req).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
-    let v = body_json(resp).await;
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     let rows = v["data"].as_array().unwrap();
     assert_eq!(rows.len(), 2);
     for row in rows {
@@ -273,8 +220,6 @@ async fn list_my_sessions_returns_every_live_session_without_the_jti() {
         assert!(row.get("jti").is_none(), "the read shape must scrub jti");
     }
 }
-
-// -- DELETE /sessions/me/* ------------------------------------------------------
 
 async fn delete(app: &TestApp, path: &str, sub: Uuid, sid: Uuid) -> axum::response::Response {
     let req = Request::delete(path)
@@ -389,8 +334,6 @@ async fn deleting_all_sessions_from_an_aged_session_passes_and_from_a_fresh_one_
     )
     .await;
 }
-
-// -- Role gate ------------------------------------------------------------------
 
 fn creator_body() -> String {
     serde_json::json!({ "firstName": "Gate", "lastName": "Probe" }).to_string()

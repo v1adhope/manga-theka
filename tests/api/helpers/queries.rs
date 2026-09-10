@@ -5,7 +5,8 @@ use manga_theka::entity::{
     AlternativeTitle, BookCoverQuery, BookKind, BookLink, BookName, BookQuery, BookStatus,
     BookVisibility, Chapter, ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume,
     ContentRating, CoverUrl, Creator, CreatorQuery, CreatorRole, Email, Feedback, ImageExtension,
-    Label, Language, LinkUrl, Name, PublicationDemographic, Session, Text, Timestamp, UserQuery,
+    Label, Language, LinkUrl, Name, PublicationDemographic, Role, Session, Text, Timestamp,
+    UserQuery,
 };
 use uuid::Uuid;
 
@@ -54,6 +55,17 @@ values($1, $2, $3, $4, $5, $6, $7);
         .execute(&self.pool)
         .await
         .expect("failed to insert factory user");
+    }
+
+    pub async fn db_seed_reader(&self) -> UserQuery {
+        let user: UserQuery = UserFaker {
+            roles: vec![Role::Reader],
+            verified: true,
+        }
+        .fake();
+        self.db_insert_user(&user).await;
+
+        user
     }
 
     pub async fn memory_insert_session(

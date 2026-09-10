@@ -43,6 +43,24 @@ pub fn redirect_target(resp: &Response) -> &str {
         .expect("a location must be printable")
 }
 
+pub fn refresh_cookie(resp: &Response) -> String {
+    resp.headers()
+        .get_all(header::SET_COOKIE)
+        .iter()
+        .map(|v| v.to_str().expect("a Set-Cookie must be printable"))
+        .find(|v| v.starts_with("refresh_token="))
+        .expect("a login response must set the refresh cookie")
+        .to_owned()
+}
+
+pub fn cookie_pair(set_cookie: &str) -> String {
+    set_cookie
+        .split(';')
+        .next()
+        .expect("a Set-Cookie must carry a name=value pair")
+        .to_owned()
+}
+
 impl TestApp {
     pub async fn get_raw(&self, path: &str) -> Response {
         self.send_raw(Request::get(path).body(Body::empty()).unwrap())
@@ -130,6 +148,16 @@ impl TestApp {
 
         let bytes = resp.into_body().collect().await.unwrap().to_bytes();
         serde_json::from_slice(&bytes).expect("failed to parse response body")
+    }
+
+    pub async fn post_login(&self, email: &str, password: &str) -> Response {
+        let body = serde_json::json!({ "email": email, "password": password });
+        let req = Request::post("/sessions/login")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap();
+
+        self.send_raw(req).await
     }
 
     pub async fn put_visibility(&self, id: Uuid, visibility: &str, note: Option<&str>) -> Response {
