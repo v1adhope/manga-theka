@@ -264,11 +264,12 @@ async fn deleting_the_current_session_bypasses_the_24h_rule() {
         .delete_authed_as("/sessions/me/current", sub, sid, &[Role::Reader])
         .await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
-    assert!(app.memory.get_session(sub, sid).await.unwrap().is_none());
+    let revoked = app.memory.get_session(sub, sid).await.unwrap();
+    assert!(revoked.is_none());
 }
 
 #[tokio::test]
-async fn deleting_another_session_that_is_not_mine_returns_404() {
+async fn deleting_a_session_owned_by_another_user_returns_404() {
     let app = TestApp::new().await;
     let sub = Uuid::now_v7();
     let current = Uuid::now_v7();
@@ -279,15 +280,26 @@ async fn deleting_another_session_that_is_not_mine_returns_404() {
     )
     .await;
 
+    let other_sub = Uuid::now_v7();
+    let other_sid = Uuid::now_v7();
+    app.memory_insert_session(other_sub, other_sid, OffsetDateTime::now_utc())
+        .await;
+
     let resp = app
         .delete_authed_as(
-            &format!("/sessions/me/{}", Uuid::now_v7()),
+            &format!("/sessions/me/{other_sid}"),
             sub,
             current,
             &[Role::Reader],
         )
         .await;
     assert_error(resp, StatusCode::NOT_FOUND).await;
+
+    let survivor = app.memory.get_session(other_sub, other_sid).await.unwrap();
+    assert!(
+        survivor.is_some(),
+        "another user's session must be untouched"
+    );
 }
 
 #[tokio::test]
@@ -310,8 +322,9 @@ async fn deleting_another_session_from_a_fresh_session_returns_409() {
         )
         .await;
     assert_error(resp, StatusCode::CONFLICT).await;
+    let target_session = app.memory.get_session(sub, target).await.unwrap();
     assert!(
-        app.memory.get_session(sub, target).await.unwrap().is_some(),
+        target_session.is_some(),
         "a blocked revoke must leave the target alive"
     );
 }
@@ -340,41 +353,45 @@ async fn deleting_another_session_from_an_aged_session_passes() {
         )
         .await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
-    assert!(app.memory.get_session(sub, target).await.unwrap().is_none());
+    let target_session = app.memory.get_session(sub, target).await.unwrap();
+    assert!(target_session.is_none());
 }
 
 #[tokio::test]
-async fn deleting_all_sessions_from_an_aged_session_passes_and_from_a_fresh_one_409s() {
+async fn deleting_all_sessions_from_a_fresh_session_returns_409() {
     let app = TestApp::new().await;
-
-    let aged_sub = Uuid::now_v7();
-    let aged_sid = Uuid::now_v7();
-    app.memory_insert_session(
-        aged_sub,
-        aged_sid,
-        OffsetDateTime::now_utc() - Duration::hours(48),
-    )
-    .await;
-    app.memory_insert_session(aged_sub, Uuid::now_v7(), OffsetDateTime::now_utc())
+    let sub = Uuid::now_v7();
+    let sid = Uuid::now_v7();
+    app.memory_insert_session(sub, sid, OffsetDateTime::now_utc())
         .await;
 
     let resp = app
-        .delete_authed_as("/sessions/me/all", aged_sub, aged_sid, &[Role::Reader])
+        .delete_authed_as("/sessions/me/all", sub, sid, &[Role::Reader])
+        .await;
+    assert_error(resp, StatusCode::CONFLICT).await;
+    let remaining = app.memory.list_sessions(sub).await.unwrap();
+    assert!(
+        !remaining.is_empty(),
+        "a blocked revoke-all must leave the sessions alive"
+    );
+}
+
+#[tokio::test]
+async fn deleting_all_sessions_from_an_aged_session_passes() {
+    let app = TestApp::new().await;
+    let sub = Uuid::now_v7();
+    let sid = Uuid::now_v7();
+    app.memory_insert_session(sub, sid, OffsetDateTime::now_utc() - Duration::hours(48))
+        .await;
+    app.memory_insert_session(sub, Uuid::now_v7(), OffsetDateTime::now_utc())
+        .await;
+
+    let resp = app
+        .delete_authed_as("/sessions/me/all", sub, sid, &[Role::Reader])
         .await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
-    assert!(app.memory.list_sessions(aged_sub).await.unwrap().is_empty());
-
-    let fresh_sub = Uuid::now_v7();
-    let fresh_sid = Uuid::now_v7();
-    app.memory_insert_session(fresh_sub, fresh_sid, OffsetDateTime::now_utc())
-        .await;
-
-    assert_error(
-        app.delete_authed_as("/sessions/me/all", fresh_sub, fresh_sid, &[Role::Reader])
-            .await,
-        StatusCode::CONFLICT,
-    )
-    .await;
+    let remaining = app.memory.list_sessions(sub).await.unwrap();
+    assert!(remaining.is_empty());
 }
 
 #[tokio::test]

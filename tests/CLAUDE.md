@@ -1,6 +1,7 @@
 # Tests
 
 - Order tests by HTTP method: POST, GET, PUT, DELETE.
+- One outcome per test: don't mix positive and negative cases in a single test; split the pass path and the failure path into separate tests.
 - Leave domain rules to the `src/entity` unit tests; cover HTTP behavior here.
 - Build fixtures with direct DB/storage inserts, not by calling an endpoint the test is not about.
 - Bind any `.await`ed or multi-step call to a `let` before feeding it to an assertion (`assert*!` or an `assert_`-prefixed helper); only a lone field or accessor on an existing binding, like `resp.status()`, may stay inline.
