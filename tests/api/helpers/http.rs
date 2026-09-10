@@ -44,7 +44,7 @@ pub fn redirect_target(resp: &Response) -> &str {
 }
 
 impl TestApp {
-    async fn get_raw(&self, path: &str) -> Response {
+    pub async fn get_raw(&self, path: &str) -> Response {
         self.send_raw(Request::get(path).body(Body::empty()).unwrap())
             .await
     }
@@ -61,9 +61,26 @@ impl TestApp {
         self.send_raw(req).await
     }
 
-    async fn delete_authed(&self, path: &str) -> Response {
+    pub async fn delete_authed(&self, path: &str) -> Response {
         self.send(Request::delete(path).body(Body::empty()).unwrap())
             .await
+    }
+
+    pub async fn post_json(&self, path: &str, body: serde_json::Value) -> Response {
+        self.json_authed(Method::POST, path, body).await
+    }
+
+    pub async fn put_json(&self, path: &str, body: serde_json::Value) -> Response {
+        self.json_authed(Method::PUT, path, body).await
+    }
+
+    pub async fn post_raw(&self, path: &str, body: &str) -> Response {
+        let req = Request::post(path)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_owned()))
+            .unwrap();
+
+        self.send(req).await
     }
 
     async fn json_authed(&self, method: Method, path: &str, body: serde_json::Value) -> Response {
@@ -99,7 +116,7 @@ impl TestApp {
             })
     }
 
-    async fn get_ok_json<T: DeserializeOwned>(&self, path: &str) -> T {
+    pub async fn get_ok_json<T: DeserializeOwned>(&self, path: &str) -> T {
         let resp = self.get_raw(path).await;
         assert_eq!(resp.status(), StatusCode::OK, "{path}");
 
