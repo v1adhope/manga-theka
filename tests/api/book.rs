@@ -15,7 +15,7 @@ use manga_theka::entity::{BookQuery, Creator, Label, Role, UserQuery};
 async fn store_book_with_valid_body_passes() {
     let app = TestApp::new().await;
     let user: UserQuery = UserFaker::default().fake();
-    app.insert_user(&user).await;
+    app.db_insert_user(&user).await;
     let book: BookQuery = BookFaker {
         labels: 1..=5,
         links: 1..=5,
@@ -24,7 +24,7 @@ async fn store_book_with_valid_body_passes() {
     }
     .fake();
     let creator: Creator = CreatorFaker.fake();
-    app.insert_creator(&creator).await;
+    app.db_insert_creator(&creator).await;
 
     let body = serde_json::json!({
         "name": book.name.as_ref(),
@@ -54,7 +54,7 @@ async fn store_book_with_valid_body_passes() {
     let resp = app.send_authed(req).await;
     let id = assert_stored(resp).await;
 
-    let got = app.fetch_book(id).await;
+    let got = app.db_fetch_book(id).await;
 
     assert_eq!(got.name, book.name);
     assert_eq!(got.description, book.description);
@@ -109,7 +109,7 @@ async fn store_book_without_relations_passes() {
     let resp = app.post_json("/books", body).await;
     let id = assert_stored(resp).await;
 
-    let sample = app.fetch_book_sample(id).await;
+    let sample = app.db_fetch_book_sample(id).await;
 
     assert_eq!(sample.name.as_deref(), Some(book.name.as_ref()));
     assert_eq!(sample.labels, 0);
@@ -264,7 +264,7 @@ async fn store_book_with_dual_role_creator_merges_into_one_credit() {
     let app = TestApp::new().await;
     let book: BookQuery = BookFaker::default().fake();
     let creator: Creator = CreatorFaker.fake();
-    app.insert_creator(&creator).await;
+    app.db_insert_creator(&creator).await;
 
     let body = serde_json::json!({
         "name": book.name.as_ref(),
@@ -284,7 +284,7 @@ async fn store_book_with_dual_role_creator_merges_into_one_credit() {
     let resp = app.post_json("/books", body).await;
     let id = assert_stored(resp).await;
 
-    let got = app.fetch_book(id).await;
+    let got = app.db_fetch_book(id).await;
 
     assert_eq!(
         creator_keys(got.creators.as_slice()),
@@ -303,7 +303,7 @@ async fn store_book_with_duplicate_creator_role_returns_422() {
     let app = TestApp::new().await;
     let book: BookQuery = BookFaker::default().fake();
     let creator: Creator = CreatorFaker.fake();
-    app.insert_creator(&creator).await;
+    app.db_insert_creator(&creator).await;
 
     let body = serde_json::json!({
         "name": book.name.as_ref(),
@@ -336,7 +336,7 @@ async fn get_book_with_valid_id_passes() {
     }
     .fake();
 
-    app.insert_book(&book).await;
+    app.fixture_insert_book(&book).await;
 
     let got = app
         .get_ok_json::<RespWrapper<BookQuery>>(&format!("/books/{}", book.id))
@@ -413,7 +413,7 @@ async fn update_book_with_valid_body_passes() {
     }
     .fake();
 
-    app.insert_book(&book).await;
+    app.fixture_insert_book(&book).await;
 
     let updated: BookQuery = BookFaker {
         labels: 1..=5,
@@ -440,7 +440,7 @@ async fn update_book_with_valid_body_passes() {
     let resp = app.put_json(&format!("/books/{}", book.id), body).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let got = app.fetch_book(book.id).await;
+    let got = app.db_fetch_book(book.id).await;
 
     assert_eq!(got.name, updated.name);
     assert_eq!(got.description, updated.description);
@@ -483,7 +483,7 @@ async fn update_book_swaps_the_content_rating() {
         .expect("content rating to swap from must exist")
         .clone();
 
-    app.insert_book(&book).await;
+    app.fixture_insert_book(&book).await;
 
     let other = CONTENT_RATINGS
         .get(1)
@@ -506,7 +506,7 @@ async fn update_book_swaps_the_content_rating() {
         .await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let got = app.fetch_book(book.id).await;
+    let got = app.db_fetch_book(book.id).await;
 
     assert_eq!(got.content_rating, other);
 }
@@ -522,7 +522,7 @@ async fn update_book_with_empty_arrays_detaches_everything() {
     }
     .fake();
 
-    app.insert_book(&book).await;
+    app.fixture_insert_book(&book).await;
 
     let detached = serde_json::json!({
         "name": book.name.as_ref(),
@@ -541,7 +541,7 @@ async fn update_book_with_empty_arrays_detaches_everything() {
     let resp = app.put_json(&format!("/books/{}", book.id), detached).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let sample = app.fetch_book_sample(book.id).await;
+    let sample = app.db_fetch_book_sample(book.id).await;
 
     assert_eq!(sample.labels, 0);
     assert_eq!(sample.links, 0);
@@ -554,8 +554,8 @@ async fn update_book_leaves_other_books_untouched() {
     let book: BookQuery = BookFaker::default().fake();
     let other: BookQuery = BookFaker::default().fake();
 
-    app.insert_book(&book).await;
-    app.insert_book(&other).await;
+    app.fixture_insert_book(&book).await;
+    app.fixture_insert_book(&other).await;
 
     let renamed: BookQuery = BookFaker::default().fake();
     let updated_body = serde_json::json!({
@@ -574,7 +574,7 @@ async fn update_book_leaves_other_books_untouched() {
         .await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let sample = app.fetch_book_sample(other.id).await;
+    let sample = app.db_fetch_book_sample(other.id).await;
 
     assert_eq!(sample.name.as_deref(), Some(other.name.as_ref()));
     assert!(sample.updated_at.is_none());
@@ -616,12 +616,12 @@ async fn delete_book_with_valid_id_passes() {
     }
     .fake();
 
-    app.insert_book(&book).await;
+    app.fixture_insert_book(&book).await;
 
     let resp = app.delete_book(book.id).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let sample = app.fetch_book_sample(book.id).await;
+    let sample = app.db_fetch_book_sample(book.id).await;
 
     assert!(sample.name.is_none());
     assert_eq!(sample.labels, 0);
@@ -648,13 +648,13 @@ async fn delete_book_leaves_other_books_untouched() {
     .fake();
     other.labels = vec![labels].try_into().unwrap();
 
-    app.insert_book(&book).await;
-    app.insert_book(&other).await;
+    app.fixture_insert_book(&book).await;
+    app.fixture_insert_book(&other).await;
 
     let resp = app.delete_book(book.id).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let sample = app.fetch_book_sample(other.id).await;
+    let sample = app.db_fetch_book_sample(other.id).await;
 
     assert_eq!(sample.name.as_deref(), Some(other.name.as_ref()));
     assert_eq!(sample.labels, other.labels.len() as i64);

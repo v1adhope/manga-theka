@@ -8,7 +8,7 @@ use manga_theka::entity::{Chapter, ChapterNumber};
 #[tokio::test]
 async fn store_chapter_with_valid_body_passes() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
     let chapter: Chapter = ChapterFaker {
         book_id,
         localizations: 1..=3,
@@ -27,7 +27,7 @@ async fn store_chapter_with_valid_body_passes() {
         .await;
     let id = assert_stored(resp).await;
 
-    let got = app.fetch_chapter(id).await;
+    let got = app.db_fetch_chapter(id).await;
 
     assert_eq!(got.book_id, book_id);
     assert_eq!(got.number, chapter.number);
@@ -44,7 +44,7 @@ async fn store_chapter_with_valid_body_passes() {
 #[tokio::test]
 async fn store_chapter_with_only_a_number_passes() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
 
     let resp = app
         .post_json(
@@ -54,7 +54,7 @@ async fn store_chapter_with_only_a_number_passes() {
         .await;
     let id = assert_stored(resp).await;
 
-    let got = app.fetch_chapter(id).await;
+    let got = app.db_fetch_chapter(id).await;
 
     assert_eq!(got.number, ChapterNumber::try_from(12.5).unwrap());
     assert!(got.name.is_none());
@@ -65,11 +65,11 @@ async fn store_chapter_with_only_a_number_passes() {
 #[tokio::test]
 async fn store_chapter_with_duplicate_number_returns_409() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
     let mut chapter: Chapter = ChapterFaker::new(book_id).fake();
     chapter.number = ChapterNumber::try_from(7.0).unwrap();
 
-    app.insert_chapter(&chapter).await;
+    app.db_insert_chapter(&chapter).await;
 
     let resp = app
         .post_json(
@@ -83,12 +83,12 @@ async fn store_chapter_with_duplicate_number_returns_409() {
 #[tokio::test]
 async fn store_chapter_reuses_a_number_taken_in_another_book() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
-    let other_book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
+    let other_book_id = app.db_insert_random_book().await;
     let mut chapter: Chapter = ChapterFaker::new(other_book_id).fake();
     chapter.number = ChapterNumber::try_from(7.0).unwrap();
 
-    app.insert_chapter(&chapter).await;
+    app.db_insert_chapter(&chapter).await;
 
     let resp = app
         .post_json(
@@ -98,7 +98,7 @@ async fn store_chapter_reuses_a_number_taken_in_another_book() {
         .await;
     let id = assert_stored(resp).await;
 
-    let got = app.fetch_chapter(id).await;
+    let got = app.db_fetch_chapter(id).await;
 
     assert_eq!(got.book_id, book_id);
 }
@@ -119,7 +119,7 @@ async fn store_chapter_with_unknown_book_returns_404() {
 #[tokio::test]
 async fn store_chapter_with_repeated_localization_language_returns_422() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
     let language = LANGUAGES.first().expect("a seeded language must exist");
 
     let body = serde_json::json!({
@@ -146,7 +146,7 @@ async fn store_chapter_with_repeated_localization_language_returns_422() {
 #[tokio::test]
 async fn store_chapter_with_broken_json_returns_400() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
 
     let resp = app
         .post_raw(&format!("/books/{book_id}/chapters"), "{not json")
@@ -157,14 +157,14 @@ async fn store_chapter_with_broken_json_returns_400() {
 #[tokio::test]
 async fn get_chapter_with_valid_id_embeds_its_localizations() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
     let chapter: Chapter = ChapterFaker {
         book_id,
         localizations: 1..=3,
     }
     .fake();
 
-    app.insert_chapter(&chapter).await;
+    app.db_insert_chapter(&chapter).await;
 
     let got = app
         .get_ok_json::<RespWrapper<Chapter>>(&format!("/chapters/{}", chapter.id))
@@ -196,9 +196,9 @@ async fn get_chapter_with_unknown_id_returns_404() {
 #[tokio::test]
 async fn get_chapter_resolves_without_a_book_scope() {
     let app = TestApp::new().await;
-    app.insert_random_book().await;
-    let owner_id = app.insert_random_book().await;
-    let chapter_id = app.insert_random_chapter(owner_id).await;
+    app.db_insert_random_book().await;
+    let owner_id = app.db_insert_random_book().await;
+    let chapter_id = app.db_insert_random_chapter(owner_id).await;
 
     let got = app
         .get_ok_json::<RespWrapper<Chapter>>(&format!("/chapters/{chapter_id}"))
@@ -213,10 +213,10 @@ async fn get_chapter_resolves_without_a_book_scope() {
 #[tokio::test]
 async fn get_chapters_defaults_to_descending_number_order() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
     let numbers = [13.0, 0.0, 12.5, 12.0];
 
-    app.insert_numbered_chapters(book_id, &numbers).await;
+    app.db_insert_numbered_chapters(book_id, &numbers).await;
 
     let listed = app
         .get_chapters(&format!("/books/{book_id}/chapters"))
@@ -229,10 +229,10 @@ async fn get_chapters_defaults_to_descending_number_order() {
 #[tokio::test]
 async fn get_chapters_with_asc_order_reverses_the_page() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
     let numbers = [1.0, 2.0, 3.0];
 
-    app.insert_numbered_chapters(book_id, &numbers).await;
+    app.db_insert_numbered_chapters(book_id, &numbers).await;
 
     let listed = app
         .get_chapters(&format!("/books/{book_id}/chapters?order=Asc"))
@@ -245,11 +245,11 @@ async fn get_chapters_with_asc_order_reverses_the_page() {
 #[tokio::test]
 async fn get_chapters_lists_only_its_own_books_chapters() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
-    let other_book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
+    let other_book_id = app.db_insert_random_book().await;
 
-    app.insert_numbered_chapters(book_id, &[1.0]).await;
-    app.insert_numbered_chapters(other_book_id, &[1.0]).await;
+    app.db_insert_numbered_chapters(book_id, &[1.0]).await;
+    app.db_insert_numbered_chapters(other_book_id, &[1.0]).await;
 
     let listed = app
         .get_chapters(&format!("/books/{book_id}/chapters"))
@@ -262,10 +262,10 @@ async fn get_chapters_lists_only_its_own_books_chapters() {
 #[tokio::test]
 async fn get_chapters_returns_default_limit_and_next_cursor() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
     let numbers: Vec<f32> = (0..25).map(|n| n as f32).collect();
 
-    app.insert_numbered_chapters(book_id, &numbers).await;
+    app.db_insert_numbered_chapters(book_id, &numbers).await;
 
     let listed = app
         .get_chapters(&format!("/books/{book_id}/chapters"))
@@ -278,10 +278,10 @@ async fn get_chapters_returns_default_limit_and_next_cursor() {
 #[tokio::test]
 async fn get_chapters_with_after_and_limit_3_returns_next_page() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
     let numbers: Vec<f32> = (0..6).map(|n| n as f32).collect();
 
-    app.insert_numbered_chapters(book_id, &numbers).await;
+    app.db_insert_numbered_chapters(book_id, &numbers).await;
 
     let first = app
         .get_chapters(&format!("/books/{book_id}/chapters?limit=3"))
@@ -303,10 +303,10 @@ async fn get_chapters_with_after_and_limit_3_returns_next_page() {
 #[tokio::test]
 async fn get_chapters_with_after_walks_ascending_pages() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
     let numbers: Vec<f32> = (0..4).map(|n| n as f32).collect();
 
-    app.insert_numbered_chapters(book_id, &numbers).await;
+    app.db_insert_numbered_chapters(book_id, &numbers).await;
 
     let first = app
         .get_chapters(&format!("/books/{book_id}/chapters?order=Asc&limit=2"))
@@ -326,9 +326,9 @@ async fn get_chapters_with_after_walks_ascending_pages() {
 #[tokio::test]
 async fn get_chapters_with_unknown_after_returns_an_empty_page() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
 
-    app.insert_numbered_chapters(book_id, &[1.0, 2.0]).await;
+    app.db_insert_numbered_chapters(book_id, &[1.0, 2.0]).await;
 
     let listed = app
         .get_chapters(&format!(
@@ -344,7 +344,7 @@ async fn get_chapters_with_unknown_after_returns_an_empty_page() {
 #[tokio::test]
 async fn get_chapters_embeds_each_chapters_own_localizations() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
 
     let mut bare: Chapter = ChapterFaker {
         book_id,
@@ -360,8 +360,8 @@ async fn get_chapters_embeds_each_chapters_own_localizations() {
     .fake();
     full.number = ChapterNumber::try_from(2.0).unwrap();
 
-    app.insert_chapter(&bare).await;
-    app.insert_chapter(&full).await;
+    app.db_insert_chapter(&bare).await;
+    app.db_insert_chapter(&full).await;
 
     let listed = app
         .get_chapters(&format!("/books/{book_id}/chapters"))
@@ -390,7 +390,7 @@ async fn get_chapters_with_unknown_book_returns_404() {
 #[tokio::test]
 async fn get_chapters_zero_limit_returns_422() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
 
     let resp = app
         .get_raw(&format!("/books/{book_id}/chapters?limit=0"))
@@ -401,7 +401,7 @@ async fn get_chapters_zero_limit_returns_422() {
 #[tokio::test]
 async fn get_chapters_unknown_order_returns_400() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
 
     let resp = app
         .get_raw(&format!("/books/{book_id}/chapters?order=sideways"))
@@ -412,7 +412,7 @@ async fn get_chapters_unknown_order_returns_400() {
 #[tokio::test]
 async fn get_chapters_with_malformed_after_returns_400() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
 
     let resp = app
         .get_raw(&format!("/books/{book_id}/chapters?after=not-a-uuid"))
@@ -423,14 +423,14 @@ async fn get_chapters_with_malformed_after_returns_400() {
 #[tokio::test]
 async fn update_chapter_with_valid_body_passes() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
     let chapter: Chapter = ChapterFaker {
         book_id,
         localizations: 1..=3,
     }
     .fake();
 
-    app.insert_chapter(&chapter).await;
+    app.db_insert_chapter(&chapter).await;
 
     let updated: Chapter = ChapterFaker {
         book_id,
@@ -450,7 +450,7 @@ async fn update_chapter_with_valid_body_passes() {
         .await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let got = app.fetch_chapter(chapter.id).await;
+    let got = app.db_fetch_chapter(chapter.id).await;
 
     assert_eq!(got.number, updated.number);
     assert_eq!(got.name, updated.name);
@@ -471,14 +471,14 @@ async fn update_chapter_with_valid_body_passes() {
 #[tokio::test]
 async fn update_chapter_with_empty_localizations_detaches_everything() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
     let chapter: Chapter = ChapterFaker {
         book_id,
         localizations: 1..=3,
     }
     .fake();
 
-    app.insert_chapter(&chapter).await;
+    app.db_insert_chapter(&chapter).await;
 
     let body = serde_json::json!({
         "number": chapter.number,
@@ -490,7 +490,7 @@ async fn update_chapter_with_empty_localizations_detaches_everything() {
         .await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let sample = app.fetch_chapter_sample(chapter.id).await;
+    let sample = app.db_fetch_chapter_sample(chapter.id).await;
 
     assert_eq!(sample.localizations, 0);
     assert!(sample.name.is_none(), "an omitted name must be cleared");
@@ -499,14 +499,14 @@ async fn update_chapter_with_empty_localizations_detaches_everything() {
 #[tokio::test]
 async fn update_chapter_renumbers_without_touching_other_chapters() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
     let mut chapter: Chapter = ChapterFaker::new(book_id).fake();
     chapter.number = ChapterNumber::try_from(1.0).unwrap();
     let mut other: Chapter = ChapterFaker::new(book_id).fake();
     other.number = ChapterNumber::try_from(2.0).unwrap();
 
-    app.insert_chapter(&chapter).await;
-    app.insert_chapter(&other).await;
+    app.db_insert_chapter(&chapter).await;
+    app.db_insert_chapter(&other).await;
 
     let resp = app
         .put_json(
@@ -516,10 +516,10 @@ async fn update_chapter_renumbers_without_touching_other_chapters() {
         .await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let sample = app.fetch_chapter_sample(chapter.id).await;
+    let sample = app.db_fetch_chapter_sample(chapter.id).await;
     assert_eq!(sample.number, Some(1.5));
 
-    let other_sample = app.fetch_chapter_sample(other.id).await;
+    let other_sample = app.db_fetch_chapter_sample(other.id).await;
     assert_eq!(other_sample.number, Some(2.0));
     assert!(other_sample.updated_at.is_none());
     assert_eq!(other_sample.localizations, other.localizations.len() as i64);
@@ -528,14 +528,14 @@ async fn update_chapter_renumbers_without_touching_other_chapters() {
 #[tokio::test]
 async fn update_chapter_to_a_taken_number_returns_409() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
     let mut chapter: Chapter = ChapterFaker::new(book_id).fake();
     chapter.number = ChapterNumber::try_from(1.0).unwrap();
     let mut other: Chapter = ChapterFaker::new(book_id).fake();
     other.number = ChapterNumber::try_from(2.0).unwrap();
 
-    app.insert_chapter(&chapter).await;
-    app.insert_chapter(&other).await;
+    app.db_insert_chapter(&chapter).await;
+    app.db_insert_chapter(&other).await;
 
     let resp = app
         .put_json(
@@ -562,9 +562,9 @@ async fn update_chapter_with_unknown_id_returns_404() {
 #[tokio::test]
 async fn update_chapter_leaves_the_owning_book_untouched() {
     let app = TestApp::new().await;
-    app.insert_random_book().await;
-    let owner_id = app.insert_random_book().await;
-    let chapter_id = app.insert_random_chapter(owner_id).await;
+    app.db_insert_random_book().await;
+    let owner_id = app.db_insert_random_book().await;
+    let chapter_id = app.db_insert_random_chapter(owner_id).await;
 
     let resp = app
         .put_json(
@@ -574,7 +574,7 @@ async fn update_chapter_leaves_the_owning_book_untouched() {
         .await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let got = app.fetch_chapter(chapter_id).await;
+    let got = app.db_fetch_chapter(chapter_id).await;
 
     assert_eq!(got.number, ChapterNumber::try_from(1.0).unwrap());
     assert_eq!(
@@ -586,13 +586,13 @@ async fn update_chapter_leaves_the_owning_book_untouched() {
 #[tokio::test]
 async fn delete_chapter_with_valid_id_passes() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
-    let chapter_id = app.insert_random_chapter(book_id).await;
+    let book_id = app.db_insert_random_book().await;
+    let chapter_id = app.db_insert_random_chapter(book_id).await;
 
     let resp = app.delete_chapter(chapter_id).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let sample = app.fetch_chapter_sample(chapter_id).await;
+    let sample = app.db_fetch_chapter_sample(chapter_id).await;
 
     assert!(sample.number.is_none());
     assert_eq!(sample.localizations, 0);
@@ -601,7 +601,7 @@ async fn delete_chapter_with_valid_id_passes() {
 #[tokio::test]
 async fn delete_chapter_leaves_other_chapters_untouched() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
     let mut chapter: Chapter = ChapterFaker::new(book_id).fake();
     chapter.number = ChapterNumber::try_from(1.0).unwrap();
     let mut other: Chapter = ChapterFaker {
@@ -611,13 +611,13 @@ async fn delete_chapter_leaves_other_chapters_untouched() {
     .fake();
     other.number = ChapterNumber::try_from(2.0).unwrap();
 
-    app.insert_chapter(&chapter).await;
-    app.insert_chapter(&other).await;
+    app.db_insert_chapter(&chapter).await;
+    app.db_insert_chapter(&other).await;
 
     let resp = app.delete_chapter(chapter.id).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let sample = app.fetch_chapter_sample(other.id).await;
+    let sample = app.db_fetch_chapter_sample(other.id).await;
 
     assert_eq!(sample.number, Some(2.0));
     assert_eq!(sample.localizations, other.localizations.len() as i64);
@@ -634,10 +634,10 @@ async fn delete_chapter_with_unknown_id_returns_404() {
 #[tokio::test]
 async fn delete_chapter_leaves_other_books_chapters_alone() {
     let app = TestApp::new().await;
-    let bystander_book_id = app.insert_random_book().await;
-    let owner_id = app.insert_random_book().await;
-    let chapter_id = app.insert_random_chapter(owner_id).await;
-    let bystander_chapter_id = app.insert_random_chapter(bystander_book_id).await;
+    let bystander_book_id = app.db_insert_random_book().await;
+    let owner_id = app.db_insert_random_book().await;
+    let chapter_id = app.db_insert_random_chapter(owner_id).await;
+    let bystander_chapter_id = app.db_insert_random_chapter(bystander_book_id).await;
 
     let resp = app.delete_chapter(chapter_id).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
@@ -656,13 +656,13 @@ async fn delete_chapter_leaves_other_books_chapters_alone() {
 #[tokio::test]
 async fn delete_book_cascades_its_chapters() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
-    let chapter_id = app.insert_random_chapter(book_id).await;
+    let book_id = app.db_insert_random_book().await;
+    let chapter_id = app.db_insert_random_chapter(book_id).await;
 
     let resp = app.delete_book(book_id).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let sample = app.fetch_chapter_sample(chapter_id).await;
+    let sample = app.db_fetch_chapter_sample(chapter_id).await;
 
     assert!(sample.number.is_none());
     assert_eq!(sample.localizations, 0);

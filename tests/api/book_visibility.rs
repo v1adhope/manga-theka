@@ -26,7 +26,7 @@ async fn store_book_starts_it_as_a_draft() {
     let resp = app.post_json("/books", body).await;
     let id = assert_stored(resp).await;
 
-    let state = app.fetch_book_visibility_state(id).await;
+    let state = app.db_fetch_book_visibility_state(id).await;
 
     assert_eq!(state.visibility, "Draft");
 }
@@ -35,9 +35,10 @@ async fn store_book_starts_it_as_a_draft() {
 async fn get_books_returns_listed_books_only() {
     let app = TestApp::new().await;
     let listed = app
-        .insert_book_with_visibility(BookVisibility::Listed)
+        .db_insert_book_with_visibility(BookVisibility::Listed)
         .await;
-    app.insert_book_with_visibility(BookVisibility::Draft).await;
+    app.db_insert_book_with_visibility(BookVisibility::Draft)
+        .await;
 
     let page = app.get_books_page("/books").await;
     let ids: Vec<uuid::Uuid> = page.data.iter().map(|b| b.id).collect();
@@ -48,9 +49,11 @@ async fn get_books_returns_listed_books_only() {
 #[tokio::test]
 async fn get_books_with_a_visibility_overrides_the_default_filter() {
     let app = TestApp::new().await;
-    app.insert_book_with_visibility(BookVisibility::Listed)
+    app.db_insert_book_with_visibility(BookVisibility::Listed)
         .await;
-    let drafted = app.insert_book_with_visibility(BookVisibility::Draft).await;
+    let drafted = app
+        .db_insert_book_with_visibility(BookVisibility::Draft)
+        .await;
 
     let resp = app.get_as_moderator("/books?visibility=Draft").await;
     assert_eq!(resp.status(), StatusCode::OK);
@@ -75,7 +78,7 @@ async fn get_books_with_an_unknown_visibility_returns_400() {
 async fn get_book_serves_a_listed_book_to_anyone() {
     let app = TestApp::new().await;
     let id = app
-        .insert_book_with_visibility(BookVisibility::Listed)
+        .db_insert_book_with_visibility(BookVisibility::Listed)
         .await;
 
     let (status, _) = app.get_body(&format!("/books/{id}")).await;
@@ -88,7 +91,7 @@ async fn get_book_reads_a_book_in_every_visibility_for_a_moderator() {
     let app = TestApp::new().await;
 
     for visibility in EVERY_VISIBILITY {
-        let id = app.insert_book_with_visibility(visibility).await;
+        let id = app.db_insert_book_with_visibility(visibility).await;
 
         let resp = app.get_as_moderator(&format!("/books/{id}")).await;
 
@@ -110,7 +113,7 @@ async fn get_book_outside_listed_reads_as_missing_for_non_moderators() {
             continue;
         }
 
-        let id = app.insert_book_with_visibility(visibility).await;
+        let id = app.db_insert_book_with_visibility(visibility).await;
 
         let anon = app.get_body(&format!("/books/{id}")).await;
         let reader = app
@@ -127,7 +130,9 @@ async fn get_book_outside_listed_reads_as_missing_for_non_moderators() {
 #[tokio::test]
 async fn get_book_carries_its_review_fields() {
     let app = TestApp::new().await;
-    let id = app.insert_book_with_visibility(BookVisibility::Draft).await;
+    let id = app
+        .db_insert_book_with_visibility(BookVisibility::Draft)
+        .await;
 
     let req = Request::get(format!("/books/{id}"))
         .body(Body::empty())
@@ -146,10 +151,11 @@ async fn get_chapter_pages_of_an_unlisted_book_returns_404() {
     let app = TestApp::new().await;
 
     for visibility in EVERY_VISIBILITY {
-        let book_id = app.insert_book_with_visibility(visibility).await;
-        let chapter_id = app.insert_random_chapter(book_id).await;
-        let release_id = app.insert_random_release(book_id, chapter_id).await;
-        app.insert_page(release_id, Some(1), COVER_PNG).await;
+        let book_id = app.db_insert_book_with_visibility(visibility).await;
+        let chapter_id = app.db_insert_random_chapter(book_id).await;
+        let release_id = app.db_insert_random_release(book_id, chapter_id).await;
+        app.fixture_insert_page(release_id, Some(1), COVER_PNG)
+            .await;
 
         let resp = app.get_pages(release_id).await;
 
@@ -166,10 +172,12 @@ async fn get_chapter_page_of_an_unlisted_book_returns_404() {
     let app = TestApp::new().await;
 
     for visibility in EVERY_VISIBILITY {
-        let book_id = app.insert_book_with_visibility(visibility).await;
-        let chapter_id = app.insert_random_chapter(book_id).await;
-        let release_id = app.insert_random_release(book_id, chapter_id).await;
-        let page_id = app.insert_page(release_id, Some(1), COVER_PNG).await;
+        let book_id = app.db_insert_book_with_visibility(visibility).await;
+        let chapter_id = app.db_insert_random_chapter(book_id).await;
+        let release_id = app.db_insert_random_release(book_id, chapter_id).await;
+        let page_id = app
+            .fixture_insert_page(release_id, Some(1), COVER_PNG)
+            .await;
 
         let number_status = app.get_page(release_id, 1).await.status();
         let image_status = app.get_page_image(release_id, page_id).await.status();
@@ -191,8 +199,8 @@ async fn get_cover_image_of_an_unlisted_book_returns_404() {
     let app = TestApp::new().await;
 
     for visibility in EVERY_VISIBILITY {
-        let book_id = app.insert_book_with_visibility(visibility).await;
-        let cover_id = app.insert_cover(book_id, COVER_PNG).await;
+        let book_id = app.db_insert_book_with_visibility(visibility).await;
+        let cover_id = app.fixture_insert_cover(book_id, COVER_PNG).await;
 
         let resp = app.get_cover_image(cover_id).await;
 
@@ -209,11 +217,13 @@ async fn a_moderator_reads_content_in_every_visibility() {
     let app = TestApp::new().await;
 
     for visibility in EVERY_VISIBILITY {
-        let book_id = app.insert_book_with_visibility(visibility).await;
-        let cover_id = app.insert_cover(book_id, COVER_PNG).await;
-        let chapter_id = app.insert_random_chapter(book_id).await;
-        let release_id = app.insert_random_release(book_id, chapter_id).await;
-        let page_id = app.insert_page(release_id, Some(1), COVER_PNG).await;
+        let book_id = app.db_insert_book_with_visibility(visibility).await;
+        let cover_id = app.fixture_insert_cover(book_id, COVER_PNG).await;
+        let chapter_id = app.db_insert_random_chapter(book_id).await;
+        let release_id = app.db_insert_random_release(book_id, chapter_id).await;
+        let page_id = app
+            .fixture_insert_page(release_id, Some(1), COVER_PNG)
+            .await;
 
         let cover = app
             .get_as_moderator(&format!("/covers/{cover_id}/image"))
@@ -251,12 +261,14 @@ async fn a_moderator_reads_content_in_every_visibility() {
 async fn a_withheld_resource_is_indistinguishable_from_a_missing_one() {
     let app = TestApp::new().await;
     let book_id = app
-        .insert_book_with_visibility(BookVisibility::Hidden)
+        .db_insert_book_with_visibility(BookVisibility::Hidden)
         .await;
-    let cover_id = app.insert_cover(book_id, COVER_PNG).await;
-    let chapter_id = app.insert_random_chapter(book_id).await;
-    let release_id = app.insert_random_release(book_id, chapter_id).await;
-    let page_id = app.insert_page(release_id, Some(1), COVER_PNG).await;
+    let cover_id = app.fixture_insert_cover(book_id, COVER_PNG).await;
+    let chapter_id = app.db_insert_random_chapter(book_id).await;
+    let release_id = app.db_insert_random_release(book_id, chapter_id).await;
+    let page_id = app
+        .fixture_insert_page(release_id, Some(1), COVER_PNG)
+        .await;
     let absent = uuid::Uuid::now_v7();
 
     for (withheld, missing) in [
@@ -291,11 +303,12 @@ async fn a_withheld_resource_is_indistinguishable_from_a_missing_one() {
 async fn a_reader_role_does_not_unlock_unlisted_content() {
     let app = TestApp::new().await;
     let book_id = app
-        .insert_book_with_visibility(BookVisibility::Hidden)
+        .db_insert_book_with_visibility(BookVisibility::Hidden)
         .await;
-    let chapter_id = app.insert_random_chapter(book_id).await;
-    let release_id = app.insert_random_release(book_id, chapter_id).await;
-    app.insert_page(release_id, Some(1), COVER_PNG).await;
+    let chapter_id = app.db_insert_random_chapter(book_id).await;
+    let release_id = app.db_insert_random_release(book_id, chapter_id).await;
+    app.fixture_insert_page(release_id, Some(1), COVER_PNG)
+        .await;
 
     let req = Request::get(format!("/releases/{release_id}/pages"))
         .header(
@@ -317,12 +330,14 @@ async fn a_reader_role_does_not_unlock_unlisted_content() {
 async fn a_broken_bearer_token_reads_as_anonymous_on_public_routes_and_401s_on_gated_ones() {
     let app = TestApp::new().await;
     let book_id = app
-        .insert_book_with_visibility(BookVisibility::Listed)
+        .db_insert_book_with_visibility(BookVisibility::Listed)
         .await;
-    let cover_id = app.insert_cover(book_id, COVER_PNG).await;
-    let chapter_id = app.insert_random_chapter(book_id).await;
-    let release_id = app.insert_random_release(book_id, chapter_id).await;
-    let page_id = app.insert_page(release_id, Some(1), COVER_PNG).await;
+    let cover_id = app.fixture_insert_cover(book_id, COVER_PNG).await;
+    let chapter_id = app.db_insert_random_chapter(book_id).await;
+    let release_id = app.db_insert_random_release(book_id, chapter_id).await;
+    let page_id = app
+        .fixture_insert_page(release_id, Some(1), COVER_PNG)
+        .await;
 
     // A garbage or stale token never grants privilege, but on a public route it
     // must not lock the caller out either -- it reads exactly as anonymous.
@@ -359,7 +374,7 @@ async fn a_broken_bearer_token_reads_as_anonymous_on_public_routes_and_401s_on_g
 async fn update_book_visibility_rejects_an_untabled_move() {
     let app = TestApp::new().await;
     let id = app
-        .insert_book_with_visibility(BookVisibility::Listed)
+        .db_insert_book_with_visibility(BookVisibility::Listed)
         .await;
 
     let resp = app
@@ -372,12 +387,14 @@ async fn update_book_visibility_rejects_an_untabled_move() {
 #[tokio::test]
 async fn update_book_visibility_stores_the_move() {
     let app = TestApp::new().await;
-    let id = app.insert_book_with_visibility(BookVisibility::Draft).await;
+    let id = app
+        .db_insert_book_with_visibility(BookVisibility::Draft)
+        .await;
 
     let resp = app.put_visibility(id, "Hidden", Some("parked")).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let state = app.fetch_book_visibility_state(id).await;
+    let state = app.db_fetch_book_visibility_state(id).await;
 
     assert_eq!(state.visibility, "Hidden");
     assert_eq!(state.note.as_deref(), Some("parked"));
@@ -390,7 +407,7 @@ async fn moves_that_explain_themselves_require_a_note() {
 
     for to in ["Draft", "Rejected", "Hidden"] {
         let id = app
-            .insert_book_with_visibility(BookVisibility::PendingReview)
+            .db_insert_book_with_visibility(BookVisibility::PendingReview)
             .await;
 
         let missing = app.put_visibility(id, to, None).await;
@@ -405,7 +422,7 @@ async fn moves_that_explain_themselves_require_a_note() {
 async fn update_book_visibility_with_an_unknown_value_returns_422() {
     let app = TestApp::new().await;
     let id = app
-        .insert_book_with_visibility(BookVisibility::Listed)
+        .db_insert_book_with_visibility(BookVisibility::Listed)
         .await;
 
     let resp = app.put_visibility(id, "Published", Some("why")).await;
@@ -448,7 +465,7 @@ async fn book_writes_are_refused_unless_the_book_is_draft_or_listed() {
             ..Default::default()
         }
         .fake();
-        app.insert_book(&book).await;
+        app.fixture_insert_book(&book).await;
 
         let body = serde_json::json!({
             "name": book.name.as_ref(),
@@ -482,8 +499,8 @@ async fn cover_writes_are_refused_unless_the_book_is_draft_or_listed() {
     let app = TestApp::new().await;
 
     for visibility in EVERY_VISIBILITY {
-        let book_id = app.insert_book_with_visibility(visibility).await;
-        let cover_id = app.insert_cover(book_id, COVER_JPG).await;
+        let book_id = app.db_insert_book_with_visibility(visibility).await;
+        let cover_id = app.fixture_insert_cover(book_id, COVER_JPG).await;
 
         let promote = app.put_main_cover(book_id, cover_id).await;
         let delete = app.delete_cover(cover_id).await.status();
@@ -507,8 +524,8 @@ async fn chapter_writes_are_refused_unless_the_book_is_listed() {
     let app = TestApp::new().await;
 
     for visibility in EVERY_VISIBILITY {
-        let book_id = app.insert_book_with_visibility(visibility).await;
-        let existing = app.insert_random_chapter(book_id).await;
+        let book_id = app.db_insert_book_with_visibility(visibility).await;
+        let existing = app.db_insert_random_chapter(book_id).await;
 
         let created = app.post_chapter(book_id, 1.0).await.status();
         let deleted = app.delete_chapter(existing).await.status();
@@ -530,9 +547,9 @@ async fn release_writes_are_refused_unless_the_book_is_listed() {
     let app = TestApp::new().await;
 
     for visibility in EVERY_VISIBILITY {
-        let book_id = app.insert_book_with_visibility(visibility).await;
-        let chapter_id = app.insert_random_chapter(book_id).await;
-        let release_id = app.insert_random_release(book_id, chapter_id).await;
+        let book_id = app.db_insert_book_with_visibility(visibility).await;
+        let chapter_id = app.db_insert_random_chapter(book_id).await;
+        let release_id = app.db_insert_random_release(book_id, chapter_id).await;
 
         let uploaded = app
             .post_upload_pages(release_id, &[COVER_PNG])
@@ -557,7 +574,7 @@ async fn delete_book_is_allowed_in_every_visibility() {
     let app = TestApp::new().await;
 
     for visibility in EVERY_VISIBILITY {
-        let id = app.insert_book_with_visibility(visibility).await;
+        let id = app.db_insert_book_with_visibility(visibility).await;
 
         let resp = app.delete_book(id).await;
 

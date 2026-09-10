@@ -54,7 +54,7 @@ async fn update_creator_with_valid_body_passes() {
     let app = TestApp::new().await;
     let creator = CreatorFaker.fake();
 
-    app.insert_creator(&creator).await;
+    app.db_insert_creator(&creator).await;
 
     let resp = app
         .put_json(
@@ -83,8 +83,8 @@ async fn update_creator_leaves_other_creators_untouched() {
     let creator = CreatorFaker.fake();
     let other_creator = CreatorFaker.fake();
 
-    app.insert_creator(&creator).await;
-    app.insert_creator(&other_creator).await;
+    app.db_insert_creator(&creator).await;
+    app.db_insert_creator(&other_creator).await;
 
     let resp = app
         .put_json(
@@ -129,8 +129,8 @@ async fn update_creator_fullname_duplication_returns_409() {
     let creator = CreatorFaker.fake();
     let another_creator = CreatorFaker.fake();
 
-    app.insert_creator(&creator).await;
-    app.insert_creator(&another_creator).await;
+    app.db_insert_creator(&creator).await;
+    app.db_insert_creator(&another_creator).await;
 
     let resp = app
         .put_json(
@@ -149,7 +149,7 @@ async fn update_creator_name_validation_failure_returns_422() {
     let app = TestApp::new().await;
     let creator = CreatorFaker.fake();
 
-    app.insert_creator(&creator).await;
+    app.db_insert_creator(&creator).await;
 
     let resp = app
         .put_json(
@@ -165,7 +165,7 @@ async fn get_creator_with_valid_id_passes() {
     let app = TestApp::new().await;
     let creator = CreatorFaker.fake();
 
-    app.insert_creator(&creator).await;
+    app.db_insert_creator(&creator).await;
 
     let got = app
         .get_ok_json::<RespWrapper<CreatorQuery>>(&format!("/creators/{}", creator.id))
@@ -193,17 +193,17 @@ async fn get_creator_with_unknown_id_returns_404() {
 async fn get_creator_returns_distinct_roles_credited_across_books() {
     let app = TestApp::new().await;
     let creator = CreatorFaker.fake();
-    app.insert_creator(&creator).await;
+    app.db_insert_creator(&creator).await;
 
-    let book_a = app.insert_random_book().await;
-    let book_b = app.insert_random_book().await;
-    let book_c = app.insert_random_book().await;
+    let book_a = app.db_insert_random_book().await;
+    let book_b = app.db_insert_random_book().await;
+    let book_c = app.db_insert_random_book().await;
 
-    app.credit_creator(book_a, creator.id, CreatorRole::Author)
+    app.db_credit_creator(book_a, creator.id, CreatorRole::Author)
         .await;
-    app.credit_creator(book_b, creator.id, CreatorRole::Artist)
+    app.db_credit_creator(book_b, creator.id, CreatorRole::Artist)
         .await;
-    app.credit_creator(book_c, creator.id, CreatorRole::Author)
+    app.db_credit_creator(book_c, creator.id, CreatorRole::Author)
         .await;
 
     let data = app
@@ -222,7 +222,7 @@ async fn get_creators_returns_default_limit_and_next_cursor() {
 
     for _ in 0..25 {
         let creator = CreatorFaker.fake();
-        app.insert_creator(&creator).await;
+        app.db_insert_creator(&creator).await;
     }
 
     let page = app
@@ -239,7 +239,7 @@ async fn get_creators_with_after_and_limit_3_returns_next_page() {
 
     for _ in 0..6 {
         let creator: Creator = CreatorFaker.fake();
-        app.insert_creator(&creator).await;
+        app.db_insert_creator(&creator).await;
     }
 
     let first = app
@@ -268,7 +268,7 @@ async fn get_creators_desc_order_confirmed() {
     for _ in 0..3 {
         let creator: Creator = CreatorFaker.fake();
         ids.push(creator.id);
-        app.insert_creator(&creator).await;
+        app.db_insert_creator(&creator).await;
     }
     ids.sort_by(|a, b| b.cmp(a));
 
@@ -284,7 +284,7 @@ async fn get_creators_next_cursor_null_on_last_page() {
     let app = TestApp::new().await;
 
     for _ in 0..10 {
-        app.insert_creator(&CreatorFaker.fake()).await;
+        app.db_insert_creator(&CreatorFaker.fake()).await;
     }
 
     let v = app.get_ok_json::<serde_json::Value>("/creators").await;
@@ -320,7 +320,7 @@ async fn delete_creator_with_valid_id_passes() {
     let app = TestApp::new().await;
     let creator = CreatorFaker.fake();
 
-    app.insert_creator(&creator).await;
+    app.db_insert_creator(&creator).await;
 
     let resp = app.delete_creator(creator.id).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
@@ -346,8 +346,8 @@ async fn delete_creator_leaves_other_creators_untouched() {
     let creator = CreatorFaker.fake();
     let other_creator = CreatorFaker.fake();
 
-    app.insert_creator(&creator).await;
-    app.insert_creator(&other_creator).await;
+    app.db_insert_creator(&creator).await;
+    app.db_insert_creator(&other_creator).await;
 
     let resp = app.delete_creator(creator.id).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);

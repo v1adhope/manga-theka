@@ -40,7 +40,7 @@ async fn register_with_a_valid_body_returns_201_and_persists_a_hashed_reader() {
 async fn register_with_a_taken_email_returns_409() {
     let app = TestApp::new().await;
     let existing: UserQuery = UserFaker::default().fake();
-    app.insert_user(&existing).await;
+    app.db_insert_user(&existing).await;
 
     let mut body = valid_body();
     body["email"] = serde_json::json!(existing.email.as_ref());
@@ -53,7 +53,7 @@ async fn register_with_a_taken_email_returns_409() {
 async fn register_with_a_taken_username_returns_409() {
     let app = TestApp::new().await;
     let existing: UserQuery = UserFaker::default().fake();
-    app.insert_user(&existing).await;
+    app.db_insert_user(&existing).await;
 
     let mut body = valid_body();
     body["username"] = serde_json::json!(existing.username.as_ref());
@@ -103,7 +103,7 @@ async fn get_me_returns_the_caller_without_the_hash() {
         verified: false,
     }
     .fake();
-    app.insert_user(&user).await;
+    app.db_insert_user(&user).await;
 
     let req = Request::get("/users/me")
         .header(
@@ -138,7 +138,7 @@ async fn get_me_without_a_token_returns_401() {
 async fn get_me_after_the_row_is_gone_returns_404() {
     let app = TestApp::new().await;
     let user: UserQuery = UserFaker::default().fake();
-    app.insert_user(&user).await;
+    app.db_insert_user(&user).await;
 
     sqlx::query!("delete from users where id = $1", user.id)
         .execute(&app.pool)

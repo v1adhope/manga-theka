@@ -48,7 +48,7 @@ async fn seeded_user(app: &TestApp) -> UserQuery {
         verified: true,
     }
     .fake();
-    app.insert_user(&user).await;
+    app.db_insert_user(&user).await;
 
     user
 }
@@ -251,8 +251,8 @@ async fn list_my_sessions_returns_every_live_session_without_the_jti() {
     let other = Uuid::now_v7();
     let now = OffsetDateTime::now_utc();
 
-    app.insert_session(sub, current, now).await;
-    app.insert_session(sub, other, now).await;
+    app.memory_insert_session(sub, current, now).await;
+    app.memory_insert_session(sub, other, now).await;
 
     let req = Request::get("/sessions/me")
         .header(
@@ -290,7 +290,7 @@ async fn deleting_the_current_session_bypasses_the_24h_rule() {
     let app = TestApp::new().await;
     let sub = Uuid::now_v7();
     let sid = Uuid::now_v7();
-    app.insert_session(sub, sid, OffsetDateTime::now_utc())
+    app.memory_insert_session(sub, sid, OffsetDateTime::now_utc())
         .await;
 
     let resp = delete(&app, "/sessions/me/current", sub, sid).await;
@@ -303,7 +303,7 @@ async fn deleting_another_session_that_is_not_mine_returns_404() {
     let app = TestApp::new().await;
     let sub = Uuid::now_v7();
     let current = Uuid::now_v7();
-    app.insert_session(
+    app.memory_insert_session(
         sub,
         current,
         OffsetDateTime::now_utc() - Duration::hours(48),
@@ -326,9 +326,9 @@ async fn deleting_another_session_from_a_fresh_session_returns_409() {
     let sub = Uuid::now_v7();
     let current = Uuid::now_v7();
     let target = Uuid::now_v7();
-    app.insert_session(sub, current, OffsetDateTime::now_utc())
+    app.memory_insert_session(sub, current, OffsetDateTime::now_utc())
         .await;
-    app.insert_session(sub, target, OffsetDateTime::now_utc())
+    app.memory_insert_session(sub, target, OffsetDateTime::now_utc())
         .await;
 
     let resp = delete(&app, &format!("/sessions/me/{target}"), sub, current).await;
@@ -345,13 +345,13 @@ async fn deleting_another_session_from_an_aged_session_passes() {
     let sub = Uuid::now_v7();
     let current = Uuid::now_v7();
     let target = Uuid::now_v7();
-    app.insert_session(
+    app.memory_insert_session(
         sub,
         current,
         OffsetDateTime::now_utc() - Duration::hours(48),
     )
     .await;
-    app.insert_session(sub, target, OffsetDateTime::now_utc())
+    app.memory_insert_session(sub, target, OffsetDateTime::now_utc())
         .await;
 
     let resp = delete(&app, &format!("/sessions/me/{target}"), sub, current).await;
@@ -365,13 +365,13 @@ async fn deleting_all_sessions_from_an_aged_session_passes_and_from_a_fresh_one_
 
     let aged_sub = Uuid::now_v7();
     let aged_sid = Uuid::now_v7();
-    app.insert_session(
+    app.memory_insert_session(
         aged_sub,
         aged_sid,
         OffsetDateTime::now_utc() - Duration::hours(48),
     )
     .await;
-    app.insert_session(aged_sub, Uuid::now_v7(), OffsetDateTime::now_utc())
+    app.memory_insert_session(aged_sub, Uuid::now_v7(), OffsetDateTime::now_utc())
         .await;
 
     let resp = delete(&app, "/sessions/me/all", aged_sub, aged_sid).await;
@@ -380,7 +380,7 @@ async fn deleting_all_sessions_from_an_aged_session_passes_and_from_a_fresh_one_
 
     let fresh_sub = Uuid::now_v7();
     let fresh_sid = Uuid::now_v7();
-    app.insert_session(fresh_sub, fresh_sid, OffsetDateTime::now_utc())
+    app.memory_insert_session(fresh_sub, fresh_sid, OffsetDateTime::now_utc())
         .await;
 
     assert_error(

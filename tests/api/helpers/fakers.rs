@@ -448,6 +448,18 @@ impl Default for BookFaker {
     }
 }
 
+impl BookFaker {
+    pub fn scalar() -> Self {
+        BookFaker {
+            labels: 0..=0,
+            links: 0..=0,
+            titles: 0..=0,
+            creators: 0..=0,
+            ..Default::default()
+        }
+    }
+}
+
 impl Dummy<BookFaker> for BookQuery {
     fn dummy_with_rng<R: RngExt + ?Sized>(config: &BookFaker, rng: &mut R) -> Self {
         let mut labels: Vec<Label> = match &config.exact_labels {

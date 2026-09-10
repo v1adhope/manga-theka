@@ -185,7 +185,7 @@ impl TestApp {
                 ..Default::default()
             }
             .fake();
-            self.insert_user(&caller).await;
+            self.db_insert_user(&caller).await;
             let token = self.access_token(caller.id, Uuid::now_v7(), &DEFAULT_ROLES);
             req.headers_mut().insert(
                 header::AUTHORIZATION,
