@@ -126,23 +126,9 @@ async fn get_book_outside_listed_reads_as_missing_for_non_moderators() {
         let id = app.insert_book_with_visibility(visibility).await;
 
         let anon = app.get_body(&format!("/books/{id}")).await;
-        let reader = {
-            let req = Request::get(format!("/books/{id}"))
-                .header(
-                    header::AUTHORIZATION,
-                    app.bearer(
-                        uuid::Uuid::now_v7(),
-                        uuid::Uuid::now_v7(),
-                        &[Role::Reader, Role::Uploader],
-                    ),
-                )
-                .body(Body::empty())
-                .unwrap();
-            let resp = app.send_raw(req).await;
-            let status = resp.status();
-            let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-            (status, String::from_utf8_lossy(&bytes).into_owned())
-        };
+        let reader = app
+            .get_body_as(&format!("/books/{id}"), &[Role::Reader, Role::Uploader])
+            .await;
         let missing = app.get_body(&format!("/books/{absent}")).await;
 
         assert_eq!(anon.0, StatusCode::NOT_FOUND, "anon while {visibility}");
