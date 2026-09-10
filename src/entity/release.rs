@@ -350,8 +350,6 @@ mod tests {
         BookVisibility::Rejected,
     ];
 
-    // -- ensure_record_readable (GET /releases/{id}) --------------------
-
     #[test]
     fn a_release_record_is_public_while_the_book_is_publicly_listable() {
         let owner = Uuid::now_v7();
@@ -380,8 +378,6 @@ mod tests {
             assert!(matches!(by_stranger, Err(EntityError::NotReadable { .. })));
         }
     }
-
-    // -- ensure_content_readable (committed pages) --------------------
 
     #[test]
     fn page_content_is_public_only_while_the_book_is_listed() {
@@ -414,8 +410,6 @@ mod tests {
             assert!(matches!(by_stranger, Err(EntityError::NotReadable { .. })));
         }
     }
-
-    // -- ensure_staged_readable (?status=Staged) --------------------
 
     #[test]
     fn staged_pages_are_never_public_not_even_while_listed() {

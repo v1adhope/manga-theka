@@ -432,8 +432,6 @@ mod tests {
         assert!(refused.is_err(), "a hidden book still owes a reason");
     }
 
-    // -- BookAccess: record-tier reads -------------------------------------
-
     #[test]
     fn a_publicly_listable_book_record_is_readable_by_anyone() {
         let owner = Uuid::now_v7();
@@ -492,8 +490,6 @@ mod tests {
         }
     }
 
-    // -- BookAccess: Draft-state writes ----------------------------------
-
     #[test]
     fn draft_writes_admit_the_creator_and_a_moderator_only() {
         let owner = Uuid::now_v7();
@@ -536,8 +532,6 @@ mod tests {
             );
         }
     }
-
-    // -- BookAccess: visibility transitions -----------------------------
 
     #[test]
     fn a_move_to_pending_review_is_the_creators_alone() {

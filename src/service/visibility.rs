@@ -7,8 +7,6 @@ use crate::{
 };
 
 impl Service {
-    // -- record-tier reads: the book row, its chapters, its covers -------------
-
     pub(crate) async fn ensure_book_readable<T: Entity>(
         &self,
         book_id: Uuid,
@@ -45,8 +43,6 @@ impl Service {
             .map_err(Into::into)
     }
 
-    // -- book and cover writes ------------------------------------------------
-
     pub(crate) async fn ensure_book_writable(
         &self,
         book_id: Uuid,
@@ -70,8 +66,6 @@ impl Service {
             .ensure_book_writable(claims)
             .map_err(Into::into)
     }
-
-    // -- content writes: chapters, releases, pages --------------------------
 
     pub(crate) async fn ensure_content_writable(&self, book_id: Uuid) -> Result<(), ServiceError> {
         self.database
@@ -105,8 +99,6 @@ impl Service {
             .ensure_mutable(claims)
             .map_err(Into::into)
     }
-
-    // -- release and page reads --------------------------------------------
 
     pub(crate) async fn ensure_release_record_readable(
         &self,
