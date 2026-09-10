@@ -5,8 +5,8 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        Bounded, BoundedVec, Entity, ImageExtension, Images, Language, MAX_PARTS_PER_REQUEST,
-        Ordinal, ResourceUrl,
+        BookVisibility, Bounded, BoundedVec, Entity, ImageExtension, Images, Language,
+        MAX_PARTS_PER_REQUEST, Ordinal, ResourceUrl, UserClaims,
     },
     error::EntityError,
 };
@@ -70,10 +70,27 @@ pub struct ChapterRelease {
     pub id: Uuid,
     pub chapter_id: Uuid,
     pub language_id: Uuid,
+    pub created_by: Uuid,
 }
 
 impl Entity for ChapterRelease {
     const NAME: &'static str = "Chapter release";
+}
+
+#[derive(Debug)]
+pub struct ReleaseAccess {
+    pub visibility: BookVisibility,
+    pub created_by: Uuid,
+}
+
+impl ReleaseAccess {
+    pub fn ensure_mutable(&self, claims: &UserClaims) -> Result<(), EntityError> {
+        if claims.id != self.created_by && !claims.can_moderate() {
+            return Err(EntityError::Forbidden);
+        }
+
+        self.visibility.ensure_content_writable()
+    }
 }
 
 impl ChapterRelease {
@@ -106,6 +123,7 @@ pub struct ChapterReleaseQuery {
     pub language: Language,
     pub page_count: i64,
     pub version: Ordinal,
+    pub created_by: Uuid,
 }
 
 pub struct ChapterPage;
@@ -150,9 +168,21 @@ pub struct ChapterPageParams {
 mod tests {
     use uuid::Uuid;
 
-    use crate::entity::{
-        ChapterRelease, MAX_COMMITTED_PAGES, MAX_PARTS_PER_REQUEST, MAX_RELEASE_ROWS, PageOrder,
+    use crate::{
+        entity::{
+            BookVisibility, ChapterRelease, MAX_COMMITTED_PAGES, MAX_PARTS_PER_REQUEST,
+            MAX_RELEASE_ROWS, PageOrder, ReleaseAccess, Role, UserClaims,
+        },
+        error::EntityError,
     };
+
+    fn claims(id: Uuid, roles: &[Role]) -> UserClaims {
+        UserClaims {
+            id,
+            sid: Uuid::now_v7(),
+            roles: roles.to_vec(),
+        }
+    }
 
     #[test]
     fn row_capacity_at_the_ceiling_is_valid() {
@@ -215,5 +245,67 @@ mod tests {
             .collect();
         let res = PageOrder::try_from(ids);
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn the_creator_may_mutate_a_listed_release() {
+        let owner = Uuid::now_v7();
+        let access = ReleaseAccess {
+            visibility: BookVisibility::Listed,
+            created_by: owner,
+        };
+
+        let res = access.ensure_mutable(&claims(owner, &[Role::Uploader]));
+
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn a_moderator_may_mutate_a_release_they_did_not_create() {
+        let access = ReleaseAccess {
+            visibility: BookVisibility::Listed,
+            created_by: Uuid::now_v7(),
+        };
+
+        let res = access.ensure_mutable(&claims(Uuid::now_v7(), &[Role::Moderator]));
+
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn a_non_creator_without_moderation_is_forbidden() {
+        let access = ReleaseAccess {
+            visibility: BookVisibility::Listed,
+            created_by: Uuid::now_v7(),
+        };
+
+        let res = access.ensure_mutable(&claims(Uuid::now_v7(), &[Role::Uploader]));
+
+        assert!(matches!(res, Err(EntityError::Forbidden)));
+    }
+
+    #[test]
+    fn forbidden_outranks_a_non_listed_book() {
+        let access = ReleaseAccess {
+            visibility: BookVisibility::Draft,
+            created_by: Uuid::now_v7(),
+        };
+
+        let res = access.ensure_mutable(&claims(Uuid::now_v7(), &[Role::Uploader]));
+
+        assert!(matches!(res, Err(EntityError::Forbidden)));
+    }
+
+    #[test]
+    fn the_creator_still_cannot_mutate_a_release_whose_book_is_not_listed() {
+        let owner = Uuid::now_v7();
+        let access = ReleaseAccess {
+            visibility: BookVisibility::Hidden,
+            created_by: owner,
+        };
+
+        let res = access.ensure_mutable(&claims(owner, &[Role::Uploader]));
+
+        assert!(matches!(res, Err(EntityError::BookNotWritable(_))));
     }
 }

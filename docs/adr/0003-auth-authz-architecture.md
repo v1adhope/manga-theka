@@ -54,7 +54,9 @@ Moderator and Admin share the content-moderation gate (`require_roles([Moderator
 
 Wired: `POST /books` -> any signed-in role; content-write routes (`creators`, book/cover writes, `chapters`, `releases`) -> `[Uploader, Moderator, Admin]`; `DELETE` of a creator or book -> `[Moderator, Admin]`; `POST /feedbacks` anonymous, other `feedbacks` routes `[Moderator, Admin]`. `PUT /books/{id}/visibility` and `GET /books?visibility=` gates: ADR-0009.
 
-Deferred: the `created_by`/`uploaded_by` half of each gate -- `books.created_by` exists but no handler compares it, `chapter_pages.uploaded_by` does not exist -- so "only the owner edits their own `Draft`", "the owner reads their own non-`Listed` content", and "staged pages scoped to the calling uploader" are unenforced (`// deferred` comments).
+Ownership gate (`Chapter Release`): mutating a `Chapter Release` -- staging pages, commit, delete -- is restricted to its `created_by` `User` or a caller who `can_moderate()`, layered on top of the `[Uploader, Moderator, Admin]` role gate. `chapter_releases.created_by` is `not null`, FK to `users(id)` `on delete restrict`, set to the caller on `POST /chapters/{id}/releases` (create itself carries no ownership check). The service guard fetches `(visibility, created_by)` in one query and fails in order: `404` release missing, `403 "Forbidden"` caller is neither owner nor moderator, `409` book not `Listed` -- so a non-owner never learns the book's state. Reads are unchanged. Rationale and staged-page fallout: ADR-0006.
+
+Still deferred: the `Book` half -- `books.created_by` exists but no handler compares it, so "only the owner edits their own `Draft`" and "the owner reads their own non-`Listed` content" are unenforced (`// deferred` comments). `chapter_pages.uploaded_by` is deliberately not added: release-level ownership already stops two plain uploaders sharing one release's staging area (ADR-0006).
 
 ## Routes and errors
 

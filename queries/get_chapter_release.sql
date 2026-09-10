@@ -1,4 +1,4 @@
-select r.id, r.chapter_id, r.version,
+select r.id, r.chapter_id, r.version, r.created_by,
        l.id as language_id, l.code as language_code, l.name as language_name,
        (select count(*)
         from chapter_pages p

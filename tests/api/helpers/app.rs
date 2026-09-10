@@ -5,11 +5,10 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, header};
 use axum::response::Response;
-use fake::Fake;
 use manga_theka::{
     config::{Config, Database},
     database,
-    entity::{Role, UserQuery},
+    entity::{MAX_USER_ROLES, Role},
     hasher::Hasher,
     jwt::Jwt,
     memory_storage::{self, MemoryStore},
@@ -21,8 +20,6 @@ use sqlx::{AssertSqlSafe, ConnectOptions, Connection, Executor, PgConnection, Pg
 use tower::ServiceExt;
 use tracing_log::log::LevelFilter;
 use uuid::Uuid;
-
-use super::fakers::UserFaker;
 
 static TRACING: LazyLock<()> = LazyLock::new(|| {
     telemetry::init_subscriber("info");
@@ -73,7 +70,9 @@ impl TestKeys {
     }
 }
 
-pub const DEFAULT_ROLES: [Role; 3] = [Role::Uploader, Role::Moderator, Role::Admin];
+// One entry per `Role` variant; adding a variant must update this.
+pub const ALL_ROLES: [Role; MAX_USER_ROLES] =
+    [Role::Reader, Role::Uploader, Role::Moderator, Role::Admin];
 
 // TODO: migrate this to axum_test::TestServer/TestResponse?
 pub struct TestApp {
@@ -85,6 +84,8 @@ pub struct TestApp {
     pub jwt: Jwt,
     pub memory: MemoryStore,
     pub hasher: Hasher,
+    pub super_user_id: Uuid,
+    pub super_user_sid: Uuid,
 }
 
 impl TestApp {
@@ -148,7 +149,7 @@ impl TestApp {
         )
         .unwrap();
 
-        TestApp {
+        let app = TestApp {
             pool,
             router: app.router(),
             s3,
@@ -157,7 +158,12 @@ impl TestApp {
             jwt,
             memory,
             hasher,
-        }
+            super_user_id: Uuid::now_v7(),
+            super_user_sid: Uuid::now_v7(),
+        };
+        app.db_seed_super_user().await;
+
+        app
     }
 
     async fn configure_db(cfg: &Database) -> PgPool {
@@ -180,13 +186,7 @@ impl TestApp {
 
     pub async fn send_authed(&self, mut req: Request<Body>) -> Response {
         if !req.headers().contains_key(header::AUTHORIZATION) {
-            let caller: UserQuery = UserFaker {
-                roles: DEFAULT_ROLES.to_vec(),
-                ..Default::default()
-            }
-            .fake();
-            self.db_insert_user(&caller).await;
-            let token = self.access_token(caller.id, Uuid::now_v7(), &DEFAULT_ROLES);
+            let token = self.access_token(self.super_user_id, self.super_user_sid, &ALL_ROLES);
             req.headers_mut().insert(
                 header::AUTHORIZATION,
                 format!("Bearer {token}").parse().unwrap(),

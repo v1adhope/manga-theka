@@ -19,6 +19,7 @@ struct ChapterReleaseRow {
     language_code: String,
     language_name: String,
     page_count: i64,
+    created_by: Uuid,
 }
 
 impl TryFrom<ChapterReleaseRow> for ChapterReleaseQuery {
@@ -37,6 +38,7 @@ impl TryFrom<ChapterReleaseRow> for ChapterReleaseQuery {
             },
             page_count: row.page_count,
             version,
+            created_by: row.created_by,
         })
     }
 }
@@ -104,6 +106,7 @@ impl Database {
             item.id,
             item.chapter_id,
             item.language_id,
+            item.created_by,
         )
         .execute(&self.pool)
         .await

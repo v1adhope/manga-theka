@@ -55,6 +55,9 @@ pub enum EntityError {
     #[error("{entity} not found")]
     NotReadable { entity: &'static str },
 
+    #[error("Forbidden")]
+    Forbidden,
+
     #[error("'{0}' is not a valid book link kind")]
     InvalidBookLinkKind(String),
 
@@ -164,6 +167,7 @@ impl IntoResponse for EntityError {
             | Self::BookNotWritable(_)
             | Self::SessionTooNewToRevoke => StatusCode::CONFLICT,
             Self::NotReadable { .. } => StatusCode::NOT_FOUND,
+            Self::Forbidden => StatusCode::FORBIDDEN,
             Self::CursorSelectionMismatch => StatusCode::BAD_REQUEST,
             _ => StatusCode::UNPROCESSABLE_ENTITY,
         };

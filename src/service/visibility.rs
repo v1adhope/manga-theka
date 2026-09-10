@@ -67,14 +67,15 @@ impl Service {
             .map_err(Into::into)
     }
 
-    pub(crate) async fn ensure_content_writable_by_release(
+    pub(crate) async fn ensure_release_mutable(
         &self,
         release_id: Uuid,
+        claims: &UserClaims,
     ) -> Result<(), ServiceError> {
         self.database
-            .get_book_visibility_by_release(release_id)
+            .get_release_access(release_id)
             .await?
-            .ensure_content_writable()
+            .ensure_mutable(claims)
             .map_err(Into::into)
     }
 
@@ -84,8 +85,9 @@ impl Service {
         claims: Option<&UserClaims>,
     ) -> Result<(), ServiceError> {
         self.database
-            .get_book_visibility_by_release(release_id)
+            .get_release_access(release_id)
             .await?
+            .visibility
             .ensure_readable::<ChapterRelease>(claims)
             .map_err(Into::into)
     }

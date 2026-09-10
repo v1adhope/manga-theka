@@ -380,4 +380,40 @@ impl TestApp {
     pub async fn delete_release(&self, id: Uuid) -> Response {
         self.delete_authed(&format!("/releases/{id}")).await
     }
+
+    pub async fn post_upload_pages_as(
+        &self,
+        release_id: Uuid,
+        parts: &[&[u8]],
+        sub: Uuid,
+        sid: Uuid,
+        roles: &[Role],
+    ) -> Response {
+        let form = Self::multipart_body(parts);
+        let req = Request::post(format!("/releases/{release_id}/upload"))
+            .header(header::CONTENT_TYPE, form.content_type())
+            .header(header::AUTHORIZATION, self.bearer(sub, sid, roles))
+            .body(Body::from(form))
+            .unwrap();
+
+        self.send_raw(req).await
+    }
+
+    pub async fn post_commit_as(
+        &self,
+        release_id: Uuid,
+        page_order: &[Uuid],
+        sub: Uuid,
+        sid: Uuid,
+        roles: &[Role],
+    ) -> Response {
+        let body = serde_json::json!({ "pageOrder": page_order });
+        let req = Request::post(format!("/releases/{release_id}/commit"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .header(header::AUTHORIZATION, self.bearer(sub, sid, roles))
+            .body(Body::from(body.to_string()))
+            .unwrap();
+
+        self.send_raw(req).await
+    }
 }

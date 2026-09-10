@@ -47,13 +47,20 @@ impl Service {
             .map_err(Into::into)
     }
 
-    pub async fn ensure_chapter_release_writable(&self, id: Uuid) -> Result<(), ServiceError> {
-        self.ensure_content_writable_by_release(id).await
+    pub async fn ensure_chapter_release_writable(
+        &self,
+        id: Uuid,
+        claims: &UserClaims,
+    ) -> Result<(), ServiceError> {
+        self.ensure_release_mutable(id, claims).await
     }
 
-    pub async fn store_chapter_pages(&self, item: ChapterPages) -> Result<(), ServiceError> {
-        self.ensure_content_writable_by_release(item.release_id)
-            .await?;
+    pub async fn store_chapter_pages(
+        &self,
+        item: ChapterPages,
+        claims: &UserClaims,
+    ) -> Result<(), ServiceError> {
+        self.ensure_release_mutable(item.release_id, claims).await?;
 
         let existing = self.database.count_chapter_pages(item.release_id).await? as usize;
         ChapterRelease::ensure_row_capacity(existing, item.images.len())?;
@@ -84,8 +91,9 @@ impl Service {
         &self,
         id: Uuid,
         order: &PageOrder,
+        claims: &UserClaims,
     ) -> Result<(), ServiceError> {
-        self.ensure_content_writable_by_release(id).await?;
+        self.ensure_release_mutable(id, claims).await?;
 
         let removed = self.database.commit_chapter_release(id, order).await?;
 
@@ -139,8 +147,12 @@ impl Service {
             .map_err(Into::into)
     }
 
-    pub async fn delete_chapter_release(&self, id: Uuid) -> Result<(), ServiceError> {
-        self.ensure_content_writable_by_release(id).await?;
+    pub async fn delete_chapter_release(
+        &self,
+        id: Uuid,
+        claims: &UserClaims,
+    ) -> Result<(), ServiceError> {
+        self.ensure_release_mutable(id, claims).await?;
 
         let page_ids = self.database.get_chapter_release_page_ids(id).await?;
 
