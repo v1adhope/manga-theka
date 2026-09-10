@@ -70,15 +70,6 @@ async fn login_and_get_cookie(app: &TestApp) -> String {
     cookie_pair(&refresh_cookie(&resp))
 }
 
-async fn post_refresh(app: &TestApp, cookie: &str) -> axum::response::Response {
-    let req = Request::post("/sessions/refresh")
-        .header(header::COOKIE, cookie)
-        .body(Body::empty())
-        .unwrap();
-
-    app.send_raw(req).await
-}
-
 #[tokio::test]
 async fn refresh_succeeds_even_with_a_stale_access_token_still_attached() {
     let app = TestApp::new().await;
@@ -109,14 +100,14 @@ async fn refresh_rotates_the_cookie_and_invalidates_the_presented_one() {
     let app = TestApp::new().await;
     let first = login_and_get_cookie(&app).await;
 
-    let rotated = post_refresh(&app, &first).await;
+    let rotated = app.post_refresh(&first).await;
     assert_eq!(rotated.status(), StatusCode::OK);
     let second = cookie_pair(&refresh_cookie(&rotated));
     assert_ne!(first, second, "refresh must mint a fresh cookie value");
 
-    assert_error(post_refresh(&app, &first).await, StatusCode::UNAUTHORIZED).await;
+    assert_error(app.post_refresh(&first).await, StatusCode::UNAUTHORIZED).await;
 
-    assert_eq!(post_refresh(&app, &second).await.status(), StatusCode::OK);
+    assert_eq!(app.post_refresh(&second).await.status(), StatusCode::OK);
 }
 
 #[tokio::test]
@@ -149,7 +140,7 @@ async fn refresh_with_an_expired_token_returns_401() {
         .value;
 
     assert_error(
-        post_refresh(&app, &format!("refresh_token={token}")).await,
+        app.post_refresh(&format!("refresh_token={token}")).await,
         StatusCode::UNAUTHORIZED,
     )
     .await;
@@ -161,7 +152,7 @@ async fn an_access_token_presented_as_a_refresh_token_is_rejected() {
     let access = app.access_token(Uuid::now_v7(), Uuid::now_v7(), &[Role::Reader]);
 
     assert_error(
-        post_refresh(&app, &format!("refresh_token={access}")).await,
+        app.post_refresh(&format!("refresh_token={access}")).await,
         StatusCode::UNAUTHORIZED,
     )
     .await;
@@ -221,15 +212,6 @@ async fn list_my_sessions_returns_every_live_session_without_the_jti() {
     }
 }
 
-async fn delete(app: &TestApp, path: &str, sub: Uuid, sid: Uuid) -> axum::response::Response {
-    let req = Request::delete(path)
-        .header(header::AUTHORIZATION, app.bearer(sub, sid, &[Role::Reader]))
-        .body(Body::empty())
-        .unwrap();
-
-    app.send_raw(req).await
-}
-
 #[tokio::test]
 async fn deleting_the_current_session_bypasses_the_24h_rule() {
     let app = TestApp::new().await;
@@ -238,7 +220,9 @@ async fn deleting_the_current_session_bypasses_the_24h_rule() {
     app.memory_insert_session(sub, sid, OffsetDateTime::now_utc())
         .await;
 
-    let resp = delete(&app, "/sessions/me/current", sub, sid).await;
+    let resp = app
+        .delete_authed_as("/sessions/me/current", sub, sid, &[Role::Reader])
+        .await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
     assert!(app.memory.get_session(sub, sid).await.unwrap().is_none());
 }
@@ -255,13 +239,14 @@ async fn deleting_another_session_that_is_not_mine_returns_404() {
     )
     .await;
 
-    let resp = delete(
-        &app,
-        &format!("/sessions/me/{}", Uuid::now_v7()),
-        sub,
-        current,
-    )
-    .await;
+    let resp = app
+        .delete_authed_as(
+            &format!("/sessions/me/{}", Uuid::now_v7()),
+            sub,
+            current,
+            &[Role::Reader],
+        )
+        .await;
     assert_error(resp, StatusCode::NOT_FOUND).await;
 }
 
@@ -276,7 +261,14 @@ async fn deleting_another_session_from_a_fresh_session_returns_409() {
     app.memory_insert_session(sub, target, OffsetDateTime::now_utc())
         .await;
 
-    let resp = delete(&app, &format!("/sessions/me/{target}"), sub, current).await;
+    let resp = app
+        .delete_authed_as(
+            &format!("/sessions/me/{target}"),
+            sub,
+            current,
+            &[Role::Reader],
+        )
+        .await;
     assert_error(resp, StatusCode::CONFLICT).await;
     assert!(
         app.memory.get_session(sub, target).await.unwrap().is_some(),
@@ -299,7 +291,14 @@ async fn deleting_another_session_from_an_aged_session_passes() {
     app.memory_insert_session(sub, target, OffsetDateTime::now_utc())
         .await;
 
-    let resp = delete(&app, &format!("/sessions/me/{target}"), sub, current).await;
+    let resp = app
+        .delete_authed_as(
+            &format!("/sessions/me/{target}"),
+            sub,
+            current,
+            &[Role::Reader],
+        )
+        .await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
     assert!(app.memory.get_session(sub, target).await.unwrap().is_none());
 }
@@ -319,7 +318,9 @@ async fn deleting_all_sessions_from_an_aged_session_passes_and_from_a_fresh_one_
     app.memory_insert_session(aged_sub, Uuid::now_v7(), OffsetDateTime::now_utc())
         .await;
 
-    let resp = delete(&app, "/sessions/me/all", aged_sub, aged_sid).await;
+    let resp = app
+        .delete_authed_as("/sessions/me/all", aged_sub, aged_sid, &[Role::Reader])
+        .await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
     assert!(app.memory.list_sessions(aged_sub).await.unwrap().is_empty());
 
@@ -329,14 +330,15 @@ async fn deleting_all_sessions_from_an_aged_session_passes_and_from_a_fresh_one_
         .await;
 
     assert_error(
-        delete(&app, "/sessions/me/all", fresh_sub, fresh_sid).await,
+        app.delete_authed_as("/sessions/me/all", fresh_sub, fresh_sid, &[Role::Reader])
+            .await,
         StatusCode::CONFLICT,
     )
     .await;
 }
 
-fn creator_body() -> String {
-    serde_json::json!({ "firstName": "Gate", "lastName": "Probe" }).to_string()
+fn creator_body() -> serde_json::Value {
+    serde_json::json!({ "firstName": "Gate", "lastName": "Probe" })
 }
 
 #[tokio::test]
@@ -344,7 +346,7 @@ async fn a_gated_route_without_a_token_returns_401() {
     let app = TestApp::new().await;
     let req = Request::post("/creators")
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(creator_body()))
+        .body(Body::from(creator_body().to_string()))
         .unwrap();
 
     assert_error(app.send_raw(req).await, StatusCode::UNAUTHORIZED).await;
@@ -353,29 +355,21 @@ async fn a_gated_route_without_a_token_returns_401() {
 #[tokio::test]
 async fn a_gated_route_with_a_role_below_the_gate_returns_403() {
     let app = TestApp::new().await;
-    let req = Request::post("/creators")
-        .header(header::CONTENT_TYPE, "application/json")
-        .header(
-            header::AUTHORIZATION,
-            app.bearer(Uuid::now_v7(), Uuid::now_v7(), &[Role::Reader]),
-        )
-        .body(Body::from(creator_body()))
-        .unwrap();
 
-    assert_error(app.send_raw(req).await, StatusCode::FORBIDDEN).await;
+    assert_error(
+        app.post_json_as("/creators", creator_body(), &[Role::Reader])
+            .await,
+        StatusCode::FORBIDDEN,
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn a_gated_route_with_a_role_at_the_gate_passes() {
     let app = TestApp::new().await;
-    let req = Request::post("/creators")
-        .header(header::CONTENT_TYPE, "application/json")
-        .header(
-            header::AUTHORIZATION,
-            app.bearer(Uuid::now_v7(), Uuid::now_v7(), &[Role::Uploader]),
-        )
-        .body(Body::from(creator_body()))
-        .unwrap();
 
-    assert_eq!(app.send_raw(req).await.status(), StatusCode::CREATED);
+    let resp = app
+        .post_json_as("/creators", creator_body(), &[Role::Uploader])
+        .await;
+    assert_eq!(resp.status(), StatusCode::CREATED);
 }

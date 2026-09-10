@@ -84,6 +84,21 @@ impl TestApp {
             .await
     }
 
+    pub async fn delete_authed_as(
+        &self,
+        path: &str,
+        sub: Uuid,
+        sid: Uuid,
+        roles: &[Role],
+    ) -> Response {
+        let req = Request::delete(path)
+            .header(header::AUTHORIZATION, self.bearer(sub, sid, roles))
+            .body(Body::empty())
+            .unwrap();
+
+        self.send_raw(req).await
+    }
+
     pub async fn post_json(&self, path: &str, body: serde_json::Value) -> Response {
         self.json_authed(Method::POST, path, body).await
     }
@@ -154,6 +169,33 @@ impl TestApp {
         let body = serde_json::json!({ "email": email, "password": password });
         let req = Request::post("/sessions/login")
             .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap();
+
+        self.send_raw(req).await
+    }
+
+    pub async fn post_refresh(&self, cookie: &str) -> Response {
+        let req = Request::post("/sessions/refresh")
+            .header(header::COOKIE, cookie)
+            .body(Body::empty())
+            .unwrap();
+
+        self.send_raw(req).await
+    }
+
+    pub async fn post_json_as(
+        &self,
+        path: &str,
+        body: serde_json::Value,
+        roles: &[Role],
+    ) -> Response {
+        let req = Request::post(path)
+            .header(header::CONTENT_TYPE, "application/json")
+            .header(
+                header::AUTHORIZATION,
+                self.bearer(Uuid::now_v7(), Uuid::now_v7(), roles),
+            )
             .body(Body::from(body.to_string()))
             .unwrap();
 

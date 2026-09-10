@@ -7,7 +7,7 @@
 
 ## Where things live
 
-Add a helper to the `api/helpers/` module that matches its kind.
+Add a helper to the `api/helpers/` module that matches its kind. Name it after existing siblings: reuse the established verb prefixes (`get_`, `post_`, `put_`, `delete_`, `send_`) and suffixes (`_as` for a role/principal variant, `_authed` for auto-auth, `_raw` for an unwrapped request), and do not coin new terms when one already fits.
 
 - `api/helpers/app.rs` — `TestApp` setup: construction, request dispatch, token minting.
 - `api/helpers/queries.rs` — direct database and object-storage inserts and reads, corpus seeders.
