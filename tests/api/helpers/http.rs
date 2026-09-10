@@ -228,8 +228,8 @@ impl TestApp {
         self.get_ok_json::<RespWrapper<Vec<Label>>>(path).await.data
     }
 
-    pub async fn get_chapters(&self, path: String) -> RespWrapper<Vec<Chapter>> {
-        self.get_ok_json(&path).await
+    pub async fn get_chapters(&self, path: &str) -> RespWrapper<Vec<Chapter>> {
+        self.get_ok_json(path).await
     }
 
     pub async fn post_chapter(&self, book_id: Uuid, number: f32) -> Response {

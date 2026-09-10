@@ -1,8 +1,4 @@
-use axum::{
-    body::Body,
-    http::{Request, StatusCode, header},
-};
-use http_body_util::BodyExt;
+use axum::http::StatusCode;
 
 use crate::helpers::fakers::{ChapterFaker, LANGUAGES};
 use crate::helpers::{RespWrapper, TestApp, assert_error, assert_stored, localization_keys};
@@ -24,15 +20,11 @@ async fn store_chapter_with_valid_body_passes() {
         "name": chapter.name,
         "volume": chapter.volume,
         "localizations": &chapter.localizations,
-    })
-    .to_string();
+    });
 
-    let req = Request::post(format!("/books/{book_id}/chapters"))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let resp = app.send(req).await;
+    let resp = app
+        .post_json(&format!("/books/{book_id}/chapters"), body)
+        .await;
     let id = assert_stored(resp).await;
 
     let got = app.fetch_chapter(id).await;
@@ -54,14 +46,12 @@ async fn store_chapter_with_only_a_number_passes() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
 
-    let body = serde_json::json!({ "number": 12.5 }).to_string();
-
-    let req = Request::post(format!("/books/{book_id}/chapters"))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let resp = app.send(req).await;
+    let resp = app
+        .post_json(
+            &format!("/books/{book_id}/chapters"),
+            serde_json::json!({ "number": 12.5 }),
+        )
+        .await;
     let id = assert_stored(resp).await;
 
     let got = app.fetch_chapter(id).await;
@@ -81,14 +71,12 @@ async fn store_chapter_with_duplicate_number_returns_409() {
 
     app.insert_chapter(&chapter).await;
 
-    let body = serde_json::json!({ "number": 7 }).to_string();
-
-    let req = Request::post(format!("/books/{book_id}/chapters"))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let resp = app.send(req).await;
+    let resp = app
+        .post_json(
+            &format!("/books/{book_id}/chapters"),
+            serde_json::json!({ "number": 7 }),
+        )
+        .await;
     assert_error(resp, StatusCode::CONFLICT).await;
 }
 
@@ -102,14 +90,12 @@ async fn store_chapter_reuses_a_number_taken_in_another_book() {
 
     app.insert_chapter(&chapter).await;
 
-    let body = serde_json::json!({ "number": 7 }).to_string();
-
-    let req = Request::post(format!("/books/{book_id}/chapters"))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let resp = app.send(req).await;
+    let resp = app
+        .post_json(
+            &format!("/books/{book_id}/chapters"),
+            serde_json::json!({ "number": 7 }),
+        )
+        .await;
     let id = assert_stored(resp).await;
 
     let got = app.fetch_chapter(id).await;
@@ -121,14 +107,12 @@ async fn store_chapter_reuses_a_number_taken_in_another_book() {
 async fn store_chapter_with_unknown_book_returns_404() {
     let app = TestApp::new().await;
 
-    let body = serde_json::json!({ "number": 1 }).to_string();
-
-    let req = Request::post(format!("/books/{}/chapters", uuid::Uuid::now_v7()))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let resp = app.send(req).await;
+    let resp = app
+        .post_json(
+            &format!("/books/{}/chapters", uuid::Uuid::now_v7()),
+            serde_json::json!({ "number": 1 }),
+        )
+        .await;
     assert_error(resp, StatusCode::NOT_FOUND).await;
 }
 
@@ -144,15 +128,11 @@ async fn store_chapter_with_repeated_localization_language_returns_422() {
             { "languageId": language.id, "name": "First" },
             { "languageId": language.id, "name": "Second" },
         ],
-    })
-    .to_string();
+    });
 
-    let req = Request::post(format!("/books/{book_id}/chapters"))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let resp = app.send(req).await;
+    let resp = app
+        .post_json(&format!("/books/{book_id}/chapters"), body)
+        .await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 
     let count = sqlx::query_scalar!(r#"select count(*) as "count!" from chapters"#)
@@ -168,12 +148,9 @@ async fn store_chapter_with_broken_json_returns_400() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
 
-    let req = Request::post(format!("/books/{book_id}/chapters"))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from("{not json"))
-        .unwrap();
-
-    let resp = app.send(req).await;
+    let resp = app
+        .post_raw(&format!("/books/{book_id}/chapters"), "{not json")
+        .await;
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
 
@@ -189,15 +166,10 @@ async fn get_chapter_with_valid_id_embeds_its_localizations() {
 
     app.insert_chapter(&chapter).await;
 
-    let req = Request::get(format!("/chapters/{}", chapter.id))
-        .body(Body::empty())
-        .unwrap();
-    let resp = app.send(req).await;
-    assert_eq!(resp.status(), StatusCode::OK);
-
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Chapter> = serde_json::from_slice(&bytes).unwrap();
-    let got = wrapper.data;
+    let got = app
+        .get_ok_json::<RespWrapper<Chapter>>(&format!("/chapters/{}", chapter.id))
+        .await
+        .data;
 
     assert_eq!(got.id, chapter.id);
     assert_eq!(got.book_id, book_id);
@@ -215,11 +187,9 @@ async fn get_chapter_with_valid_id_embeds_its_localizations() {
 async fn get_chapter_with_unknown_id_returns_404() {
     let app = TestApp::new().await;
 
-    let req = Request::get(format!("/chapters/{}", uuid::Uuid::now_v7()))
-        .body(Body::empty())
-        .unwrap();
-
-    let resp = app.send(req).await;
+    let resp = app
+        .get_raw(&format!("/chapters/{}", uuid::Uuid::now_v7()))
+        .await;
     assert_error(resp, StatusCode::NOT_FOUND).await;
 }
 
@@ -230,18 +200,12 @@ async fn get_chapter_resolves_without_a_book_scope() {
     let owner_id = app.insert_random_book().await;
     let chapter_id = app.insert_random_chapter(owner_id).await;
 
-    let req = Request::get(format!("/chapters/{chapter_id}"))
-        .body(Body::empty())
-        .unwrap();
-
-    let resp = app.send(req).await;
-    assert_eq!(resp.status(), StatusCode::OK);
-
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Chapter> = serde_json::from_slice(&bytes).unwrap();
+    let got = app
+        .get_ok_json::<RespWrapper<Chapter>>(&format!("/chapters/{chapter_id}"))
+        .await;
 
     assert_eq!(
-        wrapper.data.book_id, owner_id,
+        got.data.book_id, owner_id,
         "the flat route must name the owning book in the payload"
     );
 }
@@ -254,7 +218,9 @@ async fn get_chapters_defaults_to_descending_number_order() {
 
     app.insert_numbered_chapters(book_id, &numbers).await;
 
-    let listed = app.get_chapters(format!("/books/{book_id}/chapters")).await;
+    let listed = app
+        .get_chapters(&format!("/books/{book_id}/chapters"))
+        .await;
     let got: Vec<f32> = listed.data.iter().map(|c| c.number.as_f32()).collect();
 
     assert_eq!(got, vec![13.0, 12.5, 12.0, 0.0]);
@@ -269,7 +235,7 @@ async fn get_chapters_with_asc_order_reverses_the_page() {
     app.insert_numbered_chapters(book_id, &numbers).await;
 
     let listed = app
-        .get_chapters(format!("/books/{book_id}/chapters?order=Asc"))
+        .get_chapters(&format!("/books/{book_id}/chapters?order=Asc"))
         .await;
     let got: Vec<f32> = listed.data.iter().map(|c| c.number.as_f32()).collect();
 
@@ -285,7 +251,9 @@ async fn get_chapters_lists_only_its_own_books_chapters() {
     app.insert_numbered_chapters(book_id, &[1.0]).await;
     app.insert_numbered_chapters(other_book_id, &[1.0]).await;
 
-    let listed = app.get_chapters(format!("/books/{book_id}/chapters")).await;
+    let listed = app
+        .get_chapters(&format!("/books/{book_id}/chapters"))
+        .await;
 
     assert_eq!(listed.data.len(), 1);
     assert_eq!(listed.data[0].book_id, book_id);
@@ -299,7 +267,9 @@ async fn get_chapters_returns_default_limit_and_next_cursor() {
 
     app.insert_numbered_chapters(book_id, &numbers).await;
 
-    let listed = app.get_chapters(format!("/books/{book_id}/chapters")).await;
+    let listed = app
+        .get_chapters(&format!("/books/{book_id}/chapters"))
+        .await;
 
     assert_eq!(listed.data.len(), 20);
     assert!(listed.next_cursor.is_some());
@@ -314,7 +284,7 @@ async fn get_chapters_with_after_and_limit_3_returns_next_page() {
     app.insert_numbered_chapters(book_id, &numbers).await;
 
     let first = app
-        .get_chapters(format!("/books/{book_id}/chapters?limit=3"))
+        .get_chapters(&format!("/books/{book_id}/chapters?limit=3"))
         .await;
     let first_numbers: Vec<f32> = first.data.iter().map(|c| c.number.as_f32()).collect();
     let cursor = first.next_cursor.unwrap();
@@ -322,7 +292,7 @@ async fn get_chapters_with_after_and_limit_3_returns_next_page() {
     assert_eq!(first_numbers, vec![5.0, 4.0, 3.0]);
 
     let second = app
-        .get_chapters(format!("/books/{book_id}/chapters?limit=3&after={cursor}"))
+        .get_chapters(&format!("/books/{book_id}/chapters?limit=3&after={cursor}"))
         .await;
     let second_numbers: Vec<f32> = second.data.iter().map(|c| c.number.as_f32()).collect();
 
@@ -339,12 +309,12 @@ async fn get_chapters_with_after_walks_ascending_pages() {
     app.insert_numbered_chapters(book_id, &numbers).await;
 
     let first = app
-        .get_chapters(format!("/books/{book_id}/chapters?order=Asc&limit=2"))
+        .get_chapters(&format!("/books/{book_id}/chapters?order=Asc&limit=2"))
         .await;
     let cursor = first.next_cursor.unwrap();
 
     let second = app
-        .get_chapters(format!(
+        .get_chapters(&format!(
             "/books/{book_id}/chapters?order=Asc&limit=2&after={cursor}"
         ))
         .await;
@@ -361,7 +331,7 @@ async fn get_chapters_with_unknown_after_returns_an_empty_page() {
     app.insert_numbered_chapters(book_id, &[1.0, 2.0]).await;
 
     let listed = app
-        .get_chapters(format!(
+        .get_chapters(&format!(
             "/books/{book_id}/chapters?after={}",
             uuid::Uuid::now_v7()
         ))
@@ -393,7 +363,9 @@ async fn get_chapters_embeds_each_chapters_own_localizations() {
     app.insert_chapter(&bare).await;
     app.insert_chapter(&full).await;
 
-    let listed = app.get_chapters(format!("/books/{book_id}/chapters")).await;
+    let listed = app
+        .get_chapters(&format!("/books/{book_id}/chapters"))
+        .await;
 
     let got_bare = listed.data.iter().find(|c| c.id == bare.id).unwrap();
     assert!(got_bare.localizations.is_empty());
@@ -409,11 +381,9 @@ async fn get_chapters_embeds_each_chapters_own_localizations() {
 async fn get_chapters_with_unknown_book_returns_404() {
     let app = TestApp::new().await;
 
-    let req = Request::get(format!("/books/{}/chapters", uuid::Uuid::now_v7()))
-        .body(Body::empty())
-        .unwrap();
-
-    let resp = app.send(req).await;
+    let resp = app
+        .get_raw(&format!("/books/{}/chapters", uuid::Uuid::now_v7()))
+        .await;
     assert_error(resp, StatusCode::NOT_FOUND).await;
 }
 
@@ -422,11 +392,9 @@ async fn get_chapters_zero_limit_returns_422() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
 
-    let req = Request::get(format!("/books/{book_id}/chapters?limit=0"))
-        .body(Body::empty())
-        .unwrap();
-
-    let resp = app.send(req).await;
+    let resp = app
+        .get_raw(&format!("/books/{book_id}/chapters?limit=0"))
+        .await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
 
@@ -435,11 +403,9 @@ async fn get_chapters_unknown_order_returns_400() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
 
-    let req = Request::get(format!("/books/{book_id}/chapters?order=sideways"))
-        .body(Body::empty())
-        .unwrap();
-
-    let resp = app.send(req).await;
+    let resp = app
+        .get_raw(&format!("/books/{book_id}/chapters?order=sideways"))
+        .await;
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
 
@@ -448,11 +414,9 @@ async fn get_chapters_with_malformed_after_returns_400() {
     let app = TestApp::new().await;
     let book_id = app.insert_random_book().await;
 
-    let req = Request::get(format!("/books/{book_id}/chapters?after=not-a-uuid"))
-        .body(Body::empty())
-        .unwrap();
-
-    let resp = app.send(req).await;
+    let resp = app
+        .get_raw(&format!("/books/{book_id}/chapters?after=not-a-uuid"))
+        .await;
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
 
@@ -479,14 +443,11 @@ async fn update_chapter_with_valid_body_passes() {
         "name": updated.name,
         "volume": updated.volume,
         "localizations": &updated.localizations,
-    })
-    .to_string();
+    });
 
-    let req = Request::put(format!("/chapters/{}", chapter.id))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-    let resp = app.send(req).await;
+    let resp = app
+        .put_json(&format!("/chapters/{}", chapter.id), body)
+        .await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let got = app.fetch_chapter(chapter.id).await;
@@ -522,14 +483,11 @@ async fn update_chapter_with_empty_localizations_detaches_everything() {
     let body = serde_json::json!({
         "number": chapter.number,
         "localizations": [],
-    })
-    .to_string();
+    });
 
-    let req = Request::put(format!("/chapters/{}", chapter.id))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-    let resp = app.send(req).await;
+    let resp = app
+        .put_json(&format!("/chapters/{}", chapter.id), body)
+        .await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let sample = app.fetch_chapter_sample(chapter.id).await;
@@ -550,13 +508,12 @@ async fn update_chapter_renumbers_without_touching_other_chapters() {
     app.insert_chapter(&chapter).await;
     app.insert_chapter(&other).await;
 
-    let body = serde_json::json!({ "number": 1.5 }).to_string();
-
-    let req = Request::put(format!("/chapters/{}", chapter.id))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-    let resp = app.send(req).await;
+    let resp = app
+        .put_json(
+            &format!("/chapters/{}", chapter.id),
+            serde_json::json!({ "number": 1.5 }),
+        )
+        .await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let sample = app.fetch_chapter_sample(chapter.id).await;
@@ -580,14 +537,12 @@ async fn update_chapter_to_a_taken_number_returns_409() {
     app.insert_chapter(&chapter).await;
     app.insert_chapter(&other).await;
 
-    let body = serde_json::json!({ "number": 2 }).to_string();
-
-    let req = Request::put(format!("/chapters/{}", chapter.id))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let resp = app.send(req).await;
+    let resp = app
+        .put_json(
+            &format!("/chapters/{}", chapter.id),
+            serde_json::json!({ "number": 2 }),
+        )
+        .await;
     assert_error(resp, StatusCode::CONFLICT).await;
 }
 
@@ -595,14 +550,12 @@ async fn update_chapter_to_a_taken_number_returns_409() {
 async fn update_chapter_with_unknown_id_returns_404() {
     let app = TestApp::new().await;
 
-    let body = serde_json::json!({ "number": 1 }).to_string();
-
-    let req = Request::put(format!("/chapters/{}", uuid::Uuid::now_v7()))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let resp = app.send(req).await;
+    let resp = app
+        .put_json(
+            &format!("/chapters/{}", uuid::Uuid::now_v7()),
+            serde_json::json!({ "number": 1 }),
+        )
+        .await;
     assert_error(resp, StatusCode::NOT_FOUND).await;
 }
 
@@ -613,14 +566,12 @@ async fn update_chapter_leaves_the_owning_book_untouched() {
     let owner_id = app.insert_random_book().await;
     let chapter_id = app.insert_random_chapter(owner_id).await;
 
-    let body = serde_json::json!({ "number": 1 }).to_string();
-
-    let req = Request::put(format!("/chapters/{chapter_id}"))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let resp = app.send(req).await;
+    let resp = app
+        .put_json(
+            &format!("/chapters/{chapter_id}"),
+            serde_json::json!({ "number": 1 }),
+        )
+        .await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let got = app.fetch_chapter(chapter_id).await;
@@ -692,7 +643,7 @@ async fn delete_chapter_leaves_other_books_chapters_alone() {
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let listed = app
-        .get_chapters(format!("/books/{bystander_book_id}/chapters"))
+        .get_chapters(&format!("/books/{bystander_book_id}/chapters"))
         .await;
 
     assert_eq!(listed.data.len(), 1);
@@ -708,10 +659,7 @@ async fn delete_book_cascades_its_chapters() {
     let book_id = app.insert_random_book().await;
     let chapter_id = app.insert_random_chapter(book_id).await;
 
-    let req = Request::delete(format!("/books/{book_id}"))
-        .body(Body::empty())
-        .unwrap();
-    let resp = app.send(req).await;
+    let resp = app.delete_book(book_id).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let sample = app.fetch_chapter_sample(chapter_id).await;
