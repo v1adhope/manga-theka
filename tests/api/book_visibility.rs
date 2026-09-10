@@ -5,7 +5,7 @@ use http_body_util::BodyExt;
 use manga_theka::entity::{BookQuery, BookVisibility, Role};
 
 use crate::helpers::fakers::{BookFaker, COVER_JPG, COVER_PNG, EVERY_VISIBILITY};
-use crate::helpers::{RespWrapper, TestApp, assert_error};
+use crate::helpers::{RespWrapper, TestApp, assert_error, assert_stored};
 
 #[tokio::test]
 async fn store_book_starts_it_as_a_draft() {
@@ -21,19 +21,10 @@ async fn store_book_starts_it_as_a_draft() {
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
         "publicationDemographic": book.publication_demographic.as_ref(),
-    })
-    .to_string();
+    });
 
-    let req = Request::post("/books")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-    let resp = app.send(req).await;
-    assert_eq!(resp.status(), StatusCode::CREATED);
-
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    let id = uuid::Uuid::parse_str(v["data"]["id"].as_str().unwrap()).unwrap();
+    let resp = app.post_json("/books", body).await;
+    let id = assert_stored(resp).await;
 
     let state = app.fetch_book_visibility_state(id).await;
 
@@ -48,11 +39,7 @@ async fn get_books_returns_listed_books_only() {
         .await;
     app.insert_book_with_visibility(BookVisibility::Draft).await;
 
-    let resp = app.get_books("/books").await;
-    assert_eq!(resp.status(), StatusCode::OK);
-
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let page: RespWrapper<Vec<BookQuery>> = serde_json::from_slice(&bytes).unwrap();
+    let page = app.get_books_page("/books").await;
     let ids: Vec<uuid::Uuid> = page.data.iter().map(|b| b.id).collect();
 
     assert_eq!(ids, vec![listed]);
@@ -79,7 +66,7 @@ async fn get_books_with_a_visibility_overrides_the_default_filter() {
 async fn get_books_with_an_unknown_visibility_returns_400() {
     let app = TestApp::new().await;
 
-    let resp = app.get_books("/books?visibility=Published").await;
+    let resp = app.get_raw("/books?visibility=Published").await;
 
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
@@ -164,10 +151,7 @@ async fn get_chapter_pages_of_an_unlisted_book_returns_404() {
         let release_id = app.insert_random_release(book_id, chapter_id).await;
         app.insert_page(release_id, Some(1), COVER_PNG).await;
 
-        let req = Request::get(format!("/releases/{release_id}/pages"))
-            .body(Body::empty())
-            .unwrap();
-        let resp = app.send_raw(req).await;
+        let resp = app.get_pages(release_id).await;
 
         let expected = match visibility {
             BookVisibility::Listed => StatusCode::OK,
@@ -187,15 +171,8 @@ async fn get_chapter_page_of_an_unlisted_book_returns_404() {
         let release_id = app.insert_random_release(book_id, chapter_id).await;
         let page_id = app.insert_page(release_id, Some(1), COVER_PNG).await;
 
-        let by_number = Request::get(format!("/releases/{release_id}/pages/1"))
-            .body(Body::empty())
-            .unwrap();
-        let by_id = Request::get(format!("/releases/{release_id}/pages/{page_id}/image"))
-            .body(Body::empty())
-            .unwrap();
-
-        let number_status = app.send_raw(by_number).await.status();
-        let image_status = app.send_raw(by_id).await.status();
+        let number_status = app.get_page(release_id, 1).await.status();
+        let image_status = app.get_page_image(release_id, page_id).await.status();
 
         let expected = match visibility {
             BookVisibility::Listed => StatusCode::FOUND,
@@ -451,11 +428,12 @@ async fn update_book_visibility_with_an_unknown_id_returns_404() {
 async fn update_book_visibility_with_a_malformed_id_returns_400() {
     let app = TestApp::new().await;
 
-    let req = Request::put("/books/not-a-uuid/visibility")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(r#"{"visibility":"Hidden","note":"why"}"#))
-        .unwrap();
-    let resp = app.send(req).await;
+    let resp = app
+        .put_json(
+            "/books/not-a-uuid/visibility",
+            serde_json::json!({ "visibility": "Hidden", "note": "why" }),
+        )
+        .await;
 
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
@@ -481,13 +459,11 @@ async fn book_writes_are_refused_unless_the_book_is_draft_or_listed() {
             "kind": book.kind.as_ref(),
             "publicationLanguageId": book.publication_language.id,
             "publicationDemographic": book.publication_demographic.as_ref(),
-        })
-        .to_string();
-        let req = Request::put(format!("/books/{}", book.id))
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(body))
-            .unwrap();
-        let update = app.send(req).await.status();
+        });
+        let update = app
+            .put_json(&format!("/books/{}", book.id), body)
+            .await
+            .status();
 
         let cover = app.post_cover(book.id, COVER_PNG).await.status();
 

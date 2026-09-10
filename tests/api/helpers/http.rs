@@ -134,10 +134,6 @@ impl TestApp {
             .await
     }
 
-    pub async fn get_books(&self, path: &str) -> Response {
-        self.get_raw(path).await
-    }
-
     pub async fn get_body(&self, path: &str) -> (StatusCode, String) {
         let resp = self.get_raw(path).await;
         let status = resp.status();
