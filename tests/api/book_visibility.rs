@@ -339,8 +339,6 @@ async fn a_broken_bearer_token_reads_as_anonymous_on_public_routes_and_401s_on_g
         .fixture_insert_page(release_id, Some(1), COVER_PNG)
         .await;
 
-    // A garbage or stale token never grants privilege, but on a public route it
-    // must not lock the caller out either -- it reads exactly as anonymous.
     for (path, expected) in [
         (format!("/covers/{cover_id}/image"), StatusCode::FOUND),
         (format!("/releases/{release_id}/pages"), StatusCode::OK),
@@ -362,7 +360,6 @@ async fn a_broken_bearer_token_reads_as_anonymous_on_public_routes_and_401s_on_g
         );
     }
 
-    // A gated route still refuses it.
     let gated = Request::get("/sessions/me")
         .header(header::AUTHORIZATION, "Bearer not-a-real-jwt")
         .body(Body::empty())
