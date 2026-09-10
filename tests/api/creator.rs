@@ -1,8 +1,4 @@
-use axum::{
-    body::Body,
-    http::{Request, StatusCode, header},
-};
-use http_body_util::BodyExt;
+use axum::http::StatusCode;
 use time::OffsetDateTime;
 
 use crate::helpers::fakers::CreatorFaker;
@@ -13,17 +9,13 @@ use manga_theka::entity::{Creator, CreatorQuery, CreatorRole};
 #[tokio::test]
 async fn store_creator_with_valid_body_passes() {
     let app = TestApp::new().await;
-    let body = serde_json::json!({
-        "firstName": "John",
-        "lastName": "Doe",
-    })
-    .to_string();
-    let req = Request::post("/creators")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
 
-    let resp = app.send(req).await;
+    let resp = app
+        .post_json(
+            "/creators",
+            serde_json::json!({ "firstName": "John", "lastName": "Doe" }),
+        )
+        .await;
     let id = assert_stored(resp).await;
 
     let row = sqlx::query!("select id, first_name, last_name, created_at from creators",)
@@ -40,12 +32,8 @@ async fn store_creator_with_valid_body_passes() {
 #[tokio::test]
 async fn store_creator_with_broken_json_returns_400() {
     let app = TestApp::new().await;
-    let req = Request::post("/creators")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from("{not json"))
-        .unwrap();
 
-    let resp = app.send(req).await;
+    let resp = app.post_raw("/creators", "{not json").await;
 
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
@@ -53,16 +41,10 @@ async fn store_creator_with_broken_json_returns_400() {
 #[tokio::test]
 async fn store_creator_with_missing_first_name_returns_422() {
     let app = TestApp::new().await;
-    let body = serde_json::json!({
-        "lastName": "Doe",
-    })
-    .to_string();
-    let req = Request::post("/creators")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
 
-    let resp = app.send(req).await;
+    let resp = app
+        .post_json("/creators", serde_json::json!({ "lastName": "Doe" }))
+        .await;
 
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
@@ -74,18 +56,12 @@ async fn update_creator_with_valid_body_passes() {
 
     app.insert_creator(&creator).await;
 
-    let body = serde_json::json!({
-        "firstName": "Updated",
-        "lastName": "Name",
-    })
-    .to_string();
-
-    let req = Request::put(format!("/creators/{}", creator.id))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let resp = app.send(req).await;
+    let resp = app
+        .put_json(
+            &format!("/creators/{}", creator.id),
+            serde_json::json!({ "firstName": "Updated", "lastName": "Name" }),
+        )
+        .await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let row = sqlx::query!("select first_name, last_name, created_at from creators")
@@ -110,17 +86,12 @@ async fn update_creator_leaves_other_creators_untouched() {
     app.insert_creator(&creator).await;
     app.insert_creator(&other_creator).await;
 
-    let body = serde_json::json!({
-        "firstName": "Updated",
-        "lastName": "Name",
-    })
-    .to_string();
-    let req = Request::put(format!("/creators/{}", creator.id))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let resp = app.send(req).await;
+    let resp = app
+        .put_json(
+            &format!("/creators/{}", creator.id),
+            serde_json::json!({ "firstName": "Updated", "lastName": "Name" }),
+        )
+        .await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let row = sqlx::query!(
@@ -143,17 +114,12 @@ async fn update_creator_leaves_other_creators_untouched() {
 async fn update_creator_with_unknown_id_returns_404() {
     let app = TestApp::new().await;
 
-    let body = serde_json::json!({
-        "firstName": "Updated",
-        "lastName": "Name",
-    })
-    .to_string();
-    let req = Request::put(format!("/creators/{}", uuid::Uuid::now_v7()))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let resp = app.send(req).await;
+    let resp = app
+        .put_json(
+            &format!("/creators/{}", uuid::Uuid::now_v7()),
+            serde_json::json!({ "firstName": "Updated", "lastName": "Name" }),
+        )
+        .await;
     assert_error(resp, StatusCode::NOT_FOUND).await;
 }
 
@@ -166,17 +132,15 @@ async fn update_creator_fullname_duplication_returns_409() {
     app.insert_creator(&creator).await;
     app.insert_creator(&another_creator).await;
 
-    let body = serde_json::json!({
-        "firstName": creator.first_name.as_ref(),
-        "lastName": creator.last_name.as_ref(),
-    })
-    .to_string();
-    let req = Request::put(format!("/creators/{}", another_creator.id))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let resp = app.send(req).await;
+    let resp = app
+        .put_json(
+            &format!("/creators/{}", another_creator.id),
+            serde_json::json!({
+                "firstName": creator.first_name.as_ref(),
+                "lastName": creator.last_name.as_ref(),
+            }),
+        )
+        .await;
     assert_error(resp, StatusCode::CONFLICT).await;
 }
 
@@ -187,18 +151,12 @@ async fn update_creator_name_validation_failure_returns_422() {
 
     app.insert_creator(&creator).await;
 
-    let body = serde_json::json!({
-        "firstName": "John123",
-        "lastName": "Doe",
-    })
-    .to_string();
-
-    let req = Request::put(format!("/creators/{}", creator.id))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let resp = app.send(req).await;
+    let resp = app
+        .put_json(
+            &format!("/creators/{}", creator.id),
+            serde_json::json!({ "firstName": "John123", "lastName": "Doe" }),
+        )
+        .await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
 
@@ -209,12 +167,10 @@ async fn get_creator_with_valid_id_passes() {
 
     app.insert_creator(&creator).await;
 
-    let resp = app.get_creator(creator.id).await;
-    assert_eq!(resp.status(), StatusCode::OK);
-
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<CreatorQuery> = serde_json::from_slice(&bytes).unwrap();
-    let got = wrapper.data;
+    let got = app
+        .get_ok_json::<RespWrapper<CreatorQuery>>(&format!("/creators/{}", creator.id))
+        .await
+        .data;
 
     assert_eq!(got.id, creator.id);
     assert_eq!(got.first_name, creator.first_name);
@@ -250,13 +206,12 @@ async fn get_creator_returns_distinct_roles_credited_across_books() {
     app.credit_creator(book_c, creator.id, CreatorRole::Author)
         .await;
 
-    let resp = app.get_creator(creator.id).await;
-    assert_eq!(resp.status(), StatusCode::OK);
+    let data = app
+        .get_ok_json::<RespWrapper<CreatorQuery>>(&format!("/creators/{}", creator.id))
+        .await
+        .data;
 
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<CreatorQuery> = serde_json::from_slice(&bytes).unwrap();
-
-    let mut roles: Vec<&str> = wrapper.data.roles.iter().map(AsRef::as_ref).collect();
+    let mut roles: Vec<&str> = data.roles.iter().map(AsRef::as_ref).collect();
     roles.sort();
     assert_eq!(roles, vec!["Artist", "Author"]);
 }
@@ -270,15 +225,12 @@ async fn get_creators_returns_default_limit_and_next_cursor() {
         app.insert_creator(&creator).await;
     }
 
-    let req = Request::get("/creators").body(Body::empty()).unwrap();
-    let resp = app.send(req).await;
-    assert_eq!(resp.status(), StatusCode::OK);
+    let page = app
+        .get_ok_json::<RespWrapper<Vec<CreatorQuery>>>("/creators")
+        .await;
 
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let resp: RespWrapper<Vec<CreatorQuery>> = serde_json::from_slice(&bytes).unwrap();
-
-    assert_eq!(resp.data.len(), 20);
-    assert!(resp.next_cursor.is_some());
+    assert_eq!(page.data.len(), 20);
+    assert!(page.next_cursor.is_some());
 }
 
 #[tokio::test]
@@ -290,32 +242,22 @@ async fn get_creators_with_after_and_limit_3_returns_next_page() {
         app.insert_creator(&creator).await;
     }
 
-    let req = Request::get("/creators?limit=3")
-        .body(Body::empty())
-        .unwrap();
-    let resp = app.send(req).await;
-    assert_eq!(resp.status(), StatusCode::OK);
+    let first = app
+        .get_ok_json::<RespWrapper<Vec<CreatorQuery>>>("/creators?limit=3")
+        .await;
 
-    let body = resp.into_body().collect().await.unwrap().to_bytes();
-    let resp: RespWrapper<Vec<CreatorQuery>> = serde_json::from_slice(&body).unwrap();
+    let ids: Vec<uuid::Uuid> = first.data.iter().map(|c| c.id).collect();
+    let cursor = first.next_cursor.unwrap();
 
-    let ids: Vec<uuid::Uuid> = resp.data.iter().map(|c| c.id).collect();
-    let cursor = resp.next_cursor.unwrap();
+    let second = app
+        .get_ok_json::<RespWrapper<Vec<CreatorQuery>>>(&format!("/creators?limit=3&after={cursor}"))
+        .await;
 
-    let second_req = Request::get(format!("/creators?limit=3&after={cursor}"))
-        .body(Body::empty())
-        .unwrap();
-    let second_resp = app.send(second_req).await;
-    assert_eq!(second_resp.status(), StatusCode::OK);
-
-    let second_body = second_resp.into_body().collect().await.unwrap().to_bytes();
-    let second_resp: RespWrapper<Vec<CreatorQuery>> = serde_json::from_slice(&second_body).unwrap();
-
-    let second_ids: Vec<uuid::Uuid> = second_resp.data.iter().map(|c| c.id).collect();
+    let second_ids: Vec<uuid::Uuid> = second.data.iter().map(|c| c.id).collect();
 
     assert_eq!(second_ids.len(), 3);
     assert!(second_ids.iter().all(|id| !ids.contains(id)));
-    assert!(second_resp.next_cursor.is_none());
+    assert!(second.next_cursor.is_none());
 }
 
 #[tokio::test]
@@ -330,11 +272,10 @@ async fn get_creators_desc_order_confirmed() {
     }
     ids.sort_by(|a, b| b.cmp(a));
 
-    let req = Request::get("/creators").body(Body::empty()).unwrap();
-    let resp = app.send(req).await;
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let resp: RespWrapper<Vec<CreatorQuery>> = serde_json::from_slice(&bytes).unwrap();
-    let returned_ids: Vec<uuid::Uuid> = resp.data.iter().map(|c| c.id).collect();
+    let page = app
+        .get_ok_json::<RespWrapper<Vec<CreatorQuery>>>("/creators")
+        .await;
+    let returned_ids: Vec<uuid::Uuid> = page.data.iter().map(|c| c.id).collect();
     assert_eq!(returned_ids, ids);
 }
 
@@ -346,10 +287,7 @@ async fn get_creators_next_cursor_null_on_last_page() {
         app.insert_creator(&CreatorFaker.fake()).await;
     }
 
-    let req = Request::get("/creators").body(Body::empty()).unwrap();
-    let resp = app.send(req).await;
-    let body = resp.into_body().collect().await.unwrap().to_bytes();
-    let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let v = app.get_ok_json::<serde_json::Value>("/creators").await;
     assert!(v["nextCursor"].is_null());
 }
 
@@ -357,11 +295,7 @@ async fn get_creators_next_cursor_null_on_last_page() {
 async fn get_creators_invalid_limit_returns_400() {
     let app = TestApp::new().await;
 
-    let req = Request::get("/creators?limit=abc")
-        .body(Body::empty())
-        .unwrap();
-
-    let resp = app.send(req).await;
+    let resp = app.get_raw("/creators?limit=abc").await;
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
 
@@ -369,11 +303,7 @@ async fn get_creators_invalid_limit_returns_400() {
 async fn get_creators_zero_limit_returns_422() {
     let app = TestApp::new().await;
 
-    let req = Request::get("/creators?limit=0")
-        .body(Body::empty())
-        .unwrap();
-
-    let resp = app.send(req).await;
+    let resp = app.get_raw("/creators?limit=0").await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
 
@@ -381,11 +311,7 @@ async fn get_creators_zero_limit_returns_422() {
 async fn get_creators_invalid_after_returns_400() {
     let app = TestApp::new().await;
 
-    let req = Request::get("/creators?after=not-a-uuid")
-        .body(Body::empty())
-        .unwrap();
-
-    let resp = app.send(req).await;
+    let resp = app.get_raw("/creators?after=not-a-uuid").await;
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
 
