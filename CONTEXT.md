@@ -34,11 +34,11 @@ _Avoid_: Permission, scope, claim
 The default `Role` on signup; gates personal features -- creating and managing bookmark lists, managing one's own account, and proposing a new `Book` as a `Draft` and sending it for review (see `Book Visibility`).
 
 **Uploader**:
-A `Role` gating content writes -- editing an already-`Listed` `Book` and uploading its `Chapter`s, `Chapter Release`s, and `Chapter Page`s, none of which requires moderation. Any `Uploader` may create a `Chapter Release`, but only its `Created By` (or a `Moderator+`) may then stage pages into it, commit it, or delete it -- an `Uploader` cannot change or delete another `User`'s `Chapter Release`.
+A `Role` gating content writes -- editing an already-`Listed` `Book` and uploading its `Chapter`s, `Chapter Release`s, and `Chapter Page`s, none of which requires moderation. Any `Uploader` may create a `Chapter Release`, but mutating one -- staging pages, committing, deleting -- is its `Created By`'s alone (see `Created By`).
 _Avoid_: Mod, Contributor (as a separate concept)
 
 **Moderator**:
-A content-supervisor `Role` gating content moderation -- reviewing, hiding, handling reports. Only a `Moderator+` can change another `User`'s roles: a `Moderator` may grant or revoke the `Uploader` role. Overrides the `Created By` restriction on a `Chapter Release`: may change or delete any one, not only its own.
+A content-supervisor `Role` gating content moderation -- reviewing, hiding, handling reports. Only a `Moderator+` can change another `User`'s roles: a `Moderator` may grant or revoke the `Uploader` role.
 _Avoid_: Mod
 
 **Admin**:
@@ -137,7 +137,7 @@ The physical position of a `Chapter Page` within its `Chapter Release`, starting
 _Avoid_: Number, Position, Rank (see `Chapter Number` for the semantic counterpart)
 
 **Chapter Release**:
-A single-language, ordered set of `Chapter Page`s belonging to a `Chapter`. A `Chapter` may have multiple Releases -- different languages, or competing releases in the same language. Its `Chapter` and language are fixed after creation; its pages are changed by declaring a new whole order. Carries a revision counter starting at 1, bumped once each time a new order is committed and never on upload; it is never set by hand. Published once it holds at least one `Chapter Page`; listed for its `Chapter` from creation regardless, so one that has never been committed appears with a zero page count. Always a translation -- its language can never be the `Book`'s original publication language. Carries a `Created By` fixed at creation -- the `User` who, a `Moderator+` aside, alone may change or delete it.
+A single-language, ordered set of `Chapter Page`s belonging to a `Chapter`. A `Chapter` may have multiple Releases -- different languages, or competing releases in the same language. Its `Chapter` and language are fixed after creation; its pages are changed by declaring a new whole order. Carries a revision counter starting at 1, bumped once each time a new order is committed and never on upload; it is never set by hand. Published once it holds at least one `Chapter Page`; listed for its `Chapter` from creation regardless, so one that has never been committed appears with a zero page count. Always a translation -- its language can never be the `Book`'s original publication language. Carries a `Created By` fixed at creation (see `Created By`).
 _Avoid_: Scan, Scanlation, Version, Draft (for an unpublished one)
 
 **Chapter Page**:
