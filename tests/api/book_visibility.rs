@@ -104,26 +104,72 @@ async fn get_book_reads_a_book_in_every_visibility_for_a_moderator() {
 }
 
 #[tokio::test]
-async fn get_book_outside_listed_reads_as_missing_for_non_moderators() {
+async fn get_book_serves_a_hidden_book_to_anyone() {
     let app = TestApp::new().await;
-    let absent = uuid::Uuid::now_v7();
+    let id = app
+        .db_insert_book_with_visibility(BookVisibility::Hidden)
+        .await;
 
-    for visibility in EVERY_VISIBILITY {
-        if visibility == BookVisibility::Listed {
-            continue;
-        }
+    let (status, _) = app.get_body(&format!("/books/{id}")).await;
 
+    assert_eq!(status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn get_book_in_a_private_state_is_forbidden_for_non_owners() {
+    let app = TestApp::new().await;
+
+    for visibility in [
+        BookVisibility::Draft,
+        BookVisibility::PendingReview,
+        BookVisibility::Rejected,
+    ] {
         let id = app.db_insert_book_with_visibility(visibility).await;
 
         let anon = app.get_body(&format!("/books/{id}")).await;
         let reader = app
             .get_body_as(&format!("/books/{id}"), &[Role::Reader, Role::Uploader])
             .await;
-        let missing = app.get_body(&format!("/books/{absent}")).await;
 
-        assert_eq!(anon.0, StatusCode::NOT_FOUND, "anon while {visibility}");
-        assert_eq!(reader.0, StatusCode::NOT_FOUND, "reader while {visibility}");
-        assert_eq!(anon, missing, "{visibility} must not reveal that it exists");
+        assert_eq!(anon.0, StatusCode::FORBIDDEN, "anon while {visibility}");
+        assert_eq!(reader.0, StatusCode::FORBIDDEN, "reader while {visibility}");
+        assert!(
+            anon.1.contains(visibility.as_ref()),
+            "the {visibility} refusal body must name the blocking state, got {:?}",
+            anon.1
+        );
+    }
+}
+
+#[tokio::test]
+async fn get_book_in_a_private_state_serves_its_creator() {
+    let app = TestApp::new().await;
+    let creator = app.db_seed_user(&[Role::Reader]).await;
+
+    for visibility in [
+        BookVisibility::Draft,
+        BookVisibility::PendingReview,
+        BookVisibility::Rejected,
+    ] {
+        let id = app.db_insert_book_as(visibility, creator.id).await;
+
+        let stray = app
+            .get_body_as(&format!("/books/{id}"), &[Role::Reader])
+            .await;
+        assert_eq!(
+            stray.0,
+            StatusCode::FORBIDDEN,
+            "a stray reader is still refused a {visibility} book"
+        );
+
+        let owned = app
+            .get_as_user(&format!("/books/{id}"), creator.id, &[Role::Reader])
+            .await;
+        assert_eq!(
+            owned.status(),
+            StatusCode::OK,
+            "the creator reads their own {visibility} book"
+        );
     }
 }
 
@@ -147,7 +193,7 @@ async fn get_book_carries_its_review_fields() {
 }
 
 #[tokio::test]
-async fn get_chapter_pages_of_an_unlisted_book_returns_404() {
+async fn get_chapter_pages_are_public_only_while_the_book_is_listed() {
     let app = TestApp::new().await;
 
     for visibility in EVERY_VISIBILITY {
@@ -161,14 +207,14 @@ async fn get_chapter_pages_of_an_unlisted_book_returns_404() {
 
         let expected = match visibility {
             BookVisibility::Listed => StatusCode::OK,
-            _ => StatusCode::NOT_FOUND,
+            _ => StatusCode::FORBIDDEN,
         };
         assert_eq!(resp.status(), expected, "pages of a {visibility} book");
     }
 }
 
 #[tokio::test]
-async fn get_chapter_page_of_an_unlisted_book_returns_404() {
+async fn get_chapter_page_is_public_only_while_the_book_is_listed() {
     let app = TestApp::new().await;
 
     for visibility in EVERY_VISIBILITY {
@@ -184,7 +230,7 @@ async fn get_chapter_page_of_an_unlisted_book_returns_404() {
 
         let expected = match visibility {
             BookVisibility::Listed => StatusCode::FOUND,
-            _ => StatusCode::NOT_FOUND,
+            _ => StatusCode::FORBIDDEN,
         };
         assert_eq!(
             number_status, expected,
@@ -195,7 +241,7 @@ async fn get_chapter_page_of_an_unlisted_book_returns_404() {
 }
 
 #[tokio::test]
-async fn get_cover_image_of_an_unlisted_book_returns_404() {
+async fn get_cover_image_follows_the_record_tier() {
     let app = TestApp::new().await;
 
     for visibility in EVERY_VISIBILITY {
@@ -204,9 +250,10 @@ async fn get_cover_image_of_an_unlisted_book_returns_404() {
 
         let resp = app.get_cover_image(cover_id).await;
 
-        let expected = match visibility {
-            BookVisibility::Listed => StatusCode::FOUND,
-            _ => StatusCode::NOT_FOUND,
+        let expected = if visibility.is_publicly_listable() {
+            StatusCode::FOUND
+        } else {
+            StatusCode::FORBIDDEN
         };
         assert_eq!(resp.status(), expected, "cover of a {visibility} book");
     }
@@ -258,12 +305,11 @@ async fn a_moderator_reads_content_in_every_visibility() {
 }
 
 #[tokio::test]
-async fn a_withheld_resource_is_indistinguishable_from_a_missing_one() {
+async fn a_withheld_page_resource_answers_403_while_a_missing_one_answers_404() {
     let app = TestApp::new().await;
     let book_id = app
         .db_insert_book_with_visibility(BookVisibility::Hidden)
         .await;
-    let cover_id = app.fixture_insert_cover(book_id, COVER_PNG).await;
     let chapter_id = app.db_insert_random_chapter(book_id).await;
     let release_id = app.db_insert_random_release(book_id, chapter_id).await;
     let page_id = app
@@ -271,32 +317,62 @@ async fn a_withheld_resource_is_indistinguishable_from_a_missing_one() {
         .await;
     let absent = uuid::Uuid::now_v7();
 
-    for (withheld, missing) in [
-        (
-            format!("/covers/{cover_id}/image"),
-            format!("/covers/{absent}/image"),
-        ),
-        (
-            format!("/releases/{release_id}/pages"),
-            format!("/releases/{absent}/pages"),
-        ),
-        (
-            format!("/releases/{release_id}/pages/{page_id}/image"),
-            format!("/releases/{release_id}/pages/{absent}/image"),
-        ),
-        (
-            format!("/releases/{release_id}/pages/1"),
-            format!("/releases/{release_id}/pages/9"),
-        ),
+    // A hidden book withholds its page content: 403, naming the state.
+    for withheld in [
+        format!("/releases/{release_id}/pages"),
+        format!("/releases/{release_id}/pages/1"),
+        format!("/releases/{release_id}/pages/{page_id}/image"),
     ] {
-        let withheld_body = app.get_body(&withheld).await;
-        let missing_body = app.get_body(&missing).await;
+        let (status, body) = app.get_body(&withheld).await;
 
-        assert_eq!(
-            withheld_body, missing_body,
-            "{withheld} must not reveal that it exists"
+        assert_eq!(status, StatusCode::FORBIDDEN, "{withheld}");
+        assert!(
+            body.contains("Hidden"),
+            "{withheld} must name the blocking state, got {body:?}"
         );
     }
+
+    // Standing is resolved before sub-resource existence: an absent page id or
+    // number behind a withheld release is still 403, not 404.
+    for still_withheld in [
+        format!("/releases/{release_id}/pages/9"),
+        format!("/releases/{release_id}/pages/{absent}/image"),
+    ] {
+        let status = app.get_raw(&still_withheld).await.status();
+        assert_eq!(status, StatusCode::FORBIDDEN, "{still_withheld}");
+    }
+
+    // An entirely absent release is a genuine 404.
+    let missing = app
+        .get_raw(&format!("/releases/{absent}/pages"))
+        .await
+        .status();
+    assert_eq!(missing, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn a_moderator_reaches_a_missing_page_behind_a_withheld_release_as_404() {
+    let app = TestApp::new().await;
+    let book_id = app
+        .db_insert_book_with_visibility(BookVisibility::Hidden)
+        .await;
+    let chapter_id = app.db_insert_random_chapter(book_id).await;
+    let release_id = app.db_insert_random_release(book_id, chapter_id).await;
+    app.fixture_insert_page(release_id, Some(1), COVER_PNG)
+        .await;
+    let absent = uuid::Uuid::now_v7();
+
+    let by_number = app
+        .get_as_moderator(&format!("/releases/{release_id}/pages/9"))
+        .await
+        .status();
+    let by_id = app
+        .get_as_moderator(&format!("/releases/{release_id}/pages/{absent}/image"))
+        .await
+        .status();
+
+    assert_eq!(by_number, StatusCode::NOT_FOUND);
+    assert_eq!(by_id, StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
@@ -323,7 +399,7 @@ async fn a_reader_role_does_not_unlock_unlisted_content() {
         .unwrap();
     let resp = app.send_raw(req).await;
 
-    assert_error(resp, StatusCode::NOT_FOUND).await;
+    assert_error(resp, StatusCode::FORBIDDEN).await;
 }
 
 #[tokio::test]
@@ -370,12 +446,21 @@ async fn a_broken_bearer_token_reads_as_anonymous_on_public_routes_and_401s_on_g
 #[tokio::test]
 async fn update_book_visibility_rejects_an_untabled_move() {
     let app = TestApp::new().await;
+    let creator = app.db_seed_user(&[Role::Reader]).await;
     let id = app
-        .db_insert_book_with_visibility(BookVisibility::Listed)
+        .db_insert_book_as(BookVisibility::Listed, creator.id)
         .await;
 
+    // The creator clears the standing check, so the untabled Listed -> PendingReview
+    // move is what the domain guard refuses.
     let resp = app
-        .put_visibility(id, "PendingReview", Some("because"))
+        .json_as_user(
+            axum::http::Method::PUT,
+            &format!("/books/{id}/visibility"),
+            serde_json::json!({ "visibility": "PendingReview", "note": "because" }),
+            creator.id,
+            &[Role::Reader],
+        )
         .await;
 
     assert_error(resp, StatusCode::CONFLICT).await;
@@ -581,4 +666,223 @@ async fn delete_book_is_allowed_in_every_visibility() {
             "removal must never be blocked, not even while {visibility}"
         );
     }
+}
+
+fn book_body(book: &BookQuery) -> serde_json::Value {
+    serde_json::json!({
+        "name": book.name.as_ref(),
+        "description": book.description.as_ref(),
+        "publicationYear": book.publication_year,
+        "contentRatingId": book.content_rating.id,
+        "status": book.status.as_ref(),
+        "kind": book.kind.as_ref(),
+        "publicationLanguageId": book.publication_language.id,
+        "publicationDemographic": book.publication_demographic.as_ref(),
+    })
+}
+
+#[tokio::test]
+async fn get_books_with_visibility_hidden_is_public() {
+    let app = TestApp::new().await;
+    let hidden = app
+        .db_insert_book_with_visibility(BookVisibility::Hidden)
+        .await;
+    app.db_insert_book_with_visibility(BookVisibility::Listed)
+        .await;
+
+    let page = app.get_books_page("/books?visibility=Hidden").await;
+    let ids: Vec<uuid::Uuid> = page.data.iter().map(|b| b.id).collect();
+
+    assert_eq!(ids, vec![hidden]);
+}
+
+#[tokio::test]
+async fn get_books_with_a_restricted_visibility_is_forbidden_for_a_guest() {
+    let app = TestApp::new().await;
+
+    for visibility in ["Draft", "PendingReview", "Rejected"] {
+        let resp = app
+            .get_raw(&format!("/books?visibility={visibility}"))
+            .await;
+
+        assert_error(resp, StatusCode::FORBIDDEN).await;
+    }
+}
+
+#[tokio::test]
+async fn the_book_creator_reads_the_record_and_its_children_in_a_private_state() {
+    let app = TestApp::new().await;
+    let book_creator = app.db_seed_user(&[Role::Reader]).await;
+    let release_creator = app.db_seed_user(&[Role::Uploader]).await;
+
+    let book_id = app
+        .db_insert_book_as(BookVisibility::Draft, book_creator.id)
+        .await;
+    let cover_id = app.fixture_insert_cover(book_id, COVER_PNG).await;
+    let chapter_id = app.db_insert_random_chapter(book_id).await;
+    let language_id = app.db_non_publication_language(book_id).await;
+    let release_id = app
+        .db_insert_release_as(chapter_id, language_id, release_creator.id)
+        .await;
+
+    let cid = book_creator.id;
+    let readable = [
+        (format!("/books/{book_id}"), StatusCode::OK),
+        (format!("/books/{book_id}/covers"), StatusCode::OK),
+        (format!("/covers/{cover_id}/image"), StatusCode::FOUND),
+        (format!("/books/{book_id}/chapters"), StatusCode::OK),
+        (format!("/chapters/{chapter_id}"), StatusCode::OK),
+        (format!("/chapters/{chapter_id}/releases"), StatusCode::OK),
+        // ...but not a release they did not create, nor its page content.
+        (format!("/releases/{release_id}"), StatusCode::FORBIDDEN),
+        (
+            format!("/releases/{release_id}/pages"),
+            StatusCode::FORBIDDEN,
+        ),
+    ];
+
+    for (path, expected) in readable {
+        let status = app.get_as_user(&path, cid, &[Role::Reader]).await.status();
+        assert_eq!(status, expected, "book creator on {path}");
+    }
+}
+
+#[tokio::test]
+async fn the_release_creator_reads_their_release_and_its_pages_while_hidden() {
+    let app = TestApp::new().await;
+    let release_creator = app.db_seed_user(&[Role::Uploader]).await;
+
+    let book_id = app
+        .db_insert_book_with_visibility(BookVisibility::Hidden)
+        .await;
+    let chapter_id = app.db_insert_random_chapter(book_id).await;
+    let language_id = app.db_non_publication_language(book_id).await;
+    let release_id = app
+        .db_insert_release_as(chapter_id, language_id, release_creator.id)
+        .await;
+    let page_id = app
+        .fixture_insert_page(release_id, Some(1), COVER_PNG)
+        .await;
+
+    let record = app
+        .get_as_user(
+            &format!("/releases/{release_id}"),
+            release_creator.id,
+            &[Role::Uploader],
+        )
+        .await
+        .status();
+    let pages = app
+        .get_as_user(
+            &format!("/releases/{release_id}/pages"),
+            release_creator.id,
+            &[Role::Uploader],
+        )
+        .await
+        .status();
+    let image = app
+        .get_as_user(
+            &format!("/releases/{release_id}/pages/{page_id}/image"),
+            release_creator.id,
+            &[Role::Uploader],
+        )
+        .await
+        .status();
+    let staged = app
+        .get_as_user(
+            &format!("/releases/{release_id}/pages?status=Staged"),
+            release_creator.id,
+            &[Role::Uploader],
+        )
+        .await
+        .status();
+
+    assert_eq!(record, StatusCode::OK);
+    assert_eq!(pages, StatusCode::OK);
+    assert_eq!(image, StatusCode::FOUND);
+    assert_eq!(staged, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn the_staged_page_list_is_forbidden_to_a_guest_even_while_listed() {
+    let app = TestApp::new().await;
+    let book_id = app
+        .db_insert_book_with_visibility(BookVisibility::Listed)
+        .await;
+    let chapter_id = app.db_insert_random_chapter(book_id).await;
+    let release_id = app.db_insert_random_release(book_id, chapter_id).await;
+    app.fixture_insert_page(release_id, None, COVER_PNG).await;
+
+    let resp = app.get_staged(release_id).await;
+
+    assert_error(resp, StatusCode::FORBIDDEN).await;
+}
+
+#[tokio::test]
+async fn submitting_a_book_for_review_is_the_creators_alone() {
+    let app = TestApp::new().await;
+    let creator = app.db_seed_user(&[Role::Reader]).await;
+    let book_id = app
+        .db_insert_book_as(BookVisibility::Draft, creator.id)
+        .await;
+
+    let by_stranger = app
+        .json_as_user(
+            axum::http::Method::PUT,
+            &format!("/books/{book_id}/visibility"),
+            serde_json::json!({ "visibility": "PendingReview" }),
+            uuid::Uuid::now_v7(),
+            &[Role::Moderator],
+        )
+        .await;
+    assert_error(by_stranger, StatusCode::FORBIDDEN).await;
+
+    let by_creator = app
+        .json_as_user(
+            axum::http::Method::PUT,
+            &format!("/books/{book_id}/visibility"),
+            serde_json::json!({ "visibility": "PendingReview" }),
+            creator.id,
+            &[Role::Reader],
+        )
+        .await;
+    assert_eq!(by_creator.status(), StatusCode::NO_CONTENT);
+
+    let state = app.db_fetch_book_visibility_state(book_id).await;
+    assert_eq!(state.visibility, "PendingReview");
+}
+
+#[tokio::test]
+async fn a_draft_book_edit_is_refused_for_an_uploader_who_is_not_its_creator() {
+    let app = TestApp::new().await;
+    let creator = app.db_seed_user(&[Role::Uploader]).await;
+    let book: BookQuery = BookFaker {
+        visibility: BookVisibility::Draft,
+        created_by: Some(creator.id),
+        ..Default::default()
+    }
+    .fake();
+    app.db_insert_book(&book).await;
+
+    let by_stranger = app
+        .json_as_user(
+            axum::http::Method::PUT,
+            &format!("/books/{}", book.id),
+            book_body(&book),
+            uuid::Uuid::now_v7(),
+            &[Role::Uploader],
+        )
+        .await;
+    assert_error(by_stranger, StatusCode::FORBIDDEN).await;
+
+    let by_creator = app
+        .json_as_user(
+            axum::http::Method::PUT,
+            &format!("/books/{}", book.id),
+            book_body(&book),
+            creator.id,
+            &[Role::Uploader],
+        )
+        .await;
+    assert_eq!(by_creator.status(), StatusCode::NO_CONTENT);
 }

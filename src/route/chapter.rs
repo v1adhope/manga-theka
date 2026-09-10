@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::{
     entity::{
         Chapter, ChapterLocalization, ChapterLocalizations, ChapterName, ChapterNumber,
-        ChapterVolume, Filter,
+        ChapterVolume, Filter, UserClaims,
     },
     error::{AppError, EntityError},
     route::{PaginationQuery, StoreResp, json_data_response, json_response},
@@ -83,7 +83,6 @@ impl TryFrom<ChapterWithRelations> for Chapter {
     }
 }
 
-// TODO: re-shape authz
 pub async fn store_chapter(
     State(service): State<Service>,
     Path(book_id): Path<Uuid>,
@@ -104,7 +103,6 @@ pub async fn store_chapter(
     Ok(json_data_response(StatusCode::CREATED, StoreResp { id }))
 }
 
-// TODO: re-shape authz
 pub async fn update_chapter(
     State(service): State<Service>,
     Path(id): Path<Uuid>,
@@ -131,15 +129,17 @@ pub struct GetChaptersResp {
     pub next_cursor: Option<Uuid>,
 }
 
-// TODO: re-shape authz
 pub async fn get_chapters(
     State(service): State<Service>,
+    claims: Option<UserClaims>,
     Path(book_id): Path<Uuid>,
     Query(query): Query<PaginationQuery>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let filter: Filter = query.try_into()?;
 
-    let (data, next_cursor) = service.get_chapters(book_id, filter).await?;
+    let (data, next_cursor) = service
+        .get_chapters(book_id, filter, claims.as_ref())
+        .await?;
 
     Ok(json_response(
         StatusCode::OK,
@@ -149,9 +149,10 @@ pub async fn get_chapters(
 
 pub async fn get_chapter(
     State(service): State<Service>,
+    claims: Option<UserClaims>,
     Path(id): Path<Uuid>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    let chapter = service.get_chapter(id).await?;
+    let chapter = service.get_chapter(id, claims.as_ref()).await?;
 
     Ok(json_data_response(StatusCode::OK, chapter))
 }

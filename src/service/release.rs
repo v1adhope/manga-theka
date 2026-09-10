@@ -4,7 +4,7 @@ use uuid::Uuid;
 use crate::{
     entity::{
         ChapterPageParams, ChapterPageQuery, ChapterPages, ChapterRelease, ChapterReleaseQuery,
-        Ordinal, PageOrder, UPLOAD_CHUNK_SIZE, UserClaims,
+        Ordinal, PageOrder, PageStatus, UPLOAD_CHUNK_SIZE, UserClaims,
     },
     error::{ObjectStorageError, ServiceError},
     service::Service,
@@ -21,7 +21,13 @@ impl Service {
             .map_err(Into::into)
     }
 
-    pub async fn get_chapter_release(&self, id: Uuid) -> Result<ChapterReleaseQuery, ServiceError> {
+    pub async fn get_chapter_release(
+        &self,
+        id: Uuid,
+        claims: Option<&UserClaims>,
+    ) -> Result<ChapterReleaseQuery, ServiceError> {
+        self.ensure_release_record_readable(id, claims).await?;
+
         self.database
             .get_chapter_release(id)
             .await
@@ -31,8 +37,9 @@ impl Service {
     pub async fn get_chapter_releases(
         &self,
         chapter_id: Uuid,
+        claims: Option<&UserClaims>,
     ) -> Result<Vec<ChapterReleaseQuery>, ServiceError> {
-        self.ensure_book_exists_by_chapter(chapter_id).await?;
+        self.ensure_chapter_readable(chapter_id, claims).await?;
 
         self.database
             .get_chapter_releases(chapter_id)
@@ -108,7 +115,16 @@ impl Service {
         params: ChapterPageParams,
         claims: Option<&UserClaims>,
     ) -> Result<Vec<ChapterPageQuery>, ServiceError> {
-        self.ensure_release_readable(release_id, claims).await?;
+        match params.status {
+            Some(PageStatus::Staged) => {
+                self.ensure_release_staged_readable(release_id, claims)
+                    .await?;
+            }
+            None => {
+                self.ensure_release_content_readable(release_id, claims)
+                    .await?;
+            }
+        }
 
         self.database
             .get_chapter_pages(release_id, params)
@@ -136,9 +152,14 @@ impl Service {
         number: Ordinal,
         claims: Option<&UserClaims>,
     ) -> Result<String, ServiceError> {
+        // Standing before sub-resource existence: gate on the release before
+        // resolving the page number, so a denied caller gets `403`, not `404`.
+        self.ensure_release_content_readable(release_id, claims)
+            .await?;
+
         let id = self
             .database
-            .get_chapter_page_id(release_id, number, claims)
+            .get_chapter_page_id(release_id, number)
             .await?;
 
         self.storage

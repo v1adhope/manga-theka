@@ -184,6 +184,12 @@ impl UserClaims {
     pub fn can_moderate(&self) -> bool {
         self.holds(Role::Moderator) || self.holds(Role::Admin)
     }
+
+    /// Standing over an entity: held by its `Created By` `User` or by any
+    /// `Moderator+` (see `CONTEXT.md`, "Created By").
+    pub fn has_standing_over(&self, owner: Uuid) -> bool {
+        self.id == owner || self.can_moderate()
+    }
 }
 
 #[cfg(test)]

@@ -6,7 +6,6 @@ use crate::{
     entity::{
         ChapterPage, ChapterPageParams, ChapterPageQuery, ChapterPages, ChapterRelease,
         ChapterReleaseQuery, ImageExtension, Language, Ordinal, PageOrder, PageStatus, PageUrl,
-        UserClaims,
     },
     error::{DatabaseError, LogInternal},
 };
@@ -322,13 +321,11 @@ impl Database {
         &self,
         release_id: Uuid,
         number: Ordinal,
-        claims: Option<&UserClaims>,
     ) -> Result<Uuid, DatabaseError> {
         let id = sqlx::query_file_scalar!(
             "queries/get_chapter_page_id.sql",
             release_id,
             number.as_i32(),
-            claims.is_some_and(UserClaims::can_moderate)
         )
         .fetch_optional(&self.pool)
         .await

@@ -75,10 +75,14 @@ impl TestApp {
     }
 
     async fn get_as(&self, path: &str, roles: &[Role]) -> Response {
+        self.get_as_user(path, Uuid::now_v7(), roles).await
+    }
+
+    pub async fn get_as_user(&self, path: &str, sub: Uuid, roles: &[Role]) -> Response {
         let req = Request::get(path)
             .header(
                 header::AUTHORIZATION,
-                self.bearer(Uuid::now_v7(), Uuid::now_v7(), roles),
+                self.bearer(sub, Uuid::now_v7(), roles),
             )
             .body(Body::empty())
             .unwrap();
@@ -202,6 +206,28 @@ impl TestApp {
             .header(
                 header::AUTHORIZATION,
                 self.bearer(Uuid::now_v7(), Uuid::now_v7(), roles),
+            )
+            .body(Body::from(body.to_string()))
+            .unwrap();
+
+        self.send_raw(req).await
+    }
+
+    pub async fn json_as_user(
+        &self,
+        method: Method,
+        path: &str,
+        body: serde_json::Value,
+        sub: Uuid,
+        roles: &[Role],
+    ) -> Response {
+        let req = Request::builder()
+            .method(method)
+            .uri(path)
+            .header(header::CONTENT_TYPE, "application/json")
+            .header(
+                header::AUTHORIZATION,
+                self.bearer(sub, Uuid::now_v7(), roles),
             )
             .body(Body::from(body.to_string()))
             .unwrap();

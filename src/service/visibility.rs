@@ -1,57 +1,83 @@
 use uuid::Uuid;
 
 use crate::{
-    entity::{BookCover, ChapterPage, ChapterRelease, UserClaims},
+    entity::{BookCover, Chapter, Entity, UserClaims},
     error::ServiceError,
     service::Service,
 };
 
-// deferred: once auth ships (issue #3) and the `created_by` carve-out lands in
-// `ensure_readable`, consider folding these into one `guard(BookRef, Access)` fn
-// or a fluent `book_by_*(id).content_writable()` guard.
 impl Service {
-    pub(crate) async fn ensure_book_exists(&self, book_id: Uuid) -> Result<(), ServiceError> {
-        self.database
-            .get_book_visibility(book_id)
-            .await
-            .map(|_| ())
-            .map_err(Into::into)
-    }
+    // -- record-tier reads: the book row, its chapters, its covers -------------
 
-    pub(crate) async fn ensure_book_exists_by_chapter(
+    pub(crate) async fn ensure_book_readable<T: Entity>(
         &self,
-        chapter_id: Uuid,
+        book_id: Uuid,
+        claims: Option<&UserClaims>,
     ) -> Result<(), ServiceError> {
         self.database
-            .get_book_visibility_by_chapter(chapter_id)
-            .await
-            .map(|_| ())
+            .get_book_access(book_id)
+            .await?
+            .ensure_readable::<T>(claims)
             .map_err(Into::into)
     }
 
-    pub(crate) async fn ensure_book_writable(&self, book_id: Uuid) -> Result<(), ServiceError> {
+    pub(crate) async fn ensure_chapter_readable(
+        &self,
+        chapter_id: Uuid,
+        claims: Option<&UserClaims>,
+    ) -> Result<(), ServiceError> {
         self.database
-            .get_book_visibility(book_id)
+            .get_book_access_by_chapter(chapter_id)
             .await?
-            .ensure_book_writable()
+            .ensure_readable::<Chapter>(claims)
+            .map_err(Into::into)
+    }
+
+    pub(crate) async fn ensure_cover_readable(
+        &self,
+        cover_id: Uuid,
+        claims: Option<&UserClaims>,
+    ) -> Result<(), ServiceError> {
+        self.database
+            .get_book_access_by_cover(cover_id)
+            .await?
+            .ensure_readable::<BookCover>(claims)
+            .map_err(Into::into)
+    }
+
+    // -- book and cover writes ------------------------------------------------
+
+    pub(crate) async fn ensure_book_writable(
+        &self,
+        book_id: Uuid,
+        claims: &UserClaims,
+    ) -> Result<(), ServiceError> {
+        self.database
+            .get_book_access(book_id)
+            .await?
+            .ensure_book_writable(claims)
             .map_err(Into::into)
     }
 
     pub(crate) async fn ensure_book_writable_by_cover(
         &self,
         cover_id: Uuid,
+        claims: &UserClaims,
     ) -> Result<(), ServiceError> {
         self.database
-            .get_book_visibility_by_cover(cover_id)
+            .get_book_access_by_cover(cover_id)
             .await?
-            .ensure_book_writable()
+            .ensure_book_writable(claims)
             .map_err(Into::into)
     }
 
+    // -- content writes: chapters, releases, pages --------------------------
+
     pub(crate) async fn ensure_content_writable(&self, book_id: Uuid) -> Result<(), ServiceError> {
         self.database
-            .get_book_visibility(book_id)
+            .get_book_access(book_id)
             .await?
+            .visibility
             .ensure_content_writable()
             .map_err(Into::into)
     }
@@ -61,8 +87,9 @@ impl Service {
         chapter_id: Uuid,
     ) -> Result<(), ServiceError> {
         self.database
-            .get_book_visibility_by_chapter(chapter_id)
+            .get_book_access_by_chapter(chapter_id)
             .await?
+            .visibility
             .ensure_content_writable()
             .map_err(Into::into)
     }
@@ -79,7 +106,9 @@ impl Service {
             .map_err(Into::into)
     }
 
-    pub(crate) async fn ensure_release_readable(
+    // -- release and page reads --------------------------------------------
+
+    pub(crate) async fn ensure_release_record_readable(
         &self,
         release_id: Uuid,
         claims: Option<&UserClaims>,
@@ -87,8 +116,31 @@ impl Service {
         self.database
             .get_release_access(release_id)
             .await?
-            .visibility
-            .ensure_readable::<ChapterRelease>(claims)
+            .ensure_record_readable(claims)
+            .map_err(Into::into)
+    }
+
+    pub(crate) async fn ensure_release_content_readable(
+        &self,
+        release_id: Uuid,
+        claims: Option<&UserClaims>,
+    ) -> Result<(), ServiceError> {
+        self.database
+            .get_release_access(release_id)
+            .await?
+            .ensure_content_readable(claims)
+            .map_err(Into::into)
+    }
+
+    pub(crate) async fn ensure_release_staged_readable(
+        &self,
+        release_id: Uuid,
+        claims: Option<&UserClaims>,
+    ) -> Result<(), ServiceError> {
+        self.database
+            .get_release_access(release_id)
+            .await?
+            .ensure_staged_readable(claims)
             .map_err(Into::into)
     }
 
@@ -98,22 +150,16 @@ impl Service {
         page_id: Uuid,
         claims: Option<&UserClaims>,
     ) -> Result<(), ServiceError> {
+        // Standing before sub-resource existence: a caller who fails the tier
+        // gets `403` even when the page id in the path is also absent.
         self.database
-            .get_book_visibility_by_page(release_id, page_id)
+            .get_release_access(release_id)
             .await?
-            .ensure_readable::<ChapterPage>(claims)
-            .map_err(Into::into)
-    }
+            .ensure_content_readable(claims)?;
 
-    pub(crate) async fn ensure_cover_readable(
-        &self,
-        cover_id: Uuid,
-        claims: Option<&UserClaims>,
-    ) -> Result<(), ServiceError> {
         self.database
-            .get_book_visibility_by_cover(cover_id)
-            .await?
-            .ensure_readable::<BookCover>(claims)
+            .ensure_chapter_page_exists(release_id, page_id)
+            .await
             .map_err(Into::into)
     }
 }

@@ -84,12 +84,49 @@ pub struct ReleaseAccess {
 }
 
 impl ReleaseAccess {
+    fn admits(&self, claims: Option<&UserClaims>) -> bool {
+        claims.is_some_and(|c| c.has_standing_over(self.created_by))
+    }
+
     pub fn ensure_mutable(&self, claims: &UserClaims) -> Result<(), EntityError> {
-        if claims.id != self.created_by && !claims.can_moderate() {
+        if !claims.has_standing_over(self.created_by) {
             return Err(EntityError::Forbidden);
         }
 
         self.visibility.ensure_content_writable()
+    }
+
+    /// Release-record tier (`GET /releases/{id}`): readable by anyone while the
+    /// book is publicly listable, otherwise by a `Moderator+` or the release's
+    /// own creator -- the book's creator has no standing here.
+    pub fn ensure_record_readable(&self, claims: Option<&UserClaims>) -> Result<(), EntityError> {
+        if self.visibility.is_publicly_listable() || self.admits(claims) {
+            return Ok(());
+        }
+
+        Err(EntityError::not_readable::<ChapterRelease>(self.visibility))
+    }
+
+    /// Page-content tier (committed page list, page by number, page image):
+    /// readable by anyone only while the book is `Listed`, otherwise by a
+    /// `Moderator+` or the release's creator.
+    pub fn ensure_content_readable(&self, claims: Option<&UserClaims>) -> Result<(), EntityError> {
+        if self.visibility == BookVisibility::Listed || self.admits(claims) {
+            return Ok(());
+        }
+
+        Err(EntityError::not_readable::<ChapterPage>(self.visibility))
+    }
+
+    /// Staged page list (`?status=Staged`): the release's creator or a
+    /// `Moderator+` in every state, `Listed` included -- a staging area is not
+    /// reader-facing.
+    pub fn ensure_staged_readable(&self, claims: Option<&UserClaims>) -> Result<(), EntityError> {
+        if self.admits(claims) {
+            return Ok(());
+        }
+
+        Err(EntityError::not_readable::<ChapterPage>(self.visibility))
     }
 }
 
@@ -307,5 +344,100 @@ mod tests {
         let res = access.ensure_mutable(&claims(owner, &[Role::Uploader]));
 
         assert!(matches!(res, Err(EntityError::BookNotWritable(_))));
+    }
+
+    fn release(visibility: BookVisibility, owner: Uuid) -> ReleaseAccess {
+        ReleaseAccess {
+            visibility,
+            created_by: owner,
+        }
+    }
+
+    const PRIVATE_VISIBILITY: [BookVisibility; 3] = [
+        BookVisibility::Draft,
+        BookVisibility::PendingReview,
+        BookVisibility::Rejected,
+    ];
+
+    // -- ensure_record_readable (GET /releases/{id}) --------------------
+
+    #[test]
+    fn a_release_record_is_public_while_the_book_is_publicly_listable() {
+        let owner = Uuid::now_v7();
+
+        for visibility in [BookVisibility::Listed, BookVisibility::Hidden] {
+            let res = release(visibility, owner).ensure_record_readable(None);
+
+            assert!(res.is_ok(), "{visibility} release record must be public");
+        }
+    }
+
+    #[test]
+    fn a_private_release_record_admits_only_its_own_creator_or_a_moderator() {
+        let owner = Uuid::now_v7();
+
+        for visibility in PRIVATE_VISIBILITY {
+            let by_owner =
+                release(visibility, owner).ensure_record_readable(Some(&claims(owner, &[])));
+            let by_moderator = release(visibility, owner)
+                .ensure_record_readable(Some(&claims(Uuid::now_v7(), &[Role::Moderator])));
+            let by_stranger = release(visibility, owner)
+                .ensure_record_readable(Some(&claims(Uuid::now_v7(), &[Role::Uploader])));
+
+            assert!(by_owner.is_ok());
+            assert!(by_moderator.is_ok());
+            assert!(matches!(by_stranger, Err(EntityError::NotReadable { .. })));
+        }
+    }
+
+    // -- ensure_content_readable (committed pages) --------------------
+
+    #[test]
+    fn page_content_is_public_only_while_the_book_is_listed() {
+        let owner = Uuid::now_v7();
+
+        let listed = release(BookVisibility::Listed, owner).ensure_content_readable(None);
+        let hidden = release(BookVisibility::Hidden, owner).ensure_content_readable(None);
+
+        assert!(listed.is_ok(), "listed page content is public");
+        assert!(
+            matches!(hidden, Err(EntityError::NotReadable { state, .. }) if state == BookVisibility::Hidden),
+            "hidden page content is withheld, carrying the state"
+        );
+    }
+
+    #[test]
+    fn page_content_outside_listed_admits_the_release_creator_or_a_moderator() {
+        let owner = Uuid::now_v7();
+
+        for visibility in [BookVisibility::Hidden, BookVisibility::Rejected] {
+            let by_owner =
+                release(visibility, owner).ensure_content_readable(Some(&claims(owner, &[])));
+            let by_moderator = release(visibility, owner)
+                .ensure_content_readable(Some(&claims(Uuid::now_v7(), &[Role::Moderator])));
+            let by_stranger = release(visibility, owner)
+                .ensure_content_readable(Some(&claims(Uuid::now_v7(), &[Role::Uploader])));
+
+            assert!(by_owner.is_ok());
+            assert!(by_moderator.is_ok());
+            assert!(matches!(by_stranger, Err(EntityError::NotReadable { .. })));
+        }
+    }
+
+    // -- ensure_staged_readable (?status=Staged) --------------------
+
+    #[test]
+    fn staged_pages_are_never_public_not_even_while_listed() {
+        let owner = Uuid::now_v7();
+
+        let guest = release(BookVisibility::Listed, owner).ensure_staged_readable(None);
+        let by_owner = release(BookVisibility::Listed, owner)
+            .ensure_staged_readable(Some(&claims(owner, &[])));
+        let by_moderator = release(BookVisibility::Listed, owner)
+            .ensure_staged_readable(Some(&claims(Uuid::now_v7(), &[Role::Moderator])));
+
+        assert!(matches!(guest, Err(EntityError::NotReadable { .. })));
+        assert!(by_owner.is_ok());
+        assert!(by_moderator.is_ok());
     }
 }

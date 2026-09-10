@@ -58,8 +58,12 @@ values($1, $2, $3, $4, $5, $6, $7);
     }
 
     pub async fn db_seed_reader(&self) -> UserQuery {
+        self.db_seed_user(&[Role::Reader]).await
+    }
+
+    pub async fn db_seed_user(&self, roles: &[Role]) -> UserQuery {
         let user: UserQuery = UserFaker {
-            roles: vec![Role::Reader],
+            roles: roles.to_vec(),
             verified: true,
         }
         .fake();
@@ -153,6 +157,19 @@ values($1, $2, $3, $4, $5, $6, $7);
         .fake();
 
         self.fixture_insert_book(&book).await;
+
+        book.id
+    }
+
+    pub async fn db_insert_book_as(&self, visibility: BookVisibility, created_by: Uuid) -> Uuid {
+        let book: BookQuery = BookFaker {
+            visibility,
+            created_by: Some(created_by),
+            ..Default::default()
+        }
+        .fake();
+
+        self.db_insert_book(&book).await;
 
         book.id
     }
