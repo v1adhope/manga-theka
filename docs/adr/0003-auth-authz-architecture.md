@@ -1,35 +1,72 @@
-# Authentication and authorization: dual JWT (access + refresh) with per-session Redis session store
+# Authentication is dual Ed25519 JWTs (access + refresh) with a per-session Redis refresh store
 
-*Status: paper design, not implemented. ADRs 0004, 0009, and 0011 ship their features auth-free and defer the identity half of their gates to this design: `books` has no `uploaded_by`, role gates exist only as `// deferred` comments, and ADR-0009 adds a client-asserted `x-user-id`/`x-user-role` dev stand-in that must be removed in the same change that lands this middleware.*
+## Model
 
-**Model.** A `User` aggregate (distinct from `Creator`) holds a set of roles (`Reader`, `Uploader`, `Moderator`, `Admin`) as `text[]` with a CHECK constraint (`cardinality(roles) > 0`, each element in the four-role set). Reads are anonymous; writes are gated per-route by an OR role-gate -- a `from_fn_with_state` middleware injecting `AuthenticatedUser { id, sid, roles }` into request extensions.
+A `User` aggregate (distinct from `Creator`) holds a set of roles -- `Reader`, `Uploader`, `Moderator`, `Admin` -- as `text[]` with a CHECK constraint (`cardinality(roles) > 0`, each element in the four-role set). Reads are anonymous; writes are gated per route by an OR role-gate.
 
-**Tokens.** `POST /sessions/login` issues two Ed25519-signed JWT classes:
+One global `from_fn_with_state` layer verifies the access token and populates `Extension<Option<UserClaims>>`; it never short-circuits. Absent, non-Bearer, or unverifiable tokens (bad signature, wrong class, expired) all yield `None`. Handlers take `UserClaims { id, sid, roles }` / `Option<UserClaims>` through a `FromRequestParts` extractor reading that extension, never directly; `require_roles` and the extractor turn a `None` on a protected route into 401. So a stale access token the SPA attaches to every request does not block `POST /sessions/refresh` or a public read. Bearer matching is case-insensitive (RFC 9110 s11.1).
 
-- access: stateless, 15 min, `typ: "at+jwt"`, claims `sub`/`sid`/`role`/`iat`/`exp`, returned in the JSON body for in-memory JS storage;
-- refresh: 30 day, `typ: "rt+jwt"`, claims `sub`/`sid`/`jti`/`iat`/`exp`, in an `HttpOnly; Secure; SameSite=Strict; Path=/sessions; Max-Age=2592000` cookie.
+## Tokens
 
-Signing keypairs are per-class, loaded from `APP_JWT_ACCESS__KEY`/`APP_JWT_REFRESH__KEY` as file paths to raw 32-byte Ed25519 seeds, public key derived at startup. `typ` at the JOSE-header level (RFC 9068 `at+jwt` plus the analogous `rt+jwt`) prevents token-class confusion; `alg` is pinned server-side to `EdDSA`, `none` rejected.
+`POST /sessions/login` issues two Ed25519-signed JWT classes:
 
-**Refresh store (Redis).** Per user: a SET `sids:<sub>` of active session ids, and per-session STRING `refresh-tokens:<sub>:<sid>` holding `{"jti": "<KeyedBLAKE3(jti)>", "ua", "ip", "createdAt", "updatedAt"}` with a native TTL of the refresh lifetime (30 d). `createdAt` is set at login and never mutated; `updatedAt` bumps on each refresh. `POST /sessions/refresh` extracts `sub`/`sid`/`jti` from the verified JWT, GETs the session JSON, compares `keyed_blake3(jti)` to the stored value; on match it issues a new refresh JWT with a fresh `jti` and pipelines `SET ... EX 2592000` + `SADD sids:<sub> <sid>` (idempotent) + `EXPIRE sids:<sub> 2592000` in one atomic `MULTI`/`EXEC`; on mismatch it `tracing::warn!`s and returns 401 -- log signal only, no reuse-detection or family-revocation escalation. `POST /sessions/login` uses the same pipelined write. The Redis client is `redis` with `ConnectionManager` (auto-reconnecting, multiplexed). BLAKE3 is keyed with an env pepper (`APP_BLAKE3__KEY`), distinct from the JWT signing keys.
+- **access**: stateless, 15 min, `typ: "at+jwt"`, claims `sub`/`sid`/`roles`/`iss`/`aud`/`iat`/`exp`, returned in the JSON body for in-memory JS storage;
+- **refresh**: 30 day, `typ: "rt+jwt"`, claims `sub`/`sid`/`jti`/`iss`/`aud`/`iat`/`exp`, in an `HttpOnly; Secure; SameSite=Strict; Path=/sessions; Max-Age=2592000` cookie.
 
-**Session endpoints.** `DELETE /sessions/me/all` deletes every key from `SMEMBERS sids:<sub>` plus `DEL sids:<sub>`. `DELETE /sessions/me/current` logs the requester out via the JWT's own sid (no path sid), exempt from the 24h rule so a freshly-logged-in user can always self-logout. `DELETE /sessions/me/{sid}` revokes another of the requester's sessions, ownership-checked via `SISMEMBER sids:<sub> <sid>`. The 24h-revoke-protection rule covers `DELETE /sessions/me/all` and `DELETE /sessions/me/{sid}`: if the requester's session `createdAt` is under 24h old, the request is `409` -- an attacker who just compromised credentials can't immediately lock out the user's other sessions. `GET /sessions/me` reads `SMEMBERS sids:<sub>` then `MGET`s the per-session keys, returns only the still-alive pairs (`sid`/`ua`/`ip`/`createdAt`/`updatedAt`, `jti` scrubbed) and lazily `SREM`s the rest -- native TTL can clear a key before the SET catches up, so the SET is a superset filtered on read.
+`roles` is an array. `iss`/`aud` are one shared value (`REALM` const in `src/jwt`, not config) since this service both issues and verifies; `Validation` pins `iss`, matches `aud`, and adds both to `required_spec_claims`, so a token missing or mismatching either is 401 (RFC 9068 s4 requires `iss`/`aud` for `at+jwt`).
 
-`register` (under `/users`), `login`, `me`, `refresh` (under `/sessions`), and `all`, `current` (under `/sessions/me`) are reserved literal path segments and must register before the `{sid}` pattern in the router.
+Signing keypairs are per class: each loads a PKCS#8 PEM private key plus its SPKI PEM public key (`APP_JWT_ACCESS__PRIVATE_KEY`/`__PUBLIC_KEY`, likewise `__REFRESH__`), generated by `task keys-generate` (openssl) into `/.keys` (gitignored). No `ed25519-dalek` in production deps; the test harness uses it (dev-only) to write four deterministic PEM files from fixed seeds.
 
-**Passwords.** Argon2id (`argon2` crate), params from `APP_PASSWORD__M_COST`/`__T_COST`/`__P_COST` via `envious`+`serde`, stored as the PHC string in a single `password_hash TEXT` column (per-user salt embedded, no pepper). Policy is length 16-128, no composition rules (NIST SP 800-63B). Registration (`POST /users/register`) is open for the default `{Reader}` role.
+`alg` is pinned server-side to `EdDSA` (`none` rejected). `jsonwebtoken::Validation` has no `typ` check, so after signature/exp validation the handler asserts `header.typ` is `at+jwt` or `rt+jwt`; cross-class presentation is 401 (also blocked by the per-class keypairs).
 
-**Role gates.** Moderator and Admin share the content-moderation gate (`require_roles([Moderator, Admin])`); Admin alone gates user-promotion (`require_roles([Admin])`) -- the privilege gap is enforced by routing, not role hierarchy. Moderator may grant/revoke `Uploader`; Admin may grant/revoke any role, via `array_append`/`array_remove` on `users.roles` (promotion endpoint deferred from v1).
+## Refresh store (Redis)
 
-**Identifiers.** Login is by email (`POST /sessions/login` takes `email` though `username` is also unique). `Email` and `Username` are newtypes with `TryFrom<String>` validation in the entity layer -- `Email` via `validator::validate_email`, `Username` via `^[a-zA-Z0-9_]{3,32}$` (no `validator` derive macros, mirroring `Name`). Email verification is deferred, but `verified_at timestamptz null` is reserved on `users`.
+Per user: a SET `sids:<sub>` of active session ids, and per-session STRING `refresh-tokens:<sub>:<sid>` holding `{"jti": "<keyed BLAKE3(jti)>", "ua", "ip", "createdAt", "updatedAt"}` with a native 30 d TTL. `createdAt` is set at login and never mutated; `updatedAt` bumps on each refresh.
 
-**Routes** keep ADR-0002's plural-resource nouns and `{data}` envelope for the addressable-resource operations, and use a trailing kebab verb segment for the auth actions that are operations rather than resource CRUD. `/users`: `POST /users/register` (anonymous), `GET /users/me`. `/sessions`: `POST /sessions/login` (anonymous-via-credentials), `POST /sessions/refresh` (refresh-cookie), `DELETE /sessions/me/all`, `DELETE /sessions/me/current`, `DELETE /sessions/me/{sid}`, `GET /sessions/me`. Only the verb segment changes -- HTTP method, status codes, `{data}` envelope, and the `Path=/sessions` refresh cookie (which still covers every `/sessions/*` route) are unchanged. Error map: 400 parse / 401 unauthenticated / 403 role-gate fail / 404 `sub` deleted on `/users/me` / 409 duplicate email-or-username on `POST /users/register` or 24h block / 422 semantic / 500 internal; 401 reveals only `"Invalid credentials"`, 403 only `"Forbidden"`. The 409-vs-422 split matches ADR-0002's RFC 9110 §15.5.10 reading. New deps: `argon2`, `jsonwebtoken`, `blake3`, `redis` (`tokio-comp`), `validator`, `regex`; `secrecy` was already present.
+`POST /sessions/refresh` extracts `sub`/`sid`/`jti` from the verified JWT, GETs the session JSON, compares `keyed_blake3(jti)` to the stored value; on match it issues a new refresh JWT with a fresh `jti` and pipelines `SET ... EX 2592000` + `SADD sids:<sub> <sid>` + `EXPIRE sids:<sub> 2592000` in one `MULTI`/`EXEC`; on mismatch it `warn!`s and returns 401 -- log signal only, no reuse-detection or family revocation. `POST /sessions/login` uses the same pipelined write. Rotation has no compare-and-swap on the stored jti, so two refreshes racing on one cookie both succeed and the loser re-logs-in.
 
-**Rejected.**
+Client is `redis` with `ConnectionManager` (features `tokio-comp` + `connection-manager`; auto-reconnecting, multiplexed). BLAKE3 is keyed with an env pepper (`APP_BLAKE3__KEY`), distinct from the signing keys.
 
-- `/auth/*` action namespace (RFC 6749 style) -- verbs stay scoped under the `/users` and `/sessions` resource prefixes (`/sessions/login`, not `/auth/login`), so the resource is still the organising unit; a flat `/auth/*` namespace would detach the actions from the resources they act on.
-- Blanket plural-REST naming for every auth route (`POST /users`, `POST /sessions`, `DELETE /sessions/all`) -- `register`, `login`, and `revoke-all` are operations, not create/delete of an addressable resource, and read more naturally as verbs (`/users/register`, `/sessions/login`, `/sessions/me/all`); the genuinely resource-shaped routes (`GET /users/me`, `GET /sessions/me`, `DELETE /sessions/me/{sid}`) keep their noun form. The REST-vs-verb split is decided per endpoint by its nature, not applied uniformly.
-- Stateful access tokens (per-token whitelist/denylist) -- preserves the "CPU-only, zero DB queries on protected requests" property, at the cost of an up-to-15-min window where a logged-out user's access JWT keeps working (mitigated by short TTL).
-- Per-user HASH model -- per-session STRING keys put expiry with the data it governs, rather than split between HASH-level TTL and handler-side `expires_at`; `sids:<sub>` stays as a lookup index so `GET /sessions/me` and `DELETE /sessions/me/all` use `SMEMBERS`+`MGET` instead of an O(keyspace) `SCAN` (unusable around ~100k keys).
-- Reuse-detection state (`previous_jti` or a used-jti SET) -- simpler session JSON, at the cost of a breach alarm the warn-log replaces.
-- `citext` for email -- canonicalisation stays at the entity layer.
+## Session endpoints
+
+- `DELETE /sessions/me/all` -- deletes every key from `SMEMBERS sids:<sub>` plus `DEL sids:<sub>`.
+- `DELETE /sessions/me/current` -- logs the requester out via the JWT's own sid (no path sid), exempt from the 24h rule so a freshly-logged-in user can always self-logout.
+- `DELETE /sessions/me/{sid}` -- revokes another of the requester's sessions, ownership-checked via `SISMEMBER sids:<sub> <sid>`.
+- `GET /sessions/me` -- reads `SMEMBERS sids:<sub>` then `MGET`s the per-session keys, returns only still-alive pairs (`sid`/`ua`/`ip`/`createdAt`/`updatedAt`, `jti` scrubbed) and lazily `SREM`s the rest: native TTL can clear a key before the SET catches up, so the SET is a superset filtered on read. `ua`/`ip` are client-asserted display-only metadata (from `User-Agent` and the first `X-Forwarded-For` hop), never an authorization input.
+
+The 24h-revoke-protection rule covers `DELETE /sessions/me/all` and `/{sid}`: if the requester's session `createdAt` is under 24h old the request is `409`, so an attacker who just compromised credentials can't immediately lock out the user's other sessions.
+
+`register` (under `/users`), `login`, `me`, `refresh` (under `/sessions`), `all`, `current` (under `/sessions/me`) are reserved literal segments and register before the `{sid}` pattern.
+
+## Passwords
+
+Argon2id (`argon2` crate), params from `APP_PASSWORD__M_COST`/`__T_COST`/`__P_COST` via `envious`+`serde`, stored as the PHC string in one `password_hash TEXT` column (per-user salt embedded, no pepper). Policy: length 16-128, no composition rules (NIST SP 800-63B). `POST /users/register` is open for the default `{Reader}` role.
+
+`verify_dummy` hashes a fixed password once at startup with the *configured* Argon2 params (not a baked-in PHC), so no-such-user timing tracks a real verify even after the operator raises the cost. `POST /sessions/login` builds a `LoginForm` command entity (`Email` + `Password` newtypes, display-only `ua`/`ip`/`now`) via `TryFrom<(LoginFormReq, HeaderMap, OffsetDateTime)>` in the router, so a malformed email or out-of-policy password length is `422` before any DB or Argon2 work. The enumeration guarantee holds between a well-formed unknown address and a wrong password (both `401` after a real-or-dummy verify), not for a malformed address. Registration rejects a duplicate email before Argon2 (`unique_users_email` is the race backstop), so an anonymous caller cannot force the hash by replaying a known address.
+
+## Identifiers
+
+Login is by email (`POST /sessions/login` takes `email` though `username` is also unique). `Email` and `Username` are newtypes with `TryFrom<String>` validation in the entity layer, each via a hand-rolled `regex` pattern (`Username`: `^[a-zA-Z0-9_]{3,32}$`), mirroring `Name`; no `validator` crate. `Email` also canonicalises (`trim()` + `to_lowercase()` before the length check and regex); `Feedback` shares the newtype, so `POST /feedbacks` stores canonical addresses too. Email verification is deferred, but `verified_at timestamptz null` is reserved on `users`.
+
+## Role gates
+
+Moderator and Admin share the content-moderation gate (`require_roles([Moderator, Admin])`); Admin alone gates user-promotion -- the privilege gap is enforced by routing, not role hierarchy. Moderator may grant/revoke `Uploader`; Admin any role, via `array_append`/`array_remove` on `users.roles` (promotion endpoint deferred from v1).
+
+Wired: `POST /books` -> any signed-in role; content-write routes (`creators`, book/cover writes, `chapters`, `releases`) -> `[Uploader, Moderator, Admin]`; `DELETE` of a creator or book -> `[Moderator, Admin]`; `POST /feedbacks` anonymous, other `feedbacks` routes `[Moderator, Admin]`. `PUT /books/{id}/visibility` and `GET /books?visibility=` gates: ADR-0009.
+
+Deferred: the `created_by`/`uploaded_by` half of each gate -- `books.created_by` exists but no handler compares it, `chapter_pages.uploaded_by` does not exist -- so "only the owner edits their own `Draft`", "the owner reads their own non-`Listed` content", and "staged pages scoped to the calling uploader" are unenforced (`// deferred` comments).
+
+## Routes and errors
+
+Plural-resource nouns and the `{data}` envelope (ADR-0002) for addressable-resource operations; a trailing kebab verb segment for auth actions that are operations, not CRUD. HTTP method, status codes, envelope, and the `Path=/sessions` refresh cookie follow ADR-0002. Error map: 400 parse / 401 unauthenticated (`"Invalid credentials"` only) / 403 role-gate fail (`"Forbidden"` only) / 404 `sub` deleted on `/users/me` / 409 duplicate email-or-username on register or 24h block / 422 semantic / 500. 409-vs-422 per ADR-0002.
+
+New deps: `argon2`, `jsonwebtoken`, `blake3`, `redis`, `regex`; `secrecy` was already present. `jsonwebtoken`'s `rust_crypto` feature bundles `rsa` (RUSTSEC-2023-0071, no fix); the service only does EdDSA and constructs no RSA key, so the advisory is ignored in `.cargo/audit.toml` with that rationale.
+
+## Rejected
+
+- **`/auth/*` action namespace** (RFC 6749 style) -- verbs stay scoped under `/users` and `/sessions` so the resource is still the organising unit; a flat namespace would detach actions from their resources.
+- **Blanket plural-REST for every auth route** (`POST /users`, `POST /sessions`, `DELETE /sessions/all`) -- `register`, `login`, `revoke-all` are operations, not CRUD, and read as verbs; genuinely resource-shaped routes keep noun form. Per endpoint, not uniform.
+- **Stateful access tokens** (per-token whitelist/denylist) -- keeps "CPU-only, zero DB queries on protected requests", at the cost of an up-to-15-min window where a logged-out user's access JWT still works (mitigated by short TTL).
+- **Per-user HASH model** -- per-session STRING keys put expiry with the data it governs; `sids:<sub>` stays a lookup index so `GET /sessions/me` and `DELETE /sessions/me/all` use `SMEMBERS`+`MGET` instead of an O(keyspace) `SCAN` (unusable near ~100k keys).
+- **Reuse-detection state** (`previous_jti` or a used-jti SET) -- simpler session JSON; the warn-log replaces the breach alarm.
+- **`citext` for email** -- canonicalisation stays at the entity layer.

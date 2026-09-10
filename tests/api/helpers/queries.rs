@@ -1,128 +1,25 @@
-use std::sync::LazyLock;
-use std::time::Duration;
-
+use aws_sdk_s3::operation::head_object::HeadObjectOutput;
 use aws_sdk_s3::primitives::ByteStream;
-use axum::Router;
-use axum::body::Body;
-use axum::http::{Request, StatusCode, header};
-use axum::response::Response;
-use axum_test::multipart::{MultipartForm, Part};
 use fake::Fake;
-use http_body_util::BodyExt;
-use manga_theka::{
-    config::{Config, Database},
-    database,
-    entity::{
-        AlternativeTitle, BookCoverQuery, BookKind, BookLink, BookName, BookQuery, BookStatus,
-        BookVisibility, Chapter, ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume,
-        ContentRating, CoverUrl, Creator, CreatorQuery, CreatorRole, Email, Feedback,
-        ImageExtension, Label, Language, LinkUrl, Name, PublicationDemographic, Text,
-    },
-    object_storage,
-    startup::App,
-    telemetry,
+use manga_theka::entity::{
+    AlternativeTitle, BookCoverQuery, BookKind, BookLink, BookName, BookQuery, BookStatus,
+    BookVisibility, Chapter, ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume,
+    ContentRating, CoverUrl, Creator, CreatorQuery, CreatorRole, Email, Feedback, ImageExtension,
+    Label, Language, LinkUrl, Name, PublicationDemographic, Role, Session, Text, Timestamp,
+    UserQuery,
 };
-use serde::Deserialize;
-use sqlx::{AssertSqlSafe, ConnectOptions, Connection, Executor, PgConnection, PgPool};
-use tower::ServiceExt;
-use tracing_log::log::LevelFilter;
 use uuid::Uuid;
 
-use crate::fakers::{
-    ACTION, BookFaker, CONTENT_RATINGS, ChapterFaker, FANTASY, ISEKAI, LABELS, LANGUAGES,
-    LONG_STRIP, MAFIA, ROMANCE, SCHOOL_LIFE, ZOMBIES,
+use super::app::TestApp;
+use super::fakers::{
+    ACTION, BookFaker, CONTENT_RATINGS, ChapterFaker, FANTASY, ISEKAI, LANGUAGES, LONG_STRIP,
+    MAFIA, ROMANCE, SCHOOL_LIFE, UserFaker, ZOMBIES,
 };
+use super::pure::{day, labels};
+use super::samples::{BookSample, BookVisibilityState, ChapterSample};
 
-static TRACING: LazyLock<()> = LazyLock::new(|| {
-    telemetry::init_subscriber("info");
-});
-
-#[derive(Debug)]
-pub struct BookSample {
-    pub name: Option<String>,
-    pub updated_at: Option<time::OffsetDateTime>,
-    pub labels: i64,
-    pub links: i64,
-    pub titles: i64,
-}
-
-#[derive(Debug)]
-pub struct BookVisibilityState {
-    pub visibility: String,
-    pub note: Option<String>,
-    pub updated_at: Option<time::OffsetDateTime>,
-}
-
-#[derive(Debug)]
-pub struct ChapterSample {
-    pub number: Option<f32>,
-    pub name: Option<String>,
-    pub updated_at: Option<time::OffsetDateTime>,
-    pub localizations: i64,
-}
-
-#[derive(Deserialize, Debug)]
-pub struct RespWrapper<T, C = Uuid> {
-    pub data: T,
-    #[serde(rename = "nextCursor", default)]
-    pub next_cursor: Option<C>,
-}
-
-pub async fn assert_error(resp: Response, expected: StatusCode) {
-    assert_eq!(resp.status(), expected);
-    assert!(
-        !resp
-            .into_body()
-            .collect()
-            .await
-            .unwrap()
-            .to_bytes()
-            .is_empty(),
-        "error response must carry a body"
-    );
-}
-
-pub async fn assert_stored(resp: Response) -> Uuid {
-    assert_eq!(resp.status(), StatusCode::CREATED);
-
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    let id = v["data"]["id"]
-        .as_str()
-        .expect("created response must carry data.id");
-
-    Uuid::parse_str(id).expect("data.id must be a uuid")
-}
-
-pub fn redirect_target(resp: &Response) -> &str {
-    resp.headers()
-        .get(header::LOCATION)
-        .expect("a redirect must carry a location")
-        .to_str()
-        .expect("a location must be printable")
-}
-
-pub fn labels(ids: &[Uuid]) -> Vec<Label> {
-    ids.iter()
-        .map(|id| {
-            LABELS
-                .iter()
-                .find(|l| l.id == *id)
-                .expect("fixture label must be seeded")
-                .clone()
-        })
-        .collect()
-}
-
-pub fn label_keys(labels: &[Label]) -> Vec<(Uuid, &str, &str)> {
-    let mut keys: Vec<(Uuid, &str, &str)> = labels
-        .iter()
-        .map(|l| (l.id, l.name.as_str(), l.kind.as_ref()))
-        .collect();
-    keys.sort();
-
-    keys
-}
+pub const KNOWN_PASSWORD: &str = "correct horse battery staple";
+pub const KNOWN_PASSWORD_PHC: &str = "$argon2id$v=19$m=19456,t=2,p=1$P/qEkLVC2cUEZbYOairU+A$vdXpqQIqcVifQO1OXrCfvkTanUQLmtw2L7jEc6UDbiA";
 
 type FacetRow = (
     &'static [Uuid],
@@ -133,155 +30,84 @@ type FacetRow = (
     usize,
 );
 
-pub fn day(n: i64) -> time::OffsetDateTime {
-    time::OffsetDateTime::UNIX_EPOCH + time::Duration::days(n)
-}
-
-pub fn rfc3339(at: time::OffsetDateTime) -> String {
-    at.format(&time::format_description::well_known::Rfc3339)
-        .expect("a fixture timestamp must render")
-}
-
-pub fn ids(books: &[BookQuery]) -> Vec<Uuid> {
-    books.iter().map(|b| b.id).collect()
-}
-
-pub fn pick(books: &[BookQuery], wanted: &[usize]) -> Vec<Uuid> {
-    wanted.iter().map(|i| books[*i].id).collect()
-}
-
-pub fn sorted(mut v: Vec<Uuid>) -> Vec<Uuid> {
-    v.sort();
-
-    v
-}
-
-pub fn link_keys(links: &[BookLink]) -> Vec<(&str, &str)> {
-    let mut keys: Vec<(&str, &str)> = links
-        .iter()
-        .map(|l| (l.kind.as_ref(), l.url.as_ref()))
-        .collect();
-    keys.sort();
-
-    keys
-}
-
-pub fn title_keys(titles: &[AlternativeTitle]) -> Vec<(Uuid, &str)> {
-    let mut keys: Vec<(Uuid, &str)> = titles
-        .iter()
-        .map(|t| (t.language_id, t.name.as_ref()))
-        .collect();
-    keys.sort();
-
-    keys
-}
-
-pub fn creator_keys(creators: &[CreatorQuery]) -> Vec<(Uuid, &str, &str, Vec<&str>)> {
-    let mut keys: Vec<(Uuid, &str, &str, Vec<&str>)> = creators
-        .iter()
-        .map(|c| {
-            let mut roles: Vec<&str> = c.roles.iter().map(AsRef::as_ref).collect();
-            roles.sort();
-            (c.id, c.first_name.as_ref(), c.last_name.as_ref(), roles)
-        })
-        .collect();
-    keys.sort();
-
-    keys
-}
-
-pub fn localization_keys(localizations: &[ChapterLocalization]) -> Vec<(Uuid, &str)> {
-    let mut keys: Vec<(Uuid, &str)> = localizations
-        .iter()
-        .map(|l| (l.language_id, l.name.as_ref()))
-        .collect();
-    keys.sort();
-
-    keys
-}
-
-// TODO: migrate this to axum_test::TestServer/TestResponse.
-pub struct TestApp {
-    pub pool: PgPool,
-    pub router: Router,
-    pub s3: aws_sdk_s3::Client,
-    pub covers_bucket: String,
-    pub release_pages_bucket: String,
-}
-
 impl TestApp {
-    pub async fn new() -> TestApp {
-        LazyLock::force(&TRACING);
+    pub async fn db_insert_user(&self, user: &UserQuery) {
+        let roles: Vec<String> = user
+            .roles
+            .as_slice()
+            .iter()
+            .map(|r| r.as_ref().to_owned())
+            .collect();
 
-        let db_name = Uuid::now_v7().to_string();
-        let covers_bucket = format!("covers-{}", Uuid::now_v7());
-        let release_pages_bucket = format!("release-pages-{}", Uuid::now_v7());
-        let cfg = Config::from_env_pairs([
-            ("APP_DATABASE__USERNAME", "postgres"),
-            ("APP_DATABASE__PASSWORD", "postgres"),
-            ("APP_DATABASE__HOST", "localhost"),
-            ("APP_DATABASE__PORT", "5432"),
-            ("APP_DATABASE__DATABASE_NAME", db_name.as_str()),
-            ("APP_OBJECT_STORAGE__ENDPOINT", "http://localhost:9000"),
-            ("APP_OBJECT_STORAGE__REGION", "us-east-1"),
-            ("APP_OBJECT_STORAGE__ACCESS_KEY", "rustfsadmin"),
-            ("APP_OBJECT_STORAGE__SECRET_KEY", "rustfsadmin"),
-            ("APP_OBJECT_STORAGE__COVERS_BUCKET", covers_bucket.as_str()),
-            (
-                "APP_OBJECT_STORAGE__RELEASE_PAGES_BUCKET",
-                release_pages_bucket.as_str(),
-            ),
-            // Ignored pairs
-            ("APP_ADDR", "0.0.0.0:0"),
-            ("APP_LOG_LEVEL", "info"),
-        ]);
-        let pool = Self::configure_db(&cfg.database).await;
-        let s3 = object_storage::client(&cfg.object_storage).await;
-        let app = App::build(&cfg).await;
-
-        TestApp {
-            pool,
-            router: app.router(),
-            s3,
-            covers_bucket,
-            release_pages_bucket,
-        }
-    }
-
-    async fn configure_db(cfg: &Database) -> PgPool {
-        let conn_cfg = cfg
-            .without_db()
-            .log_slow_statements(LevelFilter::Warn, Duration::from_secs(10));
-        let mut conn = PgConnection::connect_with(&conn_cfg)
-            .await
-            .expect("failed to connect to Postgres without database");
-
-        conn.execute(AssertSqlSafe(format!(
-            r#"CREATE DATABASE "{}""#,
-            cfg.database_name
-        )))
+        sqlx::query!(
+            r#"
+insert into users(id, email, username, password_hash, roles, verified_at, created_at)
+values($1, $2, $3, $4, $5, $6, $7);
+        "#,
+            user.id,
+            user.email.as_ref(),
+            user.username.as_ref(),
+            KNOWN_PASSWORD_PHC,
+            &roles,
+            user.verified_at.map(Timestamp::into_inner),
+            user.created_at.into_inner(),
+        )
+        .execute(&self.pool)
         .await
-        .expect("failed to create database");
-
-        database::pool(cfg).await
+        .expect("failed to insert factory user");
     }
 
-    pub async fn object_exists(&self, bucket: &str, key: Uuid) -> bool {
+    pub async fn db_seed_reader(&self) -> UserQuery {
+        let user: UserQuery = UserFaker {
+            roles: vec![Role::Reader],
+            verified: true,
+        }
+        .fake();
+        self.db_insert_user(&user).await;
+
+        user
+    }
+
+    pub async fn memory_insert_session(
+        &self,
+        sub: Uuid,
+        sid: Uuid,
+        created_at: time::OffsetDateTime,
+    ) {
+        let session = Session {
+            sid,
+            jti: self
+                .hasher
+                .compute_keyed_hex_hash(Uuid::now_v7())
+                .expect("keyed jti hash"),
+            ua: None,
+            ip: None,
+            created_at: created_at.into(),
+            updated_at: created_at.into(),
+        };
+
+        self.memory
+            .put_session(sub, session)
+            .await
+            .expect("failed to insert factory session");
+    }
+
+    async fn storage_head_object(&self, bucket: &str, key: Uuid) -> Option<HeadObjectOutput> {
         self.s3
             .head_object()
             .bucket(bucket)
             .key(key.to_string())
             .send()
             .await
-            .is_ok()
+            .ok()
     }
 
-    pub async fn object_content_type(&self, bucket: &str, key: Uuid) -> String {
-        self.s3
-            .head_object()
-            .bucket(bucket)
-            .key(key.to_string())
-            .send()
+    pub async fn storage_object_exists(&self, bucket: &str, key: Uuid) -> bool {
+        self.storage_head_object(bucket, key).await.is_some()
+    }
+
+    pub async fn storage_object_content_type(&self, bucket: &str, key: Uuid) -> String {
+        self.storage_head_object(bucket, key)
             .await
             .expect("stored object must exist")
             .content_type()
@@ -289,7 +115,7 @@ impl TestApp {
             .to_owned()
     }
 
-    pub async fn objects_count(&self, bucket: &str) -> usize {
+    pub async fn storage_objects_count(&self, bucket: &str) -> usize {
         self.s3
             .list_objects_v2()
             .bucket(bucket)
@@ -300,19 +126,38 @@ impl TestApp {
             .len()
     }
 
-    pub async fn insert_book_with_visibility(&self, visibility: BookVisibility) -> Uuid {
+    async fn storage_put_image(
+        &self,
+        bucket: &str,
+        id: Uuid,
+        extension: ImageExtension,
+        body: ByteStream,
+    ) {
+        self.s3
+            .put_object()
+            .bucket(bucket)
+            .key(id.to_string())
+            .content_type(extension.content_type())
+            .content_disposition(format!("inline; filename=\"{id}.{}\"", extension.as_ref()))
+            .body(body)
+            .send()
+            .await
+            .expect("failed to upload factory image object");
+    }
+
+    pub async fn db_insert_book_with_visibility(&self, visibility: BookVisibility) -> Uuid {
         let book: BookQuery = BookFaker {
             visibility,
             ..Default::default()
         }
         .fake();
 
-        self.insert_book(&book).await;
+        self.fixture_insert_book(&book).await;
 
         book.id
     }
 
-    pub async fn fetch_book_visibility_state(&self, id: Uuid) -> BookVisibilityState {
+    pub async fn db_fetch_book_visibility_state(&self, id: Uuid) -> BookVisibilityState {
         let row = sqlx::query!(
             r#"
 select b.visibility, b.note, b.updated_at
@@ -332,52 +177,21 @@ where b.id = $1;
         }
     }
 
-    pub async fn put_visibility(&self, id: Uuid, visibility: &str, note: Option<&str>) -> Response {
-        let body = match note {
-            Some(note) => serde_json::json!({ "visibility": visibility, "note": note }),
-            None => serde_json::json!({ "visibility": visibility }),
-        }
-        .to_string();
-        let req = Request::put(format!("/books/{id}/visibility"))
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(body))
-            .unwrap();
+    pub async fn fixture_insert_book(&self, b: &BookQuery) {
+        let mut created_by: UserQuery = UserFaker::default().fake();
+        created_by.id = b.created_by;
+        self.db_insert_user(&created_by).await;
 
-        self.router.clone().oneshot(req).await.unwrap()
+        self.db_insert_book(b).await;
     }
 
-    pub async fn get_books(&self, path: &str) -> Response {
-        let req = Request::get(path).body(Body::empty()).unwrap();
-
-        self.router.clone().oneshot(req).await.unwrap()
-    }
-
-    pub async fn get_body(&self, path: &str) -> (StatusCode, String) {
-        let req = Request::get(path).body(Body::empty()).unwrap();
-        let resp = self.router.clone().oneshot(req).await.unwrap();
-        let status = resp.status();
-        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-
-        (status, String::from_utf8_lossy(&bytes).into_owned())
-    }
-
-    pub async fn get_as_moderator(&self, path: &str) -> Response {
-        let req = Request::get(path)
-            .header("x-user-id", Uuid::now_v7().to_string())
-            .header("x-user-role", "Moderator")
-            .body(Body::empty())
-            .unwrap();
-
-        self.router.clone().oneshot(req).await.unwrap()
-    }
-
-    pub async fn insert_book(&self, b: &BookQuery) {
+    pub async fn db_insert_book(&self, b: &BookQuery) {
         sqlx::query!(
             r#"
 insert into books(id, name, description, publication_year, content_rating, status, kind,
                   publication_language, publication_demographic, visibility, note, submitted_at,
-                  updated_at, created_at)
-values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14);
+                  updated_at, created_at, created_by)
+values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15);
         "#,
             b.id,
             b.name.as_ref(),
@@ -392,7 +206,8 @@ values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14);
             b.note.as_ref().map(AsRef::as_ref) as Option<&str>,
             b.submitted_at,
             b.updated_at,
-            b.created_at
+            b.created_at,
+            b.created_by
         )
         .execute(&self.pool)
         .await
@@ -505,7 +320,7 @@ from unnest($2::uuid[], $3::text[]) as credit(creator_id, role);
         }
     }
 
-    pub async fn fetch_book_sample(&self, id: Uuid) -> BookSample {
+    pub async fn db_fetch_book_sample(&self, id: Uuid) -> BookSample {
         let row = sqlx::query!(
             r#"
 select (select b.name from books b where b.id = $1) as "name?",
@@ -529,12 +344,12 @@ select (select b.name from books b where b.id = $1) as "name?",
         }
     }
 
-    pub async fn fetch_book(&self, id: Uuid) -> BookQuery {
+    pub async fn db_fetch_book(&self, id: Uuid) -> BookQuery {
         let row = sqlx::query!(
             r#"
 select b.name, b.description, b.publication_year, b.status, b.kind,
        b.publication_demographic, b.visibility, b.note, b.submitted_at, b.updated_at,
-       b.created_at,
+       b.created_at, b.created_by,
        cr.id as content_rating_id, cr.name as content_rating_name, cr.code as content_rating_code,
        l.id as language_id, l.code as language_code, l.name as language_name
 from books b
@@ -675,17 +490,18 @@ order by c.id;
             submitted_at: row.submitted_at,
             updated_at: row.updated_at,
             created_at: row.created_at,
+            created_by: row.created_by,
         }
     }
 
-    pub async fn insert_random_book(&self) -> Uuid {
+    pub async fn db_insert_random_book(&self) -> Uuid {
         let book: BookQuery = BookFaker::default().fake();
-        self.insert_book(&book).await;
+        self.fixture_insert_book(&book).await;
 
         book.id
     }
 
-    pub async fn fetch_covers(&self, book_id: Uuid) -> Vec<BookCoverQuery> {
+    pub async fn db_fetch_covers(&self, book_id: Uuid) -> Vec<BookCoverQuery> {
         sqlx::query!(
             r#"
 select id, extension, is_main
@@ -712,7 +528,7 @@ order by id;
         .collect()
     }
 
-    pub async fn insert_cover(&self, book_id: Uuid, image: &'static [u8]) -> Uuid {
+    pub async fn fixture_insert_cover(&self, book_id: Uuid, image: &'static [u8]) -> Uuid {
         let id = Uuid::now_v7();
         let extension =
             ImageExtension::try_from(image).expect("factory cover must be a supported image");
@@ -730,21 +546,18 @@ values($1, $2, $3, false);
         .await
         .expect("failed to insert factory book cover");
 
-        self.s3
-            .put_object()
-            .bucket(&self.covers_bucket)
-            .key(id.to_string())
-            .content_type(extension.content_type())
-            .content_disposition(format!("inline; filename=\"{id}.{}\"", extension.as_ref()))
-            .body(ByteStream::from_static(image))
-            .send()
-            .await
-            .expect("failed to upload factory book cover");
+        self.storage_put_image(
+            &self.covers_bucket,
+            id,
+            extension,
+            ByteStream::from_static(image),
+        )
+        .await;
 
         id
     }
 
-    pub async fn insert_chapter(&self, c: &Chapter) {
+    pub async fn db_insert_chapter(&self, c: &Chapter) {
         sqlx::query!(
             r#"
 insert into chapters(id, book_id, number, name, volume, updated_at, created_at)
@@ -783,7 +596,7 @@ from unnest($2::uuid[], $3::text[]) as localization(language_id, name);
         .expect("failed to insert factory chapter localizations");
     }
 
-    pub async fn insert_numbered_chapters(&self, book_id: Uuid, numbers: &[f32]) {
+    pub async fn db_insert_numbered_chapters(&self, book_id: Uuid, numbers: &[f32]) {
         for number in numbers {
             let mut chapter: Chapter = ChapterFaker {
                 book_id,
@@ -793,18 +606,18 @@ from unnest($2::uuid[], $3::text[]) as localization(language_id, name);
             chapter.number =
                 ChapterNumber::try_from(*number).expect("factory number must be valid");
 
-            self.insert_chapter(&chapter).await;
+            self.db_insert_chapter(&chapter).await;
         }
     }
 
-    pub async fn insert_random_chapter(&self, book_id: Uuid) -> Uuid {
+    pub async fn db_insert_random_chapter(&self, book_id: Uuid) -> Uuid {
         let chapter: Chapter = ChapterFaker::new(book_id).fake();
-        self.insert_chapter(&chapter).await;
+        self.db_insert_chapter(&chapter).await;
 
         chapter.id
     }
 
-    pub async fn fetch_chapter(&self, id: Uuid) -> Chapter {
+    pub async fn db_fetch_chapter(&self, id: Uuid) -> Chapter {
         let row = sqlx::query!(
             r#"
 select book_id, number, name, volume, updated_at, created_at
@@ -854,7 +667,7 @@ order by language_id;
         }
     }
 
-    pub async fn fetch_chapter_sample(&self, id: Uuid) -> ChapterSample {
+    pub async fn db_fetch_chapter_sample(&self, id: Uuid) -> ChapterSample {
         let row = sqlx::query!(
             r#"
 select (select c.number from chapters c where c.id = $1) as "number?",
@@ -876,7 +689,7 @@ select (select c.number from chapters c where c.id = $1) as "number?",
         }
     }
 
-    pub async fn insert_creator(&self, c: &Creator) {
+    pub async fn db_insert_creator(&self, c: &Creator) {
         sqlx::query!(
             r#"
 insert into creators(id, first_name, last_name, created_at)
@@ -892,7 +705,7 @@ values($1, $2, $3, $4);
         .expect("failed to insert factory creator");
     }
 
-    pub async fn credit_creator(&self, book_id: Uuid, creator_id: Uuid, role: CreatorRole) {
+    pub async fn db_credit_creator(&self, book_id: Uuid, creator_id: Uuid, role: CreatorRole) {
         sqlx::query!(
             r#"
 insert into book_creators(book_id, creator_id, role)
@@ -907,76 +720,7 @@ values($1, $2, $3);
         .expect("failed to insert factory book creator credit");
     }
 
-    pub async fn post_cover(&self, book_id: Uuid, image: &[u8]) -> Response {
-        let form = Self::multipart_body(&[image]);
-        let req = Request::post(format!("/books/{book_id}/covers"))
-            .header(header::CONTENT_TYPE, form.content_type())
-            .body(Body::from(form))
-            .unwrap();
-
-        self.router.clone().oneshot(req).await.unwrap()
-    }
-
-    pub async fn get_covers(&self, book_id: Uuid) -> Response {
-        let req = Request::get(format!("/books/{book_id}/covers"))
-            .body(Body::empty())
-            .unwrap();
-
-        self.router.clone().oneshot(req).await.unwrap()
-    }
-
-    pub async fn get_cover_image(&self, cover_id: Uuid) -> Response {
-        let req = Request::get(format!("/covers/{cover_id}/image"))
-            .body(Body::empty())
-            .unwrap();
-
-        self.router.clone().oneshot(req).await.unwrap()
-    }
-
-    pub async fn put_main_cover(&self, book_id: Uuid, cover_id: Uuid) -> StatusCode {
-        let body = serde_json::json!({ "coverId": cover_id }).to_string();
-        let req = Request::put(format!("/books/{book_id}/main-cover"))
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(body))
-            .unwrap();
-
-        self.router.clone().oneshot(req).await.unwrap().status()
-    }
-
-    pub async fn delete_cover(&self, cover_id: Uuid) -> Response {
-        let req = Request::delete(format!("/covers/{cover_id}"))
-            .body(Body::empty())
-            .unwrap();
-
-        self.router.clone().oneshot(req).await.unwrap()
-    }
-
-    pub async fn get_creator(&self, id: Uuid) -> Response {
-        let req = Request::get(format!("/creators/{id}"))
-            .body(Body::empty())
-            .unwrap();
-
-        self.router.clone().oneshot(req).await.unwrap()
-    }
-
-    pub async fn delete_creator(&self, id: Uuid) -> Response {
-        let req = Request::delete(format!("/creators/{id}"))
-            .body(Body::empty())
-            .unwrap();
-
-        self.router.clone().oneshot(req).await.unwrap()
-    }
-
-    pub async fn post_feedback(&self, body: serde_json::Value) -> Response {
-        let req = Request::post("/feedbacks")
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(body.to_string()))
-            .unwrap();
-
-        self.router.clone().oneshot(req).await.unwrap()
-    }
-
-    pub async fn insert_feedback(&self, f: &Feedback) {
+    pub async fn db_insert_feedback(&self, f: &Feedback) {
         sqlx::query!(
             r#"
 insert into feedback(id, kind, status, email, note, book_id, updated_at, created_at)
@@ -996,7 +740,7 @@ values($1, $2, $3, $4, $5, $6, $7, $8);
         .expect("failed to insert factory feedback");
     }
 
-    pub async fn fetch_feedback(&self, id: Uuid) -> Feedback {
+    pub async fn db_fetch_feedback(&self, id: Uuid) -> Feedback {
         let row = sqlx::query!(
             r#"
 select f.id, f.kind, f.status, f.email, f.note, f.book_id, f.updated_at, f.created_at
@@ -1021,55 +765,29 @@ where f.id = $1;
         }
     }
 
-    pub async fn count_feedback(&self) -> i64 {
+    pub async fn db_count_feedback(&self) -> i64 {
         sqlx::query_scalar!(r#"select count(*) as "count!" from feedback"#)
             .fetch_one(&self.pool)
             .await
             .expect("failed to count feedback")
     }
 
-    pub async fn get_feedbacks(&self, path: &str) -> Response {
-        let req = Request::get(path).body(Body::empty()).unwrap();
+    async fn db_seed_books<S>(
+        &self,
+        specs: impl IntoIterator<Item = S>,
+        build: impl Fn(usize, S) -> BookFaker,
+    ) -> Vec<BookQuery> {
+        let mut books = Vec::new();
+        for (i, spec) in specs.into_iter().enumerate() {
+            let book: BookQuery = build(i, spec).fake();
+            self.fixture_insert_book(&book).await;
+            books.push(book);
+        }
 
-        self.router.clone().oneshot(req).await.unwrap()
+        books
     }
 
-    pub async fn get_feedback(&self, id: Uuid) -> Response {
-        let req = Request::get(format!("/feedbacks/{id}"))
-            .body(Body::empty())
-            .unwrap();
-
-        self.router.clone().oneshot(req).await.unwrap()
-    }
-
-    pub async fn put_feedback_status(&self, id: Uuid, status: &str) -> StatusCode {
-        let body = serde_json::json!({ "status": status }).to_string();
-        let req = Request::put(format!("/feedbacks/{id}/status"))
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(body))
-            .unwrap();
-
-        self.router.clone().oneshot(req).await.unwrap().status()
-    }
-
-    pub async fn delete_chapter(&self, id: Uuid) -> Response {
-        let req = Request::delete(format!("/chapters/{id}"))
-            .body(Body::empty())
-            .unwrap();
-
-        self.router.clone().oneshot(req).await.unwrap()
-    }
-
-    pub async fn get_books_page(&self, path: &str) -> RespWrapper<Vec<BookQuery>, String> {
-        let req = Request::get(path).body(Body::empty()).unwrap();
-        let resp = self.router.clone().oneshot(req).await.unwrap();
-        assert_eq!(resp.status(), StatusCode::OK, "{path}");
-
-        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-        serde_json::from_slice(&bytes).expect("failed to parse book page")
-    }
-
-    pub async fn seed_facet_corpus(&self) -> Vec<BookQuery> {
+    pub async fn db_seed_facet_corpus(&self) -> Vec<BookQuery> {
         const ROWS: [FacetRow; 12] = [
             (
                 &[ACTION, ROMANCE],
@@ -1169,14 +887,9 @@ where f.id = $1;
             ),
         ];
 
-        let mut books = Vec::with_capacity(ROWS.len());
-        for (i, (label_ids, kind, status, demographic, rating, language)) in
-            ROWS.into_iter().enumerate()
-        {
-            let book: BookQuery = BookFaker {
-                links: 0..=0,
-                titles: 0..=0,
-                creators: 0..=0,
+        self.db_seed_books(
+            ROWS,
+            |i, (label_ids, kind, status, demographic, rating, language)| BookFaker {
                 exact_labels: Some(labels(label_ids)),
                 kind: Some(kind),
                 status: Some(status),
@@ -1185,41 +898,24 @@ where f.id = $1;
                 publication_language: Some(LANGUAGES[language].clone()),
                 publication_year: Some(2000 + i as i16),
                 created_at: Some(day(i as i64)),
-                ..Default::default()
-            }
-            .fake();
-
-            self.insert_book(&book).await;
-            books.push(book);
-        }
-
-        books
+                ..BookFaker::scalar()
+            },
+        )
+        .await
     }
 
-    pub async fn seed_range_corpus(&self) -> Vec<BookQuery> {
+    pub async fn db_seed_range_corpus(&self) -> Vec<BookQuery> {
         const YEARS: [i16; 5] = [2010, 2012, 2015, 2018, 2020];
 
-        let mut books = Vec::with_capacity(YEARS.len());
-        for year in YEARS {
-            let book: BookQuery = BookFaker {
-                labels: 0..=0,
-                links: 0..=0,
-                titles: 0..=0,
-                creators: 0..=0,
-                publication_year: Some(year),
-                created_at: Some(day(i64::from(year) - 2000)),
-                ..Default::default()
-            }
-            .fake();
-
-            self.insert_book(&book).await;
-            books.push(book);
-        }
-
-        books
+        self.db_seed_books(YEARS, |_, year| BookFaker {
+            publication_year: Some(year),
+            created_at: Some(day(i64::from(year) - 2000)),
+            ..BookFaker::scalar()
+        })
+        .await
     }
 
-    pub async fn seed_sort_corpus(&self) -> Vec<BookQuery> {
+    pub async fn db_seed_sort_corpus(&self) -> Vec<BookQuery> {
         const ROWS: [(&str, i16, i64); 4] = [
             ("Alpha", 2020, 4),
             ("Bravo", 2010, 1),
@@ -1227,52 +923,31 @@ where f.id = $1;
             ("Delta", 2005, 2),
         ];
 
-        let mut books = Vec::with_capacity(ROWS.len());
-        for (name, year, created) in ROWS {
-            let book: BookQuery = BookFaker {
-                labels: 0..=0,
-                links: 0..=0,
-                titles: 0..=0,
-                creators: 0..=0,
-                name: Some(name.to_owned()),
-                publication_year: Some(year),
-                created_at: Some(day(created)),
-                ..Default::default()
-            }
-            .fake();
-
-            self.insert_book(&book).await;
-            books.push(book);
-        }
-
-        books
+        self.db_seed_books(ROWS, |_, (name, year, created)| BookFaker {
+            name: Some(name.to_owned()),
+            publication_year: Some(year),
+            created_at: Some(day(created)),
+            ..BookFaker::scalar()
+        })
+        .await
     }
 
-    pub async fn seed_tie_corpus(&self, n: usize) -> Vec<BookQuery> {
-        let mut books = Vec::with_capacity(n);
-        for _ in 0..n {
-            let book: BookQuery = BookFaker {
-                labels: 0..=0,
-                links: 0..=0,
-                titles: 0..=0,
-                creators: 0..=0,
+    pub async fn db_seed_tie_corpus(&self, n: usize) -> Vec<BookQuery> {
+        let mut books = self
+            .db_seed_books(0..n, |_, _| BookFaker {
                 name: Some("Tied".to_owned()),
                 publication_year: Some(2020),
                 created_at: Some(day(0)),
-                ..Default::default()
-            }
-            .fake();
-
-            self.insert_book(&book).await;
-            books.push(book);
-        }
+                ..BookFaker::scalar()
+            })
+            .await;
 
         books.sort_by_key(|b| b.id);
 
         books
     }
 
-    pub async fn seed_translated_corpus(&self) -> Vec<BookQuery> {
+    pub async fn db_seed_translated_corpus(&self) -> Vec<BookQuery> {
         let japanese = LANGUAGES[0].clone();
         let english = LANGUAGES[3].clone();
         let russian = LANGUAGES[4].clone();
@@ -1297,21 +972,18 @@ where f.id = $1;
         let mut books = Vec::with_capacity(rows.len());
         for (language, visibility, releases) in rows {
             let book: BookQuery = BookFaker {
-                labels: 0..=0,
-                links: 0..=0,
-                titles: 0..=0,
-                creators: 0..=0,
                 publication_language: Some(language),
                 visibility,
-                ..Default::default()
+                ..BookFaker::scalar()
             }
             .fake();
 
-            self.insert_book(&book).await;
+            self.fixture_insert_book(&book).await;
 
             for release_language in releases {
-                let chapter_id = self.insert_random_chapter(book.id).await;
-                self.insert_release(chapter_id, release_language.id).await;
+                let chapter_id = self.db_insert_random_chapter(book.id).await;
+                self.db_insert_release(chapter_id, release_language.id)
+                    .await;
             }
 
             books.push(book);
@@ -1320,39 +992,7 @@ where f.id = $1;
         books
     }
 
-    pub async fn get_labels(&self, path: &str) -> Vec<Label> {
-        let req = Request::get(path).body(Body::empty()).unwrap();
-        let resp = self.router.clone().oneshot(req).await.unwrap();
-        assert_eq!(resp.status(), StatusCode::OK, "{path}");
-
-        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-        let wrapper: RespWrapper<Vec<Label>> = serde_json::from_slice(&bytes).unwrap();
-
-        wrapper.data
-    }
-
-    pub async fn get_chapters(&self, path: String) -> RespWrapper<Vec<Chapter>> {
-        let req = Request::get(path).body(Body::empty()).unwrap();
-        let resp = self.router.clone().oneshot(req).await.unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
-
-        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-        serde_json::from_slice(&bytes).expect("failed to parse chapter page")
-    }
-
-    fn multipart_body(parts: &[&[u8]]) -> MultipartForm {
-        parts
-            .iter()
-            .enumerate()
-            .fold(MultipartForm::new(), |form, (i, part)| {
-                form.add_part(
-                    format!("page{i}"),
-                    Part::bytes(part.to_vec()).file_name(format!("page{i}")),
-                )
-            })
-    }
-
-    pub async fn non_publication_language(&self, book_id: Uuid) -> Uuid {
+    pub async fn db_non_publication_language(&self, book_id: Uuid) -> Uuid {
         let publication = sqlx::query_scalar!(
             r#"
 select publication_language
@@ -1372,7 +1012,7 @@ where id = $1;
             .expect("the language catalog must hold a translation language")
     }
 
-    pub async fn insert_release(&self, chapter_id: Uuid, language_id: Uuid) -> Uuid {
+    pub async fn db_insert_release(&self, chapter_id: Uuid, language_id: Uuid) -> Uuid {
         let id = Uuid::now_v7();
 
         sqlx::query!(
@@ -1393,13 +1033,13 @@ where c.id = $2;
         id
     }
 
-    pub async fn insert_random_release(&self, book_id: Uuid, chapter_id: Uuid) -> Uuid {
-        let language_id = self.non_publication_language(book_id).await;
+    pub async fn db_insert_random_release(&self, book_id: Uuid, chapter_id: Uuid) -> Uuid {
+        let language_id = self.db_non_publication_language(book_id).await;
 
-        self.insert_release(chapter_id, language_id).await
+        self.db_insert_release(chapter_id, language_id).await
     }
 
-    pub async fn insert_page(
+    pub async fn fixture_insert_page(
         &self,
         release_id: Uuid,
         sort_order: Option<i32>,
@@ -1425,30 +1065,31 @@ where cr.id = $2;
         .await
         .expect("failed to insert factory chapter page");
 
-        self.s3
-            .put_object()
-            .bucket(&self.release_pages_bucket)
-            .key(id.to_string())
-            .content_type(extension.content_type())
-            .content_disposition(format!("inline; filename=\"{id}.{}\"", extension.as_ref()))
-            .body(ByteStream::from(image.to_vec()))
-            .send()
-            .await
-            .expect("failed to upload factory chapter page");
+        self.storage_put_image(
+            &self.release_pages_bucket,
+            id,
+            extension,
+            ByteStream::from(image.to_vec()),
+        )
+        .await;
 
         id
     }
 
-    pub async fn insert_staged_pages(&self, release_id: Uuid, parts: &[&[u8]]) -> Vec<Uuid> {
+    pub async fn fixture_insert_staged_pages(
+        &self,
+        release_id: Uuid,
+        parts: &[&[u8]],
+    ) -> Vec<Uuid> {
         let mut ids = Vec::with_capacity(parts.len());
         for part in parts {
-            ids.push(self.insert_page(release_id, None, part).await);
+            ids.push(self.fixture_insert_page(release_id, None, part).await);
         }
 
         ids
     }
 
-    pub async fn fetch_release_version(&self, release_id: Uuid) -> i32 {
+    pub async fn db_fetch_release_version(&self, release_id: Uuid) -> i32 {
         sqlx::query_scalar!(
             r#"
 select version
@@ -1462,7 +1103,7 @@ where id = $1;
         .expect("failed to read chapter release version")
     }
 
-    pub async fn fetch_release_id(&self, release_id: Uuid) -> Option<Uuid> {
+    pub async fn db_fetch_release_id(&self, release_id: Uuid) -> Option<Uuid> {
         sqlx::query_scalar!(
             r#"
 select id
@@ -1476,7 +1117,7 @@ where id = $1;
         .expect("failed to read chapter release id")
     }
 
-    pub async fn fetch_page_order(&self, release_id: Uuid) -> Vec<(Uuid, Option<i32>)> {
+    pub async fn db_fetch_page_order(&self, release_id: Uuid) -> Vec<(Uuid, Option<i32>)> {
         sqlx::query!(
             r#"
 select id, sort_order
@@ -1494,7 +1135,7 @@ order by sort_order nulls last, id;
         .collect()
     }
 
-    pub async fn fetch_committed_page_ids(&self, release_id: Uuid) -> Vec<Uuid> {
+    pub async fn db_fetch_committed_page_ids(&self, release_id: Uuid) -> Vec<Uuid> {
         sqlx::query_scalar!(
             r#"
 select id
@@ -1507,109 +1148,5 @@ order by sort_order;
         .fetch_all(&self.pool)
         .await
         .expect("failed to read committed chapter page order")
-    }
-
-    pub async fn post_chapter(&self, book_id: Uuid, number: f32) -> Response {
-        let body = serde_json::json!({ "number": number }).to_string();
-        let req = Request::post(format!("/books/{book_id}/chapters"))
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(body))
-            .unwrap();
-
-        self.router.clone().oneshot(req).await.unwrap()
-    }
-
-    pub async fn post_release(&self, chapter_id: Uuid, language_id: Uuid) -> Response {
-        let body = serde_json::json!({ "languageId": language_id }).to_string();
-        let req = Request::post(format!("/chapters/{chapter_id}/releases"))
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(body))
-            .unwrap();
-
-        self.router.clone().oneshot(req).await.unwrap()
-    }
-
-    pub async fn get_releases(&self, chapter_id: Uuid) -> Response {
-        let req = Request::get(format!("/chapters/{chapter_id}/releases"))
-            .body(Body::empty())
-            .unwrap();
-
-        self.router.clone().oneshot(req).await.unwrap()
-    }
-
-    pub async fn get_release(&self, id: Uuid) -> Response {
-        let req = Request::get(format!("/releases/{id}"))
-            .body(Body::empty())
-            .unwrap();
-
-        self.router.clone().oneshot(req).await.unwrap()
-    }
-
-    pub async fn post_upload_pages(&self, release_id: Uuid, parts: &[&[u8]]) -> Response {
-        let form = Self::multipart_body(parts);
-        let req = Request::post(format!("/releases/{release_id}/upload"))
-            .header(header::CONTENT_TYPE, form.content_type())
-            .body(Body::from(form))
-            .unwrap();
-
-        self.router.clone().oneshot(req).await.unwrap()
-    }
-
-    pub async fn post_commit(&self, release_id: Uuid, page_order: &[Uuid]) -> Response {
-        let body = serde_json::json!({ "pageOrder": page_order }).to_string();
-        let req = Request::post(format!("/releases/{release_id}/commit"))
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(body))
-            .unwrap();
-
-        self.router.clone().oneshot(req).await.unwrap()
-    }
-
-    pub async fn get_pages(&self, release_id: Uuid) -> Response {
-        let req = Request::get(format!("/releases/{release_id}/pages"))
-            .body(Body::empty())
-            .unwrap();
-
-        self.router.clone().oneshot(req).await.unwrap()
-    }
-
-    pub async fn get_staged(&self, release_id: Uuid) -> Response {
-        let req = Request::get(format!("/releases/{release_id}/pages?status=Staged"))
-            .body(Body::empty())
-            .unwrap();
-
-        self.router.clone().oneshot(req).await.unwrap()
-    }
-
-    pub async fn get_page_image(&self, release_id: Uuid, page_id: Uuid) -> Response {
-        let req = Request::get(format!("/releases/{release_id}/pages/{page_id}/image"))
-            .body(Body::empty())
-            .unwrap();
-
-        self.router.clone().oneshot(req).await.unwrap()
-    }
-
-    pub async fn get_page(&self, release_id: Uuid, page_number: i32) -> Response {
-        let req = Request::get(format!("/releases/{release_id}/pages/{page_number}"))
-            .body(Body::empty())
-            .unwrap();
-
-        self.router.clone().oneshot(req).await.unwrap()
-    }
-
-    pub async fn delete_book(&self, id: Uuid) -> Response {
-        let req = Request::delete(format!("/books/{id}"))
-            .body(Body::empty())
-            .unwrap();
-
-        self.router.clone().oneshot(req).await.unwrap()
-    }
-
-    pub async fn delete_release(&self, id: Uuid) -> Response {
-        let req = Request::delete(format!("/releases/{id}"))
-            .body(Body::empty())
-            .unwrap();
-
-        self.router.clone().oneshot(req).await.unwrap()
     }
 }

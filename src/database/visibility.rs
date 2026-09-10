@@ -7,7 +7,7 @@ use crate::{
         Book, BookCover, BookVisibility, BookVisibilityUpdate, Chapter, ChapterPage,
         ChapterRelease, Entity,
     },
-    error::DatabaseError,
+    error::{DatabaseError, LogInternal},
 };
 
 fn require_visibility<T: Entity>(

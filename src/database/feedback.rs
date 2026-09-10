@@ -7,7 +7,7 @@ use crate::{
     entity::{
         Email, Feedback, FeedbackFilter, FeedbackKind, FeedbackStatus, FeedbackStatusUpdate, Text,
     },
-    error::DatabaseError,
+    error::{DatabaseError, LogInternal},
 };
 
 #[derive(sqlx::FromRow)]

@@ -72,6 +72,7 @@ struct BookWithRelations {
     id: Uuid,
     updated_at: Option<OffsetDateTime>,
     created_at: OffsetDateTime,
+    created_by: Uuid,
 }
 
 impl TryFrom<BookWithRelations> for Book {
@@ -83,6 +84,7 @@ impl TryFrom<BookWithRelations> for Book {
             id,
             updated_at,
             created_at,
+            created_by,
         } = item;
 
         let BookReq {
@@ -140,13 +142,14 @@ impl TryFrom<BookWithRelations> for Book {
             creators: BookCreators::try_from(creators)?,
             updated_at,
             created_at,
+            created_by,
         })
     }
 }
 
-// deferred: gate to any signed-in User; record the caller as the submitter
 pub async fn store_book(
     State(service): State<Service>,
+    claims: UserClaims,
     Json(req): Json<BookReq>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let id = Uuid::now_v7();
@@ -156,6 +159,7 @@ pub async fn store_book(
         id,
         updated_at: None,
         created_at,
+        created_by: claims.id,
     }
     .try_into()?;
 
@@ -164,7 +168,7 @@ pub async fn store_book(
     Ok(json_data_response(StatusCode::CREATED, StoreResp { id }))
 }
 
-// deferred: gate to Uploader/Moderator/Admin, plus the submitter on their own Draft
+// TODO: re-shape authz
 pub async fn update_book(
     State(service): State<Service>,
     Path(id): Path<Uuid>,
@@ -176,6 +180,7 @@ pub async fn update_book(
         id,
         updated_at: Some(updated_at),
         created_at: OffsetDateTime::UNIX_EPOCH,
+        created_by: Uuid::nil(),
     }
     .try_into()?;
 
@@ -262,7 +267,7 @@ impl TryFrom<(BookListQuery, Option<BookCursor>)> for BookFilter {
             )?,
         };
 
-        let selection_hash = Hasher::compute_hex_hash(&selection)?;
+        let selection_hash = Hasher::compute_short_hex_hash(&selection)?;
         let filter = Self {
             limit,
             cursor,
@@ -276,11 +281,16 @@ impl TryFrom<(BookListQuery, Option<BookCursor>)> for BookFilter {
     }
 }
 
-// deferred: gate the ?visibility= override to Moderator/Admin
+// TODO: re-shape authz
 pub async fn get_books(
     State(service): State<Service>,
+    claims: Option<UserClaims>,
     Query(query): Query<BookListQuery>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
+    if query.visibility.is_some() && !claims.is_some_and(|c| c.can_moderate()) {
+        return Err(RouteError::Forbidden.into());
+    }
+
     let cursor = query.cursor.as_deref().map(Coder::decode).transpose()?;
     let filter = BookFilter::try_from((query, cursor))?;
 
@@ -293,12 +303,13 @@ pub async fn get_books(
     ))
 }
 
-// deferred: scope non-Listed reads to the submitter or a Moderator
+// TODO: re-shape authz
 pub async fn get_book(
     State(service): State<Service>,
+    claims: Option<UserClaims>,
     Path(id): Path<Uuid>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    let book = service.get_book(id).await?;
+    let book = service.get_book(id, claims.as_ref()).await?;
     Ok(json_data_response(StatusCode::OK, book))
 }
 
@@ -331,12 +342,17 @@ impl TryFrom<BookVisibilityWithContext> for VisibilityTransition {
     }
 }
 
-// deferred: gate to the submitter for Draft -> PendingReview, Moderator/Admin otherwise
+// TODO: re-shape authz
 pub async fn update_book_visibility(
     State(service): State<Service>,
+    claims: UserClaims,
     Path(id): Path<Uuid>,
     Json(req): Json<BookVisibilityReq>,
 ) -> Result<StatusCode, AppError> {
+    if req.visibility != BookVisibility::PendingReview && !claims.can_moderate() {
+        return Err(RouteError::Forbidden.into());
+    }
+
     let transition: VisibilityTransition = BookVisibilityWithContext {
         req,
         id,
@@ -349,7 +365,6 @@ pub async fn update_book_visibility(
     Ok(StatusCode::NO_CONTENT)
 }
 
-// deferred: gate to Moderator/Admin
 pub async fn delete_book(
     State(service): State<Service>,
     Path(id): Path<Uuid>,
@@ -358,7 +373,7 @@ pub async fn delete_book(
     Ok(StatusCode::NO_CONTENT)
 }
 
-// deferred: gate to Uploader/Moderator/Admin
+// TODO: re-shape authz
 pub async fn store_book_cover(
     State(service): State<Service>,
     Path(book_id): Path<Uuid>,
@@ -380,6 +395,7 @@ pub async fn store_book_cover(
     Ok(json_data_response(StatusCode::CREATED, StoreResp { id }))
 }
 
+// TODO: re-shape authz
 pub async fn get_book_covers(
     State(service): State<Service>,
     Path(book_id): Path<Uuid>,
@@ -389,7 +405,7 @@ pub async fn get_book_covers(
     Ok(json_data_response(StatusCode::OK, covers))
 }
 
-// deferred: also admit the book's submitter once `books` records one
+// TODO: re-shape authz
 pub async fn get_book_cover_image(
     State(service): State<Service>,
     Path(cover_id): Path<Uuid>,
@@ -408,7 +424,6 @@ pub struct MainCoverReq {
     pub cover_id: Uuid,
 }
 
-// deferred: gate to Uploader/Moderator/Admin
 pub async fn update_book_main_cover(
     State(service): State<Service>,
     Path(book_id): Path<Uuid>,
@@ -418,7 +433,6 @@ pub async fn update_book_main_cover(
     Ok(StatusCode::NO_CONTENT)
 }
 
-// deferred: gate to Uploader/Moderator/Admin
 pub async fn delete_book_cover(
     State(service): State<Service>,
     Path(cover_id): Path<Uuid>,

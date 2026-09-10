@@ -3,9 +3,8 @@ use axum::{
     http::{Request, StatusCode},
 };
 use http_body_util::BodyExt;
-use tower::ServiceExt;
 
-use crate::fakers::{
+use crate::helpers::fakers::{
     ACTION, BookFaker, CONTENT_RATINGS, FANTASY, ISEKAI, LABELS, LANGUAGES, LONG_STRIP, MAFIA,
     ROMANCE, SCHOOL_LIFE, ZOMBIES,
 };
@@ -48,7 +47,7 @@ const SORT_CORPUS_CASES: &[(&str, &[usize])] = &[
 #[tokio::test]
 async fn label_facets_narrow_the_catalog() {
     let app = TestApp::new().await;
-    let books = app.seed_facet_corpus().await;
+    let books = app.db_seed_facet_corpus().await;
 
     for (template, expected) in FACET_CORPUS_LABEL_CASES {
         let query = template
@@ -74,7 +73,7 @@ async fn label_facets_narrow_the_catalog() {
 #[tokio::test]
 async fn get_books_with_an_unknown_label_id_returns_no_matches() {
     let app = TestApp::new().await;
-    app.seed_facet_corpus().await;
+    app.db_seed_facet_corpus().await;
 
     let got = app
         .get_books_page(&format!("/books?labels={}", uuid::Uuid::now_v7()))
@@ -90,7 +89,7 @@ async fn get_books_with_an_unknown_label_id_returns_no_matches() {
 #[tokio::test]
 async fn enum_facets_or_within_a_facet_and_between_facets() {
     let app = TestApp::new().await;
-    let books = app.seed_facet_corpus().await;
+    let books = app.db_seed_facet_corpus().await;
 
     let cases: Vec<(String, Vec<usize>)> = vec![
         ("".to_owned(), (0..12).collect()),
@@ -157,7 +156,7 @@ async fn enum_facets_or_within_a_facet_and_between_facets() {
 #[tokio::test]
 async fn available_translated_language_answers_what_can_be_read() {
     let app = TestApp::new().await;
-    let books = app.seed_translated_corpus().await;
+    let books = app.db_seed_translated_corpus().await;
     let english = LANGUAGES[3].id;
     let russian = LANGUAGES[4].id;
     let japanese = LANGUAGES[0].id;
@@ -213,7 +212,7 @@ async fn available_translated_language_answers_what_can_be_read() {
 #[tokio::test]
 async fn range_facets_respect_their_boundaries() {
     let app = TestApp::new().await;
-    let books = app.seed_range_corpus().await;
+    let books = app.db_seed_range_corpus().await;
 
     let cases: Vec<(String, Vec<usize>)> = vec![
         (
@@ -281,11 +280,11 @@ async fn get_books_embeds_each_books_own_arrays() {
     }
     .fake();
 
-    app.insert_book(&bare).await;
-    app.insert_book(&full).await;
+    app.fixture_insert_book(&bare).await;
+    app.fixture_insert_book(&full).await;
 
     let req = Request::get("/books").body(Body::empty()).unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send_authed(req).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -324,11 +323,11 @@ async fn get_books_returns_default_limit_and_next_cursor() {
 
     for _ in 0..25 {
         let book: BookQuery = BookFaker::default().fake();
-        app.insert_book(&book).await;
+        app.fixture_insert_book(&book).await;
     }
 
     let req = Request::get("/books").body(Body::empty()).unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send_authed(req).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -344,7 +343,7 @@ async fn get_books_with_cursor_and_limit_3_returns_next_page() {
 
     for _ in 0..6 {
         let book: BookQuery = BookFaker::default().fake();
-        app.insert_book(&book).await;
+        app.fixture_insert_book(&book).await;
     }
 
     let first = app.get_books_page("/books?limit=3").await;
@@ -368,13 +367,13 @@ async fn get_books_desc_order_confirmed() {
     let mut ids = Vec::with_capacity(3);
     for _ in 0..3 {
         let book: BookQuery = BookFaker::default().fake();
-        app.insert_book(&book).await;
+        app.fixture_insert_book(&book).await;
         ids.push(book.id);
     }
     ids.sort_by(|a, b| b.cmp(a));
 
     let req = Request::get("/books").body(Body::empty()).unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send_authed(req).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -388,8 +387,7 @@ async fn get_books_desc_order_confirmed() {
 async fn get_books_zero_limit_returns_422() {
     let app = TestApp::new().await;
 
-    let req = Request::get("/books?limit=0").body(Body::empty()).unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.get_raw("/books?limit=0").await;
 
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
@@ -398,10 +396,7 @@ async fn get_books_zero_limit_returns_422() {
 async fn get_books_invalid_cursor_returns_400() {
     let app = TestApp::new().await;
 
-    let req = Request::get("/books?cursor=not-a-cursor!!")
-        .body(Body::empty())
-        .unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.get_raw("/books?cursor=not-a-cursor!!").await;
 
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
@@ -409,7 +404,7 @@ async fn get_books_invalid_cursor_returns_400() {
 #[tokio::test]
 async fn each_sort_orders_by_its_own_key() {
     let app = TestApp::new().await;
-    let books = app.seed_sort_corpus().await;
+    let books = app.db_seed_sort_corpus().await;
 
     for (query, expected) in SORT_CORPUS_CASES {
         let got = app.get_books_page(&format!("/books{query}")).await;
@@ -421,7 +416,7 @@ async fn each_sort_orders_by_its_own_key() {
 #[tokio::test]
 async fn paging_a_non_unique_sort_key_neither_skips_nor_repeats() {
     let app = TestApp::new().await;
-    let books = app.seed_tie_corpus(6).await;
+    let books = app.db_seed_tie_corpus(6).await;
     let ascending = ids(&books);
     let descending: Vec<uuid::Uuid> = ascending.iter().rev().copied().collect();
 
@@ -459,7 +454,7 @@ async fn paging_a_non_unique_sort_key_neither_skips_nor_repeats() {
 #[tokio::test]
 async fn get_books_on_the_last_page_returns_a_null_cursor() {
     let app = TestApp::new().await;
-    app.seed_tie_corpus(2).await;
+    app.db_seed_tie_corpus(2).await;
 
     let (status, body) = app.get_body("/books?limit=5").await;
     assert_eq!(status, StatusCode::OK);
@@ -475,7 +470,7 @@ async fn get_books_on_the_last_page_returns_a_null_cursor() {
 #[tokio::test]
 async fn a_cursor_carries_its_filter_across_pages() {
     let app = TestApp::new().await;
-    let books = app.seed_facet_corpus().await;
+    let books = app.db_seed_facet_corpus().await;
 
     let first = app
         .get_books_page(&format!("/books?labels={ACTION}&limit=2"))
@@ -499,7 +494,7 @@ async fn a_cursor_carries_its_filter_across_pages() {
 #[tokio::test]
 async fn a_cursor_minted_under_another_filter_returns_400() {
     let app = TestApp::new().await;
-    app.seed_facet_corpus().await;
+    app.db_seed_facet_corpus().await;
 
     let first = app
         .get_books_page(&format!("/books?labels={ACTION}&limit=2"))
@@ -513,8 +508,7 @@ async fn a_cursor_minted_under_another_filter_returns_400() {
         format!("/books?labels={ACTION}&kind=Manga&limit=2&cursor={cursor}"),
         format!("/books?limit=2&cursor={cursor}"),
     ] {
-        let req = Request::get(&changed).body(Body::empty()).unwrap();
-        let resp = app.router.clone().oneshot(req).await.unwrap();
+        let resp = app.get_raw(&changed).await;
 
         assert_error(resp, StatusCode::BAD_REQUEST).await;
     }
@@ -523,7 +517,7 @@ async fn a_cursor_minted_under_another_filter_returns_400() {
 #[tokio::test]
 async fn a_cursor_survives_a_changed_page_size() {
     let app = TestApp::new().await;
-    app.seed_facet_corpus().await;
+    app.db_seed_facet_corpus().await;
 
     let first = app.get_books_page("/books?limit=2").await;
     let cursor = first.next_cursor.expect("a full page has a cursor");
@@ -542,7 +536,7 @@ async fn a_cursor_survives_a_changed_page_size() {
 #[tokio::test]
 async fn get_books_with_an_unmatched_filter_returns_an_empty_page() {
     let app = TestApp::new().await;
-    app.seed_facet_corpus().await;
+    app.db_seed_facet_corpus().await;
 
     let (status, body) = app
         .get_body("/books?kind=Manga&publicationDemographic=Josei")
@@ -565,7 +559,7 @@ async fn filtering_stays_inside_the_default_visibility() {
         ..Default::default()
     }
     .fake();
-    app.insert_book(&hidden).await;
+    app.fixture_insert_book(&hidden).await;
 
     for query in [
         format!("?labels={ACTION}"),
@@ -631,10 +625,7 @@ async fn get_books_rejects_malformed_and_out_of_range_queries() {
     ];
 
     for (query, expected) in cases {
-        let req = Request::get(format!("/books{query}"))
-            .body(Body::empty())
-            .unwrap();
-        let resp = app.router.clone().oneshot(req).await.unwrap();
+        let resp = app.get_raw(&format!("/books{query}")).await;
 
         assert_eq!(resp.status(), expected, "{query:?}");
     }
@@ -649,7 +640,7 @@ async fn get_books_accepts_duplicates_that_fit_after_deduping() {
     let req = Request::get(format!("/books?a=1{repeated}"))
         .body(Body::empty())
         .unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.send_authed(req).await;
 
     assert_eq!(resp.status(), StatusCode::OK);
 }

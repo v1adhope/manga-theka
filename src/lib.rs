@@ -4,6 +4,8 @@ pub mod database;
 pub mod entity;
 pub mod error;
 pub mod hasher;
+pub mod jwt;
+pub mod memory_storage;
 pub mod object_storage;
 pub mod route;
 pub mod service;

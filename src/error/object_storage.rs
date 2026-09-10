@@ -4,7 +4,7 @@ use axum::{
 };
 use thiserror::Error;
 
-use crate::error::error_response;
+use crate::error::{LogInternal, error_response};
 
 #[derive(Debug, Error)]
 #[non_exhaustive]
@@ -19,10 +19,8 @@ pub enum ObjectStorageError {
     Delete(#[source] anyhow::Error),
 }
 
-impl ObjectStorageError {
-    pub fn log_internal(&self) {
-        tracing::error!(error = ?self, "internal object storage error");
-    }
+impl LogInternal for ObjectStorageError {
+    const MODULE: &'static str = "object storage";
 }
 
 impl IntoResponse for ObjectStorageError {

@@ -75,12 +75,14 @@ tasks:
       - task: up
 
   clean:
-    desc: "[DANGEROUS] Stop services and delete the postgres and rustfs data volumes (irreversible)"
+    desc: "[DANGEROUS] Stop services and delete the postgres, rustfs, and redis data volumes (irreversible)"
     cmds:
       - task: down
       - cmd: docker volume rm manga-theka_pgdata
         ignore_error: true
       - cmd: docker volume rm manga-theka_rustfsdata
+        ignore_error: true
+      - cmd: docker volume rm manga-theka_redisdata
         ignore_error: true
 
   migration-add:
@@ -104,3 +106,12 @@ tasks:
     desc: Generate sqlx offline query data for cargo build
     cmds:
       - cargo sqlx prepare --all
+
+  keys-generate:
+    desc: Generate the Ed25519 PKCS#8 PEM keypairs the JWT layer loads at startup
+    cmds:
+      - mkdir -p .keys
+      - openssl genpkey -algorithm ed25519 -out .keys/jwt_access_private.pem
+      - openssl pkey -in .keys/jwt_access_private.pem -pubout -out .keys/jwt_access_public.pem
+      - openssl genpkey -algorithm ed25519 -out .keys/jwt_refresh_private.pem
+      - openssl pkey -in .keys/jwt_refresh_private.pem -pubout -out .keys/jwt_refresh_public.pem

@@ -68,7 +68,6 @@ impl ChapterVolume {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[serde(transparent)]
 pub struct ChapterName(String);
 
 impl TryFrom<String> for ChapterName {

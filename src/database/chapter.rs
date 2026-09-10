@@ -10,7 +10,7 @@ use crate::{
         Chapter, ChapterLocalization, ChapterLocalizations, ChapterName, ChapterNumber,
         ChapterVolume, Filter,
     },
-    error::DatabaseError,
+    error::{DatabaseError, LogInternal},
 };
 
 #[derive(sqlx::FromRow)]

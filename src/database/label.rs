@@ -4,7 +4,7 @@ use uuid::Uuid;
 use crate::{
     database::{Database, Invariant},
     entity::{Label, LabelKind},
-    error::DatabaseError,
+    error::{DatabaseError, LogInternal},
 };
 
 #[derive(sqlx::FromRow)]

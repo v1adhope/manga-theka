@@ -1,0 +1,125 @@
+use axum::body::Body;
+use axum::http::{Request, StatusCode, header};
+use fake::Fake;
+use manga_theka::entity::UserQuery;
+use uuid::Uuid;
+
+use crate::helpers::fakers::UserFaker;
+use crate::helpers::{TestApp, assert_error, assert_stored};
+
+fn valid_body() -> serde_json::Value {
+    serde_json::json!({
+        "email": format!("{}@example.test", Uuid::now_v7().simple()),
+        "username": format!("u{}", &Uuid::now_v7().simple().to_string()[..16]),
+        "password": "correct horse battery staple",
+    })
+}
+
+#[tokio::test]
+async fn register_with_a_valid_body_returns_201_and_persists_a_hashed_reader() {
+    let app = TestApp::new().await;
+    let body = valid_body();
+
+    let resp = app.post_json("/users/register", body.clone()).await;
+    let id = assert_stored(resp).await;
+
+    let row = sqlx::query!(
+        "select id, roles, password_hash from users where email = $1",
+        body["email"].as_str().unwrap()
+    )
+    .fetch_one(&app.pool)
+    .await
+    .unwrap();
+    assert_eq!(row.id, id);
+    assert_eq!(row.roles, vec!["Reader".to_owned()]);
+    assert!(row.password_hash.starts_with("$argon2id$"));
+}
+
+#[tokio::test]
+async fn register_with_a_taken_email_returns_409() {
+    let app = TestApp::new().await;
+    let existing: UserQuery = UserFaker::default().fake();
+    app.db_insert_user(&existing).await;
+
+    let mut body = valid_body();
+    body["email"] = serde_json::json!(existing.email.as_ref());
+
+    let resp = app.post_json("/users/register", body).await;
+    assert_error(resp, StatusCode::CONFLICT).await;
+}
+
+#[tokio::test]
+async fn register_with_a_taken_username_returns_409() {
+    let app = TestApp::new().await;
+    let existing: UserQuery = UserFaker::default().fake();
+    app.db_insert_user(&existing).await;
+
+    let mut body = valid_body();
+    body["username"] = serde_json::json!(existing.username.as_ref());
+
+    let resp = app.post_json("/users/register", body).await;
+    assert_error(resp, StatusCode::CONFLICT).await;
+}
+
+#[tokio::test]
+async fn register_with_semantically_invalid_fields_returns_422() {
+    let app = TestApp::new().await;
+
+    let cases = [
+        ("bad email", serde_json::json!("not-an-email")),
+        ("bad username", serde_json::json!("a")),
+        ("short password", serde_json::json!("fifteen chars..")),
+        ("long password", serde_json::json!("x".repeat(129))),
+    ];
+
+    for (label, override_value) in cases {
+        let mut body = valid_body();
+        let key = match label {
+            "bad email" => "email",
+            "bad username" => "username",
+            _ => "password",
+        };
+        body[key] = override_value;
+
+        let resp = app.post_json("/users/register", body).await;
+        assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
+    }
+}
+
+#[tokio::test]
+async fn register_with_broken_json_returns_400() {
+    let app = TestApp::new().await;
+
+    let resp = app.post_raw("/users/register", "{not json").await;
+    assert_error(resp, StatusCode::BAD_REQUEST).await;
+}
+
+#[tokio::test]
+async fn get_me_without_a_token_returns_401() {
+    let app = TestApp::new().await;
+
+    let resp = app.get_raw("/users/me").await;
+    assert_error(resp, StatusCode::UNAUTHORIZED).await;
+}
+
+#[tokio::test]
+async fn get_me_after_the_row_is_gone_returns_404() {
+    let app = TestApp::new().await;
+    let user: UserQuery = UserFaker::default().fake();
+    app.db_insert_user(&user).await;
+
+    sqlx::query!("delete from users where id = $1", user.id)
+        .execute(&app.pool)
+        .await
+        .unwrap();
+
+    let req = Request::get("/users/me")
+        .header(
+            header::AUTHORIZATION,
+            app.bearer(user.id, Uuid::now_v7(), user.roles.as_slice()),
+        )
+        .body(Body::empty())
+        .unwrap();
+
+    assert_error(app.send_raw(req).await, StatusCode::NOT_FOUND).await;
+}

@@ -13,6 +13,7 @@ create table if not exists books (
 	visibility text not null,
 	note text,
 	submitted_at timestamptz,
+	created_by uuid not null,
 
 	constraint pk_books_id primary key(id),
 	constraint check_length_books_name check(char_length(name) <= 255),
@@ -23,7 +24,8 @@ create table if not exists books (
 	constraint enum_books_kind check(kind in ('Manga', 'Manhwa', 'Manhua')),
 	constraint enum_books_publication_demographic check(publication_demographic in ('Shounen', 'Shoujo', 'Seinen', 'Josei', 'Kids')),
 	constraint enum_books_visibility check(visibility in ('Draft', 'PendingReview', 'Listed', 'Rejected', 'Hidden')),
-	constraint fk_books_languages_publication_language foreign key(publication_language) references languages(id) on delete restrict
+	constraint fk_books_languages_publication_language foreign key(publication_language) references languages(id) on delete restrict,
+	constraint fk_books_users_created_by foreign key(created_by) references users(id) on delete restrict
 );
 
 create index if not exists idx_books_visibility_created_at_id on books(visibility, created_at, id);

@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use crate::entity::{CoverUrl, PageUrl};
 
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
-#[serde(transparent)]
 pub struct ResourceUrl(String);
 
 impl From<CoverUrl> for ResourceUrl {

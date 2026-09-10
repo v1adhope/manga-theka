@@ -150,7 +150,6 @@ impl AsRef<str> for BookLinkKind {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[serde(transparent)]
 pub struct BookName(String);
 
 impl TryFrom<String> for BookName {
@@ -168,7 +167,6 @@ impl AsRef<str> for BookName {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[serde(transparent)]
 pub struct LinkUrl(Url);
 
 impl TryFrom<String> for LinkUrl {
@@ -214,6 +212,7 @@ pub struct Book {
     pub creators: BookCreators,
     pub updated_at: Option<OffsetDateTime>,
     pub created_at: OffsetDateTime,
+    pub created_by: Uuid,
 }
 
 impl Entity for Book {
@@ -244,6 +243,7 @@ pub struct BookQuery {
     pub updated_at: Option<OffsetDateTime>,
     #[serde(with = "time::serde::rfc3339")]
     pub created_at: OffsetDateTime,
+    pub created_by: Uuid,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

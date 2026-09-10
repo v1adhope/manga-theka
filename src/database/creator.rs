@@ -5,7 +5,7 @@ use uuid::Uuid;
 use crate::{
     database::{Database, Invariant},
     entity::{Creator, CreatorQuery, CreatorRole, Filter, Name},
-    error::DatabaseError,
+    error::{DatabaseError, LogInternal},
 };
 
 #[derive(sqlx::FromRow)]

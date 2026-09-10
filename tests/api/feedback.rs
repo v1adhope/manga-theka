@@ -1,15 +1,10 @@
-use axum::{
-    body::Body,
-    http::{Request, StatusCode},
-};
-use http_body_util::BodyExt;
+use axum::http::StatusCode;
 use time::OffsetDateTime;
-use tower::ServiceExt;
 
-use crate::fakers::FeedbackFaker;
+use crate::helpers::fakers::FeedbackFaker;
 use crate::helpers::{RespWrapper, TestApp, assert_error, assert_stored};
 use fake::Fake;
-use manga_theka::entity::{Feedback, FeedbackKind, FeedbackStatus};
+use manga_theka::entity::{Feedback, FeedbackKind, FeedbackStatus, Role};
 
 fn general_body() -> serde_json::Value {
     serde_json::json!({
@@ -26,7 +21,7 @@ async fn store_general_feedback_with_valid_body_passes() {
     let resp = app.post_feedback(general_body()).await;
     let id = assert_stored(resp).await;
 
-    let stored = app.fetch_feedback(id).await;
+    let stored = app.db_fetch_feedback(id).await;
 
     assert_eq!(stored.kind, FeedbackKind::General);
     assert_eq!(stored.status, FeedbackStatus::Open);
@@ -39,7 +34,7 @@ async fn store_general_feedback_with_valid_body_passes() {
 #[tokio::test]
 async fn store_book_bound_feedback_with_valid_body_passes() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
 
     for (kind, expected) in [
         ("Report", FeedbackKind::Report),
@@ -55,7 +50,7 @@ async fn store_book_bound_feedback_with_valid_body_passes() {
             .await;
         let id = assert_stored(resp).await;
 
-        let stored = app.fetch_feedback(id).await;
+        let stored = app.db_fetch_feedback(id).await;
 
         assert_eq!(stored.kind, expected);
         assert_eq!(stored.book_id, Some(book_id));
@@ -79,7 +74,11 @@ async fn store_book_bound_feedback_without_a_book_returns_422() {
         assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
     }
 
-    assert_eq!(app.count_feedback().await, 0, "failed write must roll back");
+    assert_eq!(
+        app.db_count_feedback().await,
+        0,
+        "failed write must roll back"
+    );
 }
 
 #[tokio::test]
@@ -96,13 +95,17 @@ async fn store_feedback_with_unknown_book_returns_422() {
         .await;
 
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
-    assert_eq!(app.count_feedback().await, 0, "failed write must roll back");
+    assert_eq!(
+        app.db_count_feedback().await,
+        0,
+        "failed write must roll back"
+    );
 }
 
 #[tokio::test]
 async fn store_general_feedback_naming_a_book_returns_422() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
 
     let resp = app
         .post_feedback(serde_json::json!({
@@ -114,7 +117,11 @@ async fn store_general_feedback_naming_a_book_returns_422() {
         .await;
 
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
-    assert_eq!(app.count_feedback().await, 0, "failed write must roll back");
+    assert_eq!(
+        app.db_count_feedback().await,
+        0,
+        "failed write must roll back"
+    );
 }
 
 #[tokio::test]
@@ -159,7 +166,11 @@ async fn store_feedback_with_invalid_field_values_returns_422() {
         );
     }
 
-    assert_eq!(app.count_feedback().await, 0, "failed write must roll back");
+    assert_eq!(
+        app.db_count_feedback().await,
+        0,
+        "failed write must roll back"
+    );
 }
 
 #[tokio::test]
@@ -182,19 +193,15 @@ async fn store_feedback_with_a_malformed_book_id_returns_422() {
 async fn store_feedback_with_broken_json_returns_400() {
     let app = TestApp::new().await;
 
-    let req = Request::post("/feedbacks")
-        .header(axum::http::header::CONTENT_TYPE, "application/json")
-        .body(Body::from("{not json"))
-        .unwrap();
+    let resp = app.post_raw("/feedbacks", "{not json").await;
 
-    let resp = app.router.oneshot(req).await.unwrap();
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
 
 #[tokio::test]
 async fn get_feedbacks_filters_by_kind() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
 
     for kind in [
         FeedbackKind::Report,
@@ -211,17 +218,15 @@ async fn get_feedbacks_filters_by_kind() {
             ..Default::default()
         }
         .fake();
-        app.insert_feedback(&feedback).await;
+        app.db_insert_feedback(&feedback).await;
     }
 
-    let resp = app.get_feedbacks("/feedbacks?kind=Report").await;
-    assert_eq!(resp.status(), StatusCode::OK);
+    let page: RespWrapper<Vec<Feedback>> = app
+        .get_ok_json_as("/feedbacks?kind=Report", &[Role::Moderator])
+        .await;
 
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<Feedback>> = serde_json::from_slice(&bytes).unwrap();
-
-    assert_eq!(wrapper.data.len(), 1);
-    assert_eq!(wrapper.data[0].kind, FeedbackKind::Report);
+    assert_eq!(page.data.len(), 1);
+    assert_eq!(page.data[0].kind, FeedbackKind::Report);
 }
 
 #[tokio::test]
@@ -238,23 +243,21 @@ async fn get_feedbacks_filters_by_status() {
             ..Default::default()
         }
         .fake();
-        app.insert_feedback(&feedback).await;
+        app.db_insert_feedback(&feedback).await;
     }
 
-    let resp = app.get_feedbacks("/feedbacks?status=Dismissed").await;
-    assert_eq!(resp.status(), StatusCode::OK);
+    let page: RespWrapper<Vec<Feedback>> = app
+        .get_ok_json_as("/feedbacks?status=Dismissed", &[Role::Moderator])
+        .await;
 
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<Feedback>> = serde_json::from_slice(&bytes).unwrap();
-
-    assert_eq!(wrapper.data.len(), 1);
-    assert_eq!(wrapper.data[0].status, FeedbackStatus::Dismissed);
+    assert_eq!(page.data.len(), 1);
+    assert_eq!(page.data[0].status, FeedbackStatus::Dismissed);
 }
 
 #[tokio::test]
 async fn get_feedbacks_combines_kind_and_status_filters() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
 
     for (kind, status, book) in [
         (FeedbackKind::Report, FeedbackStatus::Open, Some(book_id)),
@@ -271,20 +274,16 @@ async fn get_feedbacks_combines_kind_and_status_filters() {
             book_id: book,
         }
         .fake();
-        app.insert_feedback(&feedback).await;
+        app.db_insert_feedback(&feedback).await;
     }
 
-    let resp = app
-        .get_feedbacks("/feedbacks?kind=Report&status=Open")
+    let page: RespWrapper<Vec<Feedback>> = app
+        .get_ok_json_as("/feedbacks?kind=Report&status=Open", &[Role::Moderator])
         .await;
-    assert_eq!(resp.status(), StatusCode::OK);
 
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<Feedback>> = serde_json::from_slice(&bytes).unwrap();
-
-    assert_eq!(wrapper.data.len(), 1);
-    assert_eq!(wrapper.data[0].kind, FeedbackKind::Report);
-    assert_eq!(wrapper.data[0].status, FeedbackStatus::Open);
+    assert_eq!(page.data.len(), 1);
+    assert_eq!(page.data[0].kind, FeedbackKind::Report);
+    assert_eq!(page.data[0].status, FeedbackStatus::Open);
 }
 
 #[tokio::test]
@@ -295,17 +294,17 @@ async fn get_feedbacks_orders_by_submission_date() {
     for _ in 0..4 {
         let feedback: Feedback = FeedbackFaker::default().fake();
         ids.push(feedback.id);
-        app.insert_feedback(&feedback).await;
+        app.db_insert_feedback(&feedback).await;
     }
 
-    let resp = app.get_feedbacks("/feedbacks?order=Asc").await;
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let asc: RespWrapper<Vec<Feedback>> = serde_json::from_slice(&bytes).unwrap();
+    let asc: RespWrapper<Vec<Feedback>> = app
+        .get_ok_json_as("/feedbacks?order=Asc", &[Role::Moderator])
+        .await;
     let asc_ids: Vec<uuid::Uuid> = asc.data.iter().map(|f| f.id).collect();
 
-    let resp = app.get_feedbacks("/feedbacks?order=Desc").await;
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let desc: RespWrapper<Vec<Feedback>> = serde_json::from_slice(&bytes).unwrap();
+    let desc: RespWrapper<Vec<Feedback>> = app
+        .get_ok_json_as("/feedbacks?order=Desc", &[Role::Moderator])
+        .await;
     let desc_ids: Vec<uuid::Uuid> = desc.data.iter().map(|f| f.id).collect();
 
     ids.sort();
@@ -321,17 +320,14 @@ async fn get_feedbacks_returns_default_limit_and_next_cursor() {
 
     for _ in 0..25 {
         let feedback: Feedback = FeedbackFaker::default().fake();
-        app.insert_feedback(&feedback).await;
+        app.db_insert_feedback(&feedback).await;
     }
 
-    let resp = app.get_feedbacks("/feedbacks").await;
-    assert_eq!(resp.status(), StatusCode::OK);
+    let page: RespWrapper<Vec<Feedback>> =
+        app.get_ok_json_as("/feedbacks", &[Role::Moderator]).await;
 
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<Feedback>> = serde_json::from_slice(&bytes).unwrap();
-
-    assert_eq!(wrapper.data.len(), 20);
-    assert!(wrapper.next_cursor.is_some());
+    assert_eq!(page.data.len(), 20);
+    assert!(page.next_cursor.is_some());
 }
 
 #[tokio::test]
@@ -340,21 +336,22 @@ async fn get_feedbacks_with_after_and_limit_3_returns_next_page() {
 
     for _ in 0..6 {
         let feedback: Feedback = FeedbackFaker::default().fake();
-        app.insert_feedback(&feedback).await;
+        app.db_insert_feedback(&feedback).await;
     }
 
-    let resp = app.get_feedbacks("/feedbacks?limit=3").await;
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let first: RespWrapper<Vec<Feedback>> = serde_json::from_slice(&bytes).unwrap();
+    let first: RespWrapper<Vec<Feedback>> = app
+        .get_ok_json_as("/feedbacks?limit=3", &[Role::Moderator])
+        .await;
 
     let ids: Vec<uuid::Uuid> = first.data.iter().map(|f| f.id).collect();
     let cursor = first.next_cursor.unwrap();
 
-    let resp = app
-        .get_feedbacks(&format!("/feedbacks?limit=3&after={cursor}"))
+    let second: RespWrapper<Vec<Feedback>> = app
+        .get_ok_json_as(
+            &format!("/feedbacks?limit=3&after={cursor}"),
+            &[Role::Moderator],
+        )
         .await;
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let second: RespWrapper<Vec<Feedback>> = serde_json::from_slice(&bytes).unwrap();
 
     let second_ids: Vec<uuid::Uuid> = second.data.iter().map(|f| f.id).collect();
 
@@ -402,17 +399,15 @@ async fn get_feedback_with_valid_id_passes() {
             ..Default::default()
         }
         .fake();
-        app.insert_feedback(&feedback).await;
+        app.db_insert_feedback(&feedback).await;
 
-        let resp = app.get_feedback(feedback.id).await;
-        assert_eq!(resp.status(), StatusCode::OK);
+        let got: RespWrapper<Feedback> = app
+            .get_ok_json_as(&format!("/feedbacks/{}", feedback.id), &[Role::Moderator])
+            .await;
 
-        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-        let wrapper: RespWrapper<Feedback> = serde_json::from_slice(&bytes).unwrap();
-
-        assert_eq!(wrapper.data.id, feedback.id);
-        assert_eq!(wrapper.data.email.as_ref(), feedback.email.as_ref());
-        assert_eq!(wrapper.data.note.as_ref(), feedback.note.as_ref());
+        assert_eq!(got.data.id, feedback.id);
+        assert_eq!(got.data.email.as_ref(), feedback.email.as_ref());
+        assert_eq!(got.data.note.as_ref(), feedback.note.as_ref());
     }
 }
 
@@ -440,12 +435,12 @@ async fn update_feedback_status_closes_it_and_stamps_updated_at() {
 
     for target in ["Resolved", "Dismissed"] {
         let feedback: Feedback = FeedbackFaker::default().fake();
-        app.insert_feedback(&feedback).await;
+        app.db_insert_feedback(&feedback).await;
 
         let status = app.put_feedback_status(feedback.id, target).await;
         assert_eq!(status, StatusCode::NO_CONTENT);
 
-        let stored = app.fetch_feedback(feedback.id).await;
+        let stored = app.db_fetch_feedback(feedback.id).await;
 
         assert_eq!(stored.status.as_ref(), target);
         assert!(
@@ -463,12 +458,12 @@ async fn update_feedback_status_can_reopen_a_closed_one() {
         ..Default::default()
     }
     .fake();
-    app.insert_feedback(&feedback).await;
+    app.db_insert_feedback(&feedback).await;
 
     let status = app.put_feedback_status(feedback.id, "Open").await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
-    let stored = app.fetch_feedback(feedback.id).await;
+    let stored = app.db_fetch_feedback(feedback.id).await;
 
     assert_eq!(stored.status, FeedbackStatus::Open);
 }
@@ -477,12 +472,12 @@ async fn update_feedback_status_can_reopen_a_closed_one() {
 async fn update_feedback_status_to_its_current_value_is_idempotent() {
     let app = TestApp::new().await;
     let feedback: Feedback = FeedbackFaker::default().fake();
-    app.insert_feedback(&feedback).await;
+    app.db_insert_feedback(&feedback).await;
 
     let first = app.put_feedback_status(feedback.id, "Resolved").await;
     let second = app.put_feedback_status(feedback.id, "Resolved").await;
 
-    let stored = app.fetch_feedback(feedback.id).await;
+    let stored = app.db_fetch_feedback(feedback.id).await;
 
     assert_eq!(first, StatusCode::NO_CONTENT);
     assert_eq!(second, StatusCode::NO_CONTENT);
@@ -493,7 +488,7 @@ async fn update_feedback_status_to_its_current_value_is_idempotent() {
 async fn update_feedback_status_with_unknown_status_returns_422() {
     let app = TestApp::new().await;
     let feedback: Feedback = FeedbackFaker::default().fake();
-    app.insert_feedback(&feedback).await;
+    app.db_insert_feedback(&feedback).await;
 
     let status = app.put_feedback_status(feedback.id, "Closed").await;
 
@@ -514,36 +509,35 @@ async fn update_feedback_status_with_unknown_id_returns_404() {
 #[tokio::test]
 async fn deleting_a_book_keeps_its_feedback_and_nulls_the_book_id() {
     let app = TestApp::new().await;
-    let book_id = app.insert_random_book().await;
+    let book_id = app.db_insert_random_book().await;
     let feedback: Feedback = FeedbackFaker {
         kind: FeedbackKind::Report,
         book_id: Some(book_id),
         ..Default::default()
     }
     .fake();
-    app.insert_feedback(&feedback).await;
+    app.db_insert_feedback(&feedback).await;
 
     let resp = app.delete_book(book_id).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let stored = app.fetch_feedback(feedback.id).await;
+    let stored = app.db_fetch_feedback(feedback.id).await;
 
     assert_eq!(stored.kind, FeedbackKind::Report);
     assert_eq!(stored.book_id, None);
-    assert_eq!(app.count_feedback().await, 1);
+    assert_eq!(app.db_count_feedback().await, 1);
 }
 
 #[tokio::test]
 async fn feedback_has_no_delete_route() {
     let app = TestApp::new().await;
     let feedback: Feedback = FeedbackFaker::default().fake();
-    app.insert_feedback(&feedback).await;
+    app.db_insert_feedback(&feedback).await;
 
-    let req = Request::delete(format!("/feedbacks/{}", feedback.id))
-        .body(Body::empty())
-        .unwrap();
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app
+        .delete_authed(&format!("/feedbacks/{}", feedback.id))
+        .await;
 
     assert_eq!(resp.status(), StatusCode::METHOD_NOT_ALLOWED);
-    assert_eq!(app.count_feedback().await, 1);
+    assert_eq!(app.db_count_feedback().await, 1);
 }

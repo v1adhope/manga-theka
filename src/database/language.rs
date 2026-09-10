@@ -1,4 +1,8 @@
-use crate::{database::Database, entity::Language, error::DatabaseError};
+use crate::{
+    database::Database,
+    entity::Language,
+    error::{DatabaseError, LogInternal},
+};
 
 impl Database {
     #[tracing::instrument(name = "db.language.list", skip_all)]

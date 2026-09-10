@@ -83,7 +83,7 @@ impl TryFrom<ChapterWithRelations> for Chapter {
     }
 }
 
-// deferred: gate to Uploader/Moderator/Admin
+// TODO: re-shape authz
 pub async fn store_chapter(
     State(service): State<Service>,
     Path(book_id): Path<Uuid>,
@@ -104,7 +104,7 @@ pub async fn store_chapter(
     Ok(json_data_response(StatusCode::CREATED, StoreResp { id }))
 }
 
-// deferred: gate to Uploader/Moderator/Admin
+// TODO: re-shape authz
 pub async fn update_chapter(
     State(service): State<Service>,
     Path(id): Path<Uuid>,
@@ -131,6 +131,7 @@ pub struct GetChaptersResp {
     pub next_cursor: Option<Uuid>,
 }
 
+// TODO: re-shape authz
 pub async fn get_chapters(
     State(service): State<Service>,
     Path(book_id): Path<Uuid>,
@@ -155,7 +156,6 @@ pub async fn get_chapter(
     Ok(json_data_response(StatusCode::OK, chapter))
 }
 
-// deferred: gate to Uploader/Moderator/Admin
 pub async fn delete_chapter(
     State(service): State<Service>,
     Path(id): Path<Uuid>,

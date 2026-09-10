@@ -13,7 +13,7 @@ use crate::{
         ContentRating, CoverUrl, CreatedAtBound, CreatorQuery, ImageExtension, Label, LabelsMode,
         Language, LinkUrl, PublicationDemographic, PublicationYearBound, Text, Timestamp,
     },
-    error::DatabaseError,
+    error::{DatabaseError, LogInternal},
 };
 
 #[derive(sqlx::FromRow)]
@@ -36,6 +36,7 @@ struct BookRow {
     submitted_at: Option<time::OffsetDateTime>,
     updated_at: Option<time::OffsetDateTime>,
     created_at: time::OffsetDateTime,
+    created_by: Uuid,
 }
 
 struct BookLabelRow {
@@ -210,6 +211,7 @@ impl TryFrom<BookWithRelations> for BookQuery {
             submitted_at: row.submitted_at,
             updated_at: row.updated_at,
             created_at: row.created_at,
+            created_by: row.created_by,
         })
     }
 }
@@ -321,6 +323,7 @@ impl Database {
             item.publication_demographic.as_ref(),
             item.updated_at,
             item.created_at,
+            item.created_by,
         )
         .execute(&mut *tx)
         .await?;
@@ -431,7 +434,8 @@ impl Database {
                      cr.code as content_rating_code, b.status, b.kind,
                      l.id as publication_language_id, l.code as publication_language_code,
                      l.name as publication_language_name, b.publication_demographic,
-                     b.visibility, b.note, b.submitted_at, b.updated_at, b.created_at
+                     b.visibility, b.note, b.submitted_at, b.updated_at, b.created_at,
+                     b.created_by
               from books b
               join content_ratings cr on cr.id = b.content_rating
               join languages l on l.id = b.publication_language
@@ -487,14 +491,14 @@ impl Database {
         if let Some(from) = selection.created_at.from() {
             builder
                 .push(" and b.created_at >= ")
-                .push_bind(time::OffsetDateTime::from(*from));
+                .push_bind(from.into_inner());
         }
         if let Some(to) = selection.created_at.to() {
             builder
                 .push(" and b.created_at ")
                 .push(super::upper_bound_op::<CreatedAtBound>())
                 .push(" ")
-                .push_bind(time::OffsetDateTime::from(*to));
+                .push_bind(to.into_inner());
         }
 
         if let Some(cursor) = &filter.cursor {
@@ -505,7 +509,7 @@ impl Database {
                 .push(cursor_comparison)
                 .push(" (");
             match &cursor.sort {
-                BookSort::CreatedAt(at) => builder.push_bind(time::OffsetDateTime::from(*at)),
+                BookSort::CreatedAt(at) => builder.push_bind(at.into_inner()),
                 BookSort::Name(name) => builder.push_bind(name.clone()),
                 BookSort::PublicationYear(year) => builder.push_bind(*year),
             };

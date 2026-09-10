@@ -40,7 +40,7 @@ impl TryFrom<(CreatorReq, Uuid, OffsetDateTime)> for Creator {
     }
 }
 
-// deferred: gate to Uploader/Moderator/Admin
+// TODO: re-shape authz
 pub async fn store_creator(
     State(service): State<Service>,
     Json(req): Json<CreatorReq>,
@@ -54,7 +54,6 @@ pub async fn store_creator(
     Ok(json_data_response(StatusCode::CREATED, StoreResp { id }))
 }
 
-// deferred: gate to Uploader/Moderator/Admin
 pub async fn update_creator(
     State(service): State<Service>,
     Path(id): Path<Uuid>,
@@ -94,7 +93,6 @@ pub async fn get_creator(
     Ok(json_data_response(StatusCode::OK, creator))
 }
 
-// deferred: gate to Moderator/Admin
 pub async fn delete_creator(
     State(service): State<Service>,
     Path(id): Path<Uuid>,

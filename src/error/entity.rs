@@ -67,14 +67,26 @@ pub enum EntityError {
     #[error("Text can't be empty or whitespace")]
     TextIsEmptyOrWhitespace,
 
-    #[error("Text exceeds the 2000-character limit")]
-    TextExceedsCharLimit,
+    #[error("Text exceeds the {0}-character limit")]
+    TextExceedsCharLimit(usize),
 
     #[error("Email is not a well-formed address")]
     EmailIsMalformed,
 
     #[error("Email exceeds the 254-character limit")]
     EmailExceedsCharLimit,
+
+    #[error("Username must be 3 to 32 characters of letters, digits, or underscores")]
+    UsernameIsMalformed,
+
+    #[error("Password must be between {0} and {1} characters")]
+    PasswordLengthOutOfRange(usize, usize),
+
+    #[error("Password hash exceeds the {0}-character limit")]
+    PasswordHashExceedsCharLimit(usize),
+
+    #[error("A session younger than 24 hours can't revoke other sessions")]
+    SessionTooNewToRevoke,
 
     #[error("'{0}' is not a valid feedback kind")]
     InvalidFeedbackKind(String),
@@ -148,9 +160,9 @@ impl IntoResponse for EntityError {
         let status = match self {
             Self::UnsupportedImageFormat => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             Self::ImageExceedsByteLimit(_) => StatusCode::PAYLOAD_TOO_LARGE,
-            Self::IllegalVisibilityTransition(_, _) | Self::BookNotWritable(_) => {
-                StatusCode::CONFLICT
-            }
+            Self::IllegalVisibilityTransition(_, _)
+            | Self::BookNotWritable(_)
+            | Self::SessionTooNewToRevoke => StatusCode::CONFLICT,
             Self::NotReadable { .. } => StatusCode::NOT_FOUND,
             Self::CursorSelectionMismatch => StatusCode::BAD_REQUEST,
             _ => StatusCode::UNPROCESSABLE_ENTITY,

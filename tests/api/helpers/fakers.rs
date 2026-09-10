@@ -11,14 +11,15 @@ use manga_theka::entity::{
     AlternativeTitle, BookKind, BookLink, BookLinkKind, BookName, BookQuery, BookStatus,
     BookVisibility, Chapter, ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume,
     ContentRating, Creator, CreatorQuery, CreatorRole, Email, Feedback, FeedbackKind,
-    FeedbackStatus, Label, LabelKind, Language, LinkUrl, Name, PublicationDemographic, Text,
+    FeedbackStatus, Label, LabelKind, Language, LinkUrl, Name, PublicationDemographic, Role, Text,
+    UserQuery, Username,
 };
 use time::OffsetDateTime;
 use uuid::{Uuid, uuid};
 
-pub const COVER_JPG: &[u8] = include_bytes!("fixtures/cover.jpg");
-pub const COVER_PNG: &[u8] = include_bytes!("fixtures/cover.png");
-pub const COVER_WEBP: &[u8] = include_bytes!("fixtures/cover.webp");
+pub const COVER_JPG: &[u8] = include_bytes!("../fixtures/cover.jpg");
+pub const COVER_PNG: &[u8] = include_bytes!("../fixtures/cover.png");
+pub const COVER_WEBP: &[u8] = include_bytes!("../fixtures/cover.webp");
 
 pub const EVERY_VISIBILITY: [BookVisibility; 5] = [
     BookVisibility::Draft,
@@ -155,6 +156,38 @@ impl Dummy<NameFaker> for Name {
     fn dummy_with_rng<R: RngExt + ?Sized>(_config: &NameFaker, rng: &mut R) -> Self {
         let name = FirstName().fake_with_rng::<String, R>(rng);
         Name::try_from(name).unwrap()
+    }
+}
+
+pub struct UserFaker {
+    pub roles: Vec<Role>,
+    pub verified: bool,
+}
+
+impl Default for UserFaker {
+    fn default() -> Self {
+        UserFaker {
+            roles: vec![Role::Reader],
+            verified: false,
+        }
+    }
+}
+
+impl Dummy<UserFaker> for UserQuery {
+    fn dummy_with_rng<R: RngExt + ?Sized>(config: &UserFaker, rng: &mut R) -> Self {
+        let id = Uuid::now_v7();
+        let nonce = format!("{:016x}{:016x}", rng.random::<u64>(), rng.random::<u64>());
+
+        UserQuery {
+            id,
+            email: Email::try_from(format!("{}@example.test", &nonce[..12])).unwrap(),
+            username: Username::try_from(format!("u{}", &nonce[..16])).unwrap(),
+            roles: config.roles.clone().try_into().unwrap(),
+            verified_at: config
+                .verified
+                .then(|| (OffsetDateTime::now_utc() - time::Duration::hours(1)).into()),
+            created_at: OffsetDateTime::now_utc().into(),
+        }
     }
 }
 
@@ -390,6 +423,7 @@ pub struct BookFaker {
     pub publication_demographic: Option<PublicationDemographic>,
     pub publication_year: Option<i16>,
     pub created_at: Option<OffsetDateTime>,
+    pub created_by: Option<Uuid>,
 }
 
 impl Default for BookFaker {
@@ -409,6 +443,19 @@ impl Default for BookFaker {
             publication_demographic: None,
             publication_year: None,
             created_at: None,
+            created_by: None,
+        }
+    }
+}
+
+impl BookFaker {
+    pub fn scalar() -> Self {
+        BookFaker {
+            labels: 0..=0,
+            links: 0..=0,
+            titles: 0..=0,
+            creators: 0..=0,
+            ..Default::default()
         }
     }
 }
@@ -470,6 +517,7 @@ impl Dummy<BookFaker> for BookQuery {
             submitted_at: None,
             updated_at: None,
             created_at: config.created_at.unwrap_or(OffsetDateTime::UNIX_EPOCH),
+            created_by: config.created_by.unwrap_or_else(Uuid::now_v7),
         }
     }
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select b.id, b.name, b.description, b.publication_year, cr.id as content_rating_id,\n       cr.name as content_rating_name, cr.code as content_rating_code, b.status, b.kind,\n       l.id as publication_language_id, l.code as publication_language_code,\n       l.name as publication_language_name, b.publication_demographic, b.visibility, b.note,\n       b.submitted_at, b.updated_at, b.created_at\nfrom books b\njoin content_ratings cr on cr.id = b.content_rating\njoin languages l on l.id = b.publication_language\nwhere b.id = $1;\n",
+  "query": "select b.id, b.name, b.description, b.publication_year, cr.id as content_rating_id,\n       cr.name as content_rating_name, cr.code as content_rating_code, b.status, b.kind,\n       l.id as publication_language_id, l.code as publication_language_code,\n       l.name as publication_language_name, b.publication_demographic, b.visibility, b.note,\n       b.submitted_at, b.updated_at, b.created_at, b.created_by\nfrom books b\njoin content_ratings cr on cr.id = b.content_rating\njoin languages l on l.id = b.publication_language\nwhere b.id = $1;\n",
   "describe": {
     "columns": [
       {
@@ -200,6 +200,17 @@
             "name": "created_at"
           }
         }
+      },
+      {
+        "ordinal": 18,
+        "name": "created_by",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "books",
+            "name": "created_by"
+          }
+        }
       }
     ],
     "parameters": {
@@ -225,8 +236,9 @@
       true,
       true,
       true,
+      false,
       false
     ]
   },
-  "hash": "be87e442b2c80a4dff9eaa33db75dca9fddafe13e8ead08a36638782a504ae76"
+  "hash": "5bafec5a0ea44c20832b97313586d6de762ae710750870d0283602b2c50387a4"
 }

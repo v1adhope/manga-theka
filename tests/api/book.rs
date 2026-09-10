@@ -2,20 +2,20 @@ use axum::{
     body::Body,
     http::{Request, StatusCode, header},
 };
-use http_body_util::BodyExt;
-use tower::ServiceExt;
 
-use crate::fakers::{BookFaker, CONTENT_RATINGS, CreatorFaker, LabelFaker};
+use crate::helpers::fakers::{BookFaker, CONTENT_RATINGS, CreatorFaker, LabelFaker, UserFaker};
 use crate::helpers::{
     RespWrapper, TestApp, assert_error, assert_stored, creator_keys, label_keys, link_keys,
     title_keys,
 };
 use fake::Fake;
-use manga_theka::entity::{BookQuery, Creator, Label};
+use manga_theka::entity::{BookQuery, Creator, Label, Role, UserQuery};
 
 #[tokio::test]
 async fn store_book_with_valid_body_passes() {
     let app = TestApp::new().await;
+    let user: UserQuery = UserFaker::default().fake();
+    app.db_insert_user(&user).await;
     let book: BookQuery = BookFaker {
         labels: 1..=5,
         links: 1..=5,
@@ -24,7 +24,7 @@ async fn store_book_with_valid_body_passes() {
     }
     .fake();
     let creator: Creator = CreatorFaker.fake();
-    app.insert_creator(&creator).await;
+    app.db_insert_creator(&creator).await;
 
     let body = serde_json::json!({
         "name": book.name.as_ref(),
@@ -44,13 +44,17 @@ async fn store_book_with_valid_body_passes() {
 
     let req = Request::post("/books")
         .header(header::CONTENT_TYPE, "application/json")
+        .header(
+            header::AUTHORIZATION,
+            app.bearer(user.id, uuid::Uuid::now_v7(), &[Role::Reader]),
+        )
         .body(Body::from(body))
         .unwrap();
 
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.send_authed(req).await;
     let id = assert_stored(resp).await;
 
-    let got = app.fetch_book(id).await;
+    let got = app.db_fetch_book(id).await;
 
     assert_eq!(got.name, book.name);
     assert_eq!(got.description, book.description);
@@ -83,6 +87,7 @@ async fn store_book_with_valid_body_passes() {
     );
     assert!(got.updated_at.is_none());
     assert_ne!(got.created_at, time::OffsetDateTime::UNIX_EPOCH);
+    assert_eq!(got.created_by, user.id);
 }
 
 #[tokio::test]
@@ -99,18 +104,12 @@ async fn store_book_without_relations_passes() {
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
         "publicationDemographic": book.publication_demographic.as_ref(),
-    })
-    .to_string();
+    });
 
-    let req = Request::post("/books")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.post_json("/books", body).await;
     let id = assert_stored(resp).await;
 
-    let sample = app.fetch_book_sample(id).await;
+    let sample = app.db_fetch_book_sample(id).await;
 
     assert_eq!(sample.name.as_deref(), Some(book.name.as_ref()));
     assert_eq!(sample.labels, 0);
@@ -122,12 +121,7 @@ async fn store_book_without_relations_passes() {
 async fn store_book_with_broken_json_returns_400() {
     let app = TestApp::new().await;
 
-    let req = Request::post("/books")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from("{not json"))
-        .unwrap();
-
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.post_raw("/books", "{not json").await;
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
 
@@ -144,15 +138,9 @@ async fn store_book_with_missing_name_returns_422() {
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
         "publicationDemographic": book.publication_demographic.as_ref(),
-    })
-    .to_string();
+    });
 
-    let req = Request::post("/books")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.post_json("/books", body).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
 
@@ -170,15 +158,9 @@ async fn store_book_with_unknown_status_returns_422() {
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
         "publicationDemographic": book.publication_demographic.as_ref(),
-    })
-    .to_string();
+    });
 
-    let req = Request::post("/books")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.post_json("/books", body).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
 
@@ -196,15 +178,9 @@ async fn store_book_with_unknown_publication_demographic_returns_422() {
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
         "publicationDemographic": "Unknown",
-    })
-    .to_string();
+    });
 
-    let req = Request::post("/books")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.post_json("/books", body).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
 
@@ -221,15 +197,9 @@ async fn store_book_without_publication_demographic_returns_422() {
         "status": book.status.as_ref(),
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
-    })
-    .to_string();
+    });
 
-    let req = Request::post("/books")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.post_json("/books", body).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
 
@@ -248,15 +218,9 @@ async fn store_book_with_unknown_label_id_returns_422() {
         "publicationLanguageId": book.publication_language.id,
         "publicationDemographic": book.publication_demographic.as_ref(),
         "labelIds": [uuid::Uuid::now_v7()],
-    })
-    .to_string();
+    });
 
-    let req = Request::post("/books")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.post_json("/books", body).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 
     let count = sqlx::query_scalar!(r#"select count(*) as "count!" from books"#)
@@ -282,15 +246,9 @@ async fn store_book_with_unknown_creator_id_returns_422() {
         "publicationLanguageId": book.publication_language.id,
         "publicationDemographic": book.publication_demographic.as_ref(),
         "creators": [{ "creatorId": uuid::Uuid::now_v7(), "role": "Author" }],
-    })
-    .to_string();
+    });
 
-    let req = Request::post("/books")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.post_json("/books", body).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 
     let count = sqlx::query_scalar!(r#"select count(*) as "count!" from books"#)
@@ -306,7 +264,7 @@ async fn store_book_with_dual_role_creator_merges_into_one_credit() {
     let app = TestApp::new().await;
     let book: BookQuery = BookFaker::default().fake();
     let creator: Creator = CreatorFaker.fake();
-    app.insert_creator(&creator).await;
+    app.db_insert_creator(&creator).await;
 
     let body = serde_json::json!({
         "name": book.name.as_ref(),
@@ -321,18 +279,12 @@ async fn store_book_with_dual_role_creator_merges_into_one_credit() {
             { "creatorId": creator.id, "role": "Author" },
             { "creatorId": creator.id, "role": "Artist" },
         ],
-    })
-    .to_string();
+    });
 
-    let req = Request::post("/books")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.post_json("/books", body).await;
     let id = assert_stored(resp).await;
 
-    let got = app.fetch_book(id).await;
+    let got = app.db_fetch_book(id).await;
 
     assert_eq!(
         creator_keys(got.creators.as_slice()),
@@ -351,7 +303,7 @@ async fn store_book_with_duplicate_creator_role_returns_422() {
     let app = TestApp::new().await;
     let book: BookQuery = BookFaker::default().fake();
     let creator: Creator = CreatorFaker.fake();
-    app.insert_creator(&creator).await;
+    app.db_insert_creator(&creator).await;
 
     let body = serde_json::json!({
         "name": book.name.as_ref(),
@@ -366,15 +318,9 @@ async fn store_book_with_duplicate_creator_role_returns_422() {
             { "creatorId": creator.id, "role": "Author" },
             { "creatorId": creator.id, "role": "Author" },
         ],
-    })
-    .to_string();
+    });
 
-    let req = Request::post("/books")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.post_json("/books", body).await;
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
 
@@ -390,17 +336,12 @@ async fn get_book_with_valid_id_passes() {
     }
     .fake();
 
-    app.insert_book(&book).await;
+    app.fixture_insert_book(&book).await;
 
-    let req = Request::get(format!("/books/{}", book.id))
-        .body(Body::empty())
-        .unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::OK);
-
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<BookQuery> = serde_json::from_slice(&bytes).unwrap();
-    let got = wrapper.data;
+    let got = app
+        .get_ok_json::<RespWrapper<BookQuery>>(&format!("/books/{}", book.id))
+        .await
+        .data;
 
     assert_eq!(got.id, book.id);
     assert_eq!(got.name, book.name);
@@ -446,11 +387,9 @@ async fn get_book_with_valid_id_passes() {
 async fn get_book_with_unknown_id_returns_404() {
     let app = TestApp::new().await;
 
-    let req = Request::get(format!("/books/{}", uuid::Uuid::now_v7()))
-        .body(Body::empty())
-        .unwrap();
-
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app
+        .get_raw(&format!("/books/{}", uuid::Uuid::now_v7()))
+        .await;
 
     assert_error(resp, StatusCode::NOT_FOUND).await;
 }
@@ -459,11 +398,7 @@ async fn get_book_with_unknown_id_returns_404() {
 async fn get_book_with_malformed_id_returns_400() {
     let app = TestApp::new().await;
 
-    let req = Request::get("/books/not-a-uuid")
-        .body(Body::empty())
-        .unwrap();
-
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.get_raw("/books/not-a-uuid").await;
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
 
@@ -478,7 +413,7 @@ async fn update_book_with_valid_body_passes() {
     }
     .fake();
 
-    app.insert_book(&book).await;
+    app.fixture_insert_book(&book).await;
 
     let updated: BookQuery = BookFaker {
         labels: 1..=5,
@@ -500,17 +435,12 @@ async fn update_book_with_valid_body_passes() {
         "labelIds": updated.labels.as_slice().iter().map(|l| l.id).collect::<Vec<_>>(),
         "links": &updated.links,
         "titles": &updated.titles,
-    })
-    .to_string();
+    });
 
-    let req = Request::put(format!("/books/{}", book.id))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.put_json(&format!("/books/{}", book.id), body).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let got = app.fetch_book(book.id).await;
+    let got = app.db_fetch_book(book.id).await;
 
     assert_eq!(got.name, updated.name);
     assert_eq!(got.description, updated.description);
@@ -553,7 +483,7 @@ async fn update_book_swaps_the_content_rating() {
         .expect("content rating to swap from must exist")
         .clone();
 
-    app.insert_book(&book).await;
+    app.fixture_insert_book(&book).await;
 
     let other = CONTENT_RATINGS
         .get(1)
@@ -569,17 +499,14 @@ async fn update_book_swaps_the_content_rating() {
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
         "publicationDemographic": book.publication_demographic.as_ref(),
-    })
-    .to_string();
+    });
 
-    let req = Request::put(format!("/books/{}", book.id))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(updated_body))
-        .unwrap();
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app
+        .put_json(&format!("/books/{}", book.id), updated_body)
+        .await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let got = app.fetch_book(book.id).await;
+    let got = app.db_fetch_book(book.id).await;
 
     assert_eq!(got.content_rating, other);
 }
@@ -595,7 +522,7 @@ async fn update_book_with_empty_arrays_detaches_everything() {
     }
     .fake();
 
-    app.insert_book(&book).await;
+    app.fixture_insert_book(&book).await;
 
     let detached = serde_json::json!({
         "name": book.name.as_ref(),
@@ -609,17 +536,12 @@ async fn update_book_with_empty_arrays_detaches_everything() {
         "labelIds": [],
         "links": [],
         "titles": [],
-    })
-    .to_string();
+    });
 
-    let req = Request::put(format!("/books/{}", book.id))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(detached))
-        .unwrap();
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.put_json(&format!("/books/{}", book.id), detached).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let sample = app.fetch_book_sample(book.id).await;
+    let sample = app.db_fetch_book_sample(book.id).await;
 
     assert_eq!(sample.labels, 0);
     assert_eq!(sample.links, 0);
@@ -632,8 +554,8 @@ async fn update_book_leaves_other_books_untouched() {
     let book: BookQuery = BookFaker::default().fake();
     let other: BookQuery = BookFaker::default().fake();
 
-    app.insert_book(&book).await;
-    app.insert_book(&other).await;
+    app.fixture_insert_book(&book).await;
+    app.fixture_insert_book(&other).await;
 
     let renamed: BookQuery = BookFaker::default().fake();
     let updated_body = serde_json::json!({
@@ -645,17 +567,14 @@ async fn update_book_leaves_other_books_untouched() {
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
         "publicationDemographic": book.publication_demographic.as_ref(),
-    })
-    .to_string();
+    });
 
-    let req = Request::put(format!("/books/{}", book.id))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(updated_body))
-        .unwrap();
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app
+        .put_json(&format!("/books/{}", book.id), updated_body)
+        .await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let sample = app.fetch_book_sample(other.id).await;
+    let sample = app.db_fetch_book_sample(other.id).await;
 
     assert_eq!(sample.name.as_deref(), Some(other.name.as_ref()));
     assert!(sample.updated_at.is_none());
@@ -678,15 +597,11 @@ async fn update_book_with_unknown_id_returns_404() {
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
         "publicationDemographic": book.publication_demographic.as_ref(),
-    })
-    .to_string();
+    });
 
-    let req = Request::put(format!("/books/{}", uuid::Uuid::now_v7()))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app
+        .put_json(&format!("/books/{}", uuid::Uuid::now_v7()), body)
+        .await;
     assert_error(resp, StatusCode::NOT_FOUND).await;
 }
 
@@ -701,16 +616,12 @@ async fn delete_book_with_valid_id_passes() {
     }
     .fake();
 
-    app.insert_book(&book).await;
+    app.fixture_insert_book(&book).await;
 
-    let req = Request::delete(format!("/books/{}", book.id))
-        .body(Body::empty())
-        .unwrap();
-
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.delete_book(book.id).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let sample = app.fetch_book_sample(book.id).await;
+    let sample = app.db_fetch_book_sample(book.id).await;
 
     assert!(sample.name.is_none());
     assert_eq!(sample.labels, 0);
@@ -737,16 +648,13 @@ async fn delete_book_leaves_other_books_untouched() {
     .fake();
     other.labels = vec![labels].try_into().unwrap();
 
-    app.insert_book(&book).await;
-    app.insert_book(&other).await;
+    app.fixture_insert_book(&book).await;
+    app.fixture_insert_book(&other).await;
 
-    let req = Request::delete(format!("/books/{}", book.id))
-        .body(Body::empty())
-        .unwrap();
-    let resp = app.router.clone().oneshot(req).await.unwrap();
+    let resp = app.delete_book(book.id).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    let sample = app.fetch_book_sample(other.id).await;
+    let sample = app.db_fetch_book_sample(other.id).await;
 
     assert_eq!(sample.name.as_deref(), Some(other.name.as_ref()));
     assert_eq!(sample.labels, other.labels.len() as i64);
@@ -758,11 +666,7 @@ async fn delete_book_leaves_other_books_untouched() {
 async fn delete_book_with_unknown_id_returns_404() {
     let app = TestApp::new().await;
 
-    let req = Request::delete(format!("/books/{}", uuid::Uuid::now_v7()))
-        .body(Body::empty())
-        .unwrap();
-
-    let resp = app.router.oneshot(req).await.unwrap();
+    let resp = app.delete_book(uuid::Uuid::now_v7()).await;
 
     assert_error(resp, StatusCode::NOT_FOUND).await;
 }

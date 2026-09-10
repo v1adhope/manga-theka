@@ -14,8 +14,15 @@ impl Service {
         self.database.store_book(&item).await.map_err(Into::into)
     }
 
-    pub async fn get_book(&self, id: Uuid) -> Result<BookQuery, ServiceError> {
-        self.database.get_book(id).await.map_err(Into::into)
+    pub async fn get_book(
+        &self,
+        id: Uuid,
+        claims: Option<&UserClaims>,
+    ) -> Result<BookQuery, ServiceError> {
+        let book = self.database.get_book(id).await?;
+        book.visibility.ensure_readable::<Book>(claims)?;
+
+        Ok(book)
     }
 
     pub async fn get_books(
@@ -77,7 +84,7 @@ impl Service {
             .map_err(Into::into)
     }
 
-    // deferred: allow the submitter through once `books` records one
+    // deferred: allow the book's `created_by` user through
     pub async fn presign_book_cover(
         &self,
         id: Uuid,

@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use sqlx::postgres::PgConnectOptions;
@@ -7,7 +9,17 @@ pub struct Config {
     pub addr: String,
     pub database: Database,
     pub object_storage: ObjectStorage,
+    pub redis: Redis,
+    pub auth: Auth,
     pub log_level: String,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Auth {
+    pub jwt_access: Jwt,
+    pub jwt_refresh: Jwt,
+    pub pepper: PepperHash,
+    pub password: Password,
 }
 
 impl Config {
@@ -62,4 +74,28 @@ pub struct ObjectStorage {
     pub secret_key: SecretString,
     pub covers_bucket: String,
     pub release_pages_bucket: String,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Redis {
+    pub url: SecretString,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Jwt {
+    pub private_key: PathBuf,
+    pub public_key: PathBuf,
+    pub ttl: i64,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct PepperHash {
+    pub key: SecretString,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Password {
+    pub m_cost: u32,
+    pub t_cost: u32,
+    pub p_cost: u32,
 }

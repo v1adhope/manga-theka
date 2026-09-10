@@ -23,7 +23,7 @@ pub struct ChapterReleaseReq {
     pub language_id: Uuid,
 }
 
-// deferred: gate to Uploader/Moderator/Admin
+// TODO: re-shape authz
 pub async fn store_chapter_release(
     State(service): State<Service>,
     Path(chapter_id): Path<Uuid>,
@@ -41,6 +41,7 @@ pub async fn store_chapter_release(
     Ok(json_data_response(StatusCode::CREATED, StoreResp { id }))
 }
 
+// TODO: re-shape authz
 pub async fn get_chapter_releases(
     State(service): State<Service>,
     Path(chapter_id): Path<Uuid>,
@@ -50,6 +51,7 @@ pub async fn get_chapter_releases(
     Ok(json_data_response(StatusCode::OK, releases))
 }
 
+// TODO: re-shape authz
 pub async fn get_chapter_release(
     State(service): State<Service>,
     Path(id): Path<Uuid>,
@@ -59,7 +61,7 @@ pub async fn get_chapter_release(
     Ok(json_data_response(StatusCode::OK, release))
 }
 
-// deferred: gate to Uploader/Moderator/Admin; scope staged pages to the calling uploader
+// TODO: re-shape authz
 pub async fn upload_chapter_pages(
     State(service): State<Service>,
     Path(release_id): Path<Uuid>,
@@ -98,7 +100,7 @@ pub struct CommitReq {
     pub page_order: Vec<Uuid>,
 }
 
-// deferred: gate to Uploader/Moderator/Admin; commit only the caller's own staged pages
+// TODO: re-shape authz
 pub async fn commit_chapter_release(
     State(service): State<Service>,
     Path(id): Path<Uuid>,
@@ -111,7 +113,7 @@ pub async fn commit_chapter_release(
     Ok(StatusCode::NO_CONTENT)
 }
 
-// deferred: also admit the book's submitter once `books` records one
+// TODO: re-shape authz
 pub async fn get_chapter_pages(
     State(service): State<Service>,
     Path(release_id): Path<Uuid>,
@@ -125,7 +127,7 @@ pub async fn get_chapter_pages(
     Ok(json_data_response(StatusCode::OK, pages))
 }
 
-// deferred: also admit the book's submitter once `books` records one
+// TODO: re-shape authz
 pub async fn get_chapter_page_image(
     State(service): State<Service>,
     Path((release_id, page_id)): Path<(Uuid, Uuid)>,
@@ -138,7 +140,7 @@ pub async fn get_chapter_page_image(
     Ok((StatusCode::FOUND, [(header::LOCATION, url)]))
 }
 
-// deferred: also admit the book's submitter once `books` records one
+// TODO: re-shape authz
 pub async fn get_chapter_page(
     State(service): State<Service>,
     Path((release_id, page_number)): Path<(Uuid, i32)>,
@@ -153,7 +155,7 @@ pub async fn get_chapter_page(
     Ok((StatusCode::FOUND, [(header::LOCATION, url)]))
 }
 
-// deferred: gate to Uploader/Moderator/Admin
+// TODO: re-shape authz
 pub async fn delete_chapter_release(
     State(service): State<Service>,
     Path(id): Path<Uuid>,

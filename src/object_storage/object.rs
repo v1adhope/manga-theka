@@ -9,7 +9,10 @@ use bytes::Bytes;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::{error::ObjectStorageError, object_storage::ObjectStorage};
+use crate::{
+    error::{LogInternal, ObjectStorageError},
+    object_storage::ObjectStorage,
+};
 
 const DELETE_BATCH_MAX: usize = 1000;
 

@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::{
     entity::{Book, Chapter, ChapterRelease, Entity},
-    error::error_response,
+    error::{LogInternal, error_response},
 };
 
 #[derive(Error, Debug)]
@@ -51,6 +51,9 @@ pub enum DatabaseError {
         source: sqlx::Error,
     },
 
+    #[error("{field} is already taken")]
+    Taken { field: &'static str },
+
     #[error("{field} is in use")]
     InUse {
         field: &'static str,
@@ -69,15 +72,33 @@ pub enum DatabaseError {
     Unknown(#[source] sqlx::Error),
 }
 
-impl DatabaseError {
-    pub fn log_internal(&self) {
-        if matches!(self, Self::Unknown(_) | Self::InvariantCorrupted { .. }) {
-            tracing::error!(error = ?self, "internal database error");
+impl LogInternal for DatabaseError {
+    const MODULE: &'static str = "database";
+
+    fn log_internal(&self) {
+        match self {
+            Self::NotFound { .. }
+            | Self::AlreadyExists { .. }
+            | Self::Taken { .. }
+            | Self::InUse { .. }
+            | Self::BookCoverMainConflict(_)
+            | Self::OutOfRange { .. }
+            | Self::DoesNotExist { .. }
+            | Self::Duplication { .. }
+            | Self::ChapterReleaseLanguageIsPublicationLanguage
+            | Self::PageOrderIsForeign => {}
+            _ => tracing::error!(error = ?self, module = Self::MODULE, "internal error"),
         }
     }
+}
 
+impl DatabaseError {
     pub fn not_found<T: Entity>() -> Self {
         Self::NotFound { entity: T::NAME }
+    }
+
+    pub fn taken(field: &'static str) -> Self {
+        Self::Taken { field }
     }
 
     pub fn invariant_corrupted(field: &'static str, msg: impl std::error::Error) -> Self {
@@ -366,6 +387,33 @@ impl From<sqlx::Error> for DatabaseError {
                         source: err,
                     };
                 }
+                Some("unique_users_email") => {
+                    return Self::AlreadyExists {
+                        field: "User email",
+                        source: err,
+                    };
+                }
+                Some("unique_users_username") => {
+                    return Self::AlreadyExists {
+                        field: "User username",
+                        source: err,
+                    };
+                }
+                Some("check_length_users_email")
+                | Some("check_length_users_username")
+                | Some("check_length_users_password_hash")
+                | Some("check_empty_users_roles") => {
+                    return Self::OutOfRange {
+                        field: "User",
+                        source: err,
+                    };
+                }
+                Some("enum_users_roles") => {
+                    return Self::DoesNotExist {
+                        field: "User role",
+                        source: err,
+                    };
+                }
                 _ => {}
             }
         }
@@ -376,16 +424,17 @@ impl From<sqlx::Error> for DatabaseError {
 impl IntoResponse for DatabaseError {
     fn into_response(self) -> Response {
         let status = match self {
-            Self::Unknown(_) | Self::InvariantCorrupted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Self::NotFound { .. } => StatusCode::NOT_FOUND,
-            Self::AlreadyExists { .. } | Self::InUse { .. } | Self::BookCoverMainConflict(_) => {
-                StatusCode::CONFLICT
-            }
+            Self::AlreadyExists { .. }
+            | Self::Taken { .. }
+            | Self::InUse { .. }
+            | Self::BookCoverMainConflict(_) => StatusCode::CONFLICT,
             Self::OutOfRange { .. }
             | Self::DoesNotExist { .. }
             | Self::Duplication { .. }
             | Self::ChapterReleaseLanguageIsPublicationLanguage
             | Self::PageOrderIsForeign => StatusCode::UNPROCESSABLE_ENTITY,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
 
         error_response(status, self.to_string())

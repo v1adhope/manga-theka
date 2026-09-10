@@ -6,7 +6,7 @@ use crate::{
     service::Service,
 };
 
-// deferred: once auth ships (issue #3) and the submitter carve-out lands in
+// deferred: once auth ships (issue #3) and the `created_by` carve-out lands in
 // `ensure_readable`, consider folding these into one `guard(BookRef, Access)` fn
 // or a fluent `book_by_*(id).content_writable()` guard.
 impl Service {

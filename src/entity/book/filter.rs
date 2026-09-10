@@ -3,8 +3,8 @@ use uuid::Uuid;
 
 use crate::{
     entity::{
-        BookKind, BookLabelIds, BookStatus, BookVisibility, Bounded, BoundedVec, HexHash, Limit,
-        PublicationDemographic, Range, RangeBound, SortOrder, Timestamp,
+        BookKind, BookLabelIds, BookStatus, BookVisibility, Bounded, BoundedVec, Limit,
+        PublicationDemographic, Range, RangeBound, ShortHexHash, SortOrder, Timestamp,
     },
     error::EntityError,
 };
@@ -111,7 +111,7 @@ impl BookSort {
 pub struct BookCursor {
     pub id: Uuid,
     pub sort: BookSort,
-    pub selection_hash: HexHash,
+    pub selection_hash: ShortHexHash,
 }
 
 #[derive(Debug, Serialize)]
@@ -135,7 +135,7 @@ pub struct BookFilter {
     pub limit: Limit,
     pub cursor: Option<BookCursor>,
     pub selection: BookSelection,
-    pub selection_hash: HexHash,
+    pub selection_hash: ShortHexHash,
 }
 
 impl BookFilter {
@@ -155,24 +155,49 @@ impl BookFilter {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use time::OffsetDateTime;
     use uuid::Uuid;
 
-    use crate::{
-        entity::{
-            BookCursor, BookFilter, BookKind, BookKinds, BookLabelIds, BookSelection, BookSort,
-            BookSortField, BookVisibility, CreatedAtRange, HexHash, LabelFilter, LabelsMode, Limit,
-            PublicationYearRange, SortOrder, Timestamp,
-        },
-        hasher::{Hasher, tests::stub},
+    use crate::entity::{
+        BookCursor, BookFilter, BookKinds, BookLabelIds, BookSelection, BookSort, BookSortField,
+        BookStatuses, BookVisibility, CreatedAtRange, FilterLookupIds, LabelFilter, LabelsMode,
+        Limit, PublicationDemographics, PublicationYearRange, ShortHexHash, SortOrder, Timestamp,
     };
+
+    const SELECTION_HASH: &str = "0123456789abcdef";
+    const STALE_HASH: &str = "fedcba9876543210";
+
+    pub(crate) fn unfiltered_selection() -> BookSelection {
+        BookSelection {
+            visibility: BookVisibility::Listed,
+            sort_field: BookSortField::CreatedAt,
+            order: SortOrder::Desc,
+            labels: LabelFilter {
+                included: BookLabelIds::try_from(vec![]).unwrap(),
+                mode: LabelsMode::And,
+                excluded: BookLabelIds::try_from(vec![]).unwrap(),
+            },
+            kinds: BookKinds::try_from(vec![]).unwrap(),
+            statuses: BookStatuses::try_from(vec![]).unwrap(),
+            content_rating_ids: FilterLookupIds::try_from(vec![]).unwrap(),
+            publication_language_ids: FilterLookupIds::try_from(vec![]).unwrap(),
+            publication_demographics: PublicationDemographics::try_from(vec![]).unwrap(),
+            available_translated_language_ids: FilterLookupIds::try_from(vec![]).unwrap(),
+            publication_year: PublicationYearRange::try_new(None, None).unwrap(),
+            created_at: CreatedAtRange::try_new(None, None).unwrap(),
+        }
+    }
+
+    fn short_hash(hex: &str) -> ShortHexHash {
+        ShortHexHash::try_from(hex.to_owned()).unwrap()
+    }
 
     fn filter(selection: BookSelection) -> BookFilter {
         BookFilter {
             limit: Limit::DEFAULT,
             cursor: None,
-            selection_hash: hash(&selection),
+            selection_hash: short_hash(SELECTION_HASH),
             selection,
         }
     }
@@ -181,94 +206,51 @@ mod tests {
         BookFilter {
             limit: Limit::DEFAULT,
             cursor: Some(cursor),
-            selection_hash: hash(&selection),
+            selection_hash: short_hash(SELECTION_HASH),
             selection,
         }
     }
 
-    fn cursor_for(selection: &BookSelection) -> BookCursor {
+    fn cursor_for() -> BookCursor {
         BookCursor {
             id: Uuid::now_v7(),
             sort: BookSort::CreatedAt(Timestamp::from(OffsetDateTime::UNIX_EPOCH)),
-            selection_hash: hash(selection),
+            selection_hash: short_hash(SELECTION_HASH),
         }
-    }
-
-    fn hash(selection: &BookSelection) -> HexHash {
-        Hasher::compute_hex_hash(selection).unwrap()
     }
 
     #[test]
     fn a_cursor_from_the_same_filter_is_accepted() {
-        let selection = stub();
-        let filter = filter_paged(stub(), cursor_for(&selection));
+        let filter = filter_paged(unfiltered_selection(), cursor_for());
 
         assert!(filter.ensure_cursor_fits().is_ok());
     }
 
     #[test]
     fn no_cursor_is_always_accepted() {
-        let filter = filter(stub());
+        let filter = filter(unfiltered_selection());
 
         assert!(filter.ensure_cursor_fits().is_ok());
     }
 
     #[test]
-    fn a_cursor_is_rejected_once_any_facet_moves() {
-        let cursor = cursor_for(&stub());
+    fn a_cursor_whose_selection_hash_no_longer_matches_is_rejected() {
+        let cursor = BookCursor {
+            selection_hash: short_hash(STALE_HASH),
+            ..cursor_for()
+        };
+        let filter = filter_paged(unfiltered_selection(), cursor);
 
-        let changed = [
-            BookSelection {
-                labels: LabelFilter {
-                    included: BookLabelIds::try_from(vec![Uuid::now_v7()]).unwrap(),
-                    mode: LabelsMode::And,
-                    excluded: BookLabelIds::try_from(vec![]).unwrap(),
-                },
-                ..stub()
-            },
-            BookSelection {
-                kinds: BookKinds::try_from(vec![BookKind::Manhwa]).unwrap(),
-                ..stub()
-            },
-            BookSelection {
-                visibility: BookVisibility::Hidden,
-                ..stub()
-            },
-            BookSelection {
-                publication_year: PublicationYearRange::try_new(Some(2010), None).unwrap(),
-                ..stub()
-            },
-            BookSelection {
-                created_at: CreatedAtRange::try_new(
-                    Some(Timestamp::from(OffsetDateTime::UNIX_EPOCH)),
-                    None,
-                )
-                .unwrap(),
-                ..stub()
-            },
-            BookSelection {
-                order: SortOrder::Asc,
-                ..stub()
-            },
-        ];
-
-        for selection in changed {
-            let filter = filter_paged(selection, cursor.clone());
-
-            assert!(
-                filter.ensure_cursor_fits().is_err(),
-                "{filter:?} must reject a cursor minted before the change"
-            );
-        }
+        assert!(filter.ensure_cursor_fits().is_err());
     }
 
     #[test]
     fn a_cursor_for_another_sort_field_is_rejected() {
         let selection = BookSelection {
             sort_field: BookSortField::Name,
-            ..stub()
+            ..unfiltered_selection()
         };
-        let cursor = cursor_for(&selection);
+        let cursor = cursor_for();
         let filter = filter_paged(selection, cursor);
 
         assert!(filter.ensure_cursor_fits().is_err());
@@ -276,11 +258,10 @@ mod tests {
 
     #[test]
     fn page_size_is_outside_the_selection_hash() {
-        let minted_under = stub();
-        let cursor = cursor_for(&minted_under);
+        let cursor = cursor_for();
         let resized = BookFilter {
             limit: Limit::try_from(50).unwrap(),
-            ..filter_paged(stub(), cursor)
+            ..filter_paged(unfiltered_selection(), cursor)
         };
 
         assert!(
@@ -308,38 +289,6 @@ mod tests {
 
         for (value, field) in cases {
             assert_eq!(value.field(), field, "{value:?}");
-        }
-    }
-
-    #[test]
-    fn a_sort_value_belongs_to_no_other_field() {
-        let cases = [
-            (
-                BookSort::CreatedAt(Timestamp::from(OffsetDateTime::UNIX_EPOCH)),
-                BookSortField::Name,
-            ),
-            (
-                BookSort::CreatedAt(Timestamp::from(OffsetDateTime::UNIX_EPOCH)),
-                BookSortField::PublicationYear,
-            ),
-            (
-                BookSort::Name("Solo Leveling".to_owned()),
-                BookSortField::CreatedAt,
-            ),
-            (
-                BookSort::Name("Solo Leveling".to_owned()),
-                BookSortField::PublicationYear,
-            ),
-            (BookSort::PublicationYear(2016), BookSortField::CreatedAt),
-            (BookSort::PublicationYear(2016), BookSortField::Name),
-        ];
-
-        for (value, other) in cases {
-            assert_ne!(
-                value.field(),
-                other,
-                "{value:?} must not pass a cursor check for {other:?}"
-            );
         }
     }
 }

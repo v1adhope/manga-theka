@@ -1,9 +1,3 @@
-use axum::{
-    body::Body,
-    http::{Request, StatusCode},
-};
-use http_body_util::BodyExt;
-use tower::ServiceExt;
 use uuid::Uuid;
 
 use crate::helpers::{RespWrapper, TestApp};
@@ -13,12 +7,9 @@ use manga_theka::entity::Language;
 async fn get_languages_returns_seeded_set() {
     let app = TestApp::new().await;
 
-    let req = Request::get("/languages").body(Body::empty()).unwrap();
-    let resp = app.router.oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::OK);
-
-    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let wrapper: RespWrapper<Vec<Language>> = serde_json::from_slice(&bytes).unwrap();
+    let wrapper = app
+        .get_ok_json::<RespWrapper<Vec<Language>>>("/languages")
+        .await;
 
     let mut actual: Vec<(Uuid, String)> =
         wrapper.data.into_iter().map(|l| (l.id, l.code)).collect();

@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:17
+    image: postgres:18
     restart: always
     shm_size: 1gb
     ports:
@@ -10,7 +10,7 @@ services:
       POSTGRES_USER: ${APP_DATABASE__USERNAME}
       POSTGRES_DB: ${APP_DATABASE__DATABASE_NAME}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql
 
   rustfs:
     image: rustfs/rustfs:latest
@@ -26,6 +26,15 @@ services:
     volumes:
       - rustfsdata:/data
 
+  redis:
+    image: redis:8
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+
 volumes:
   pgdata:
   rustfsdata:
+  redisdata:

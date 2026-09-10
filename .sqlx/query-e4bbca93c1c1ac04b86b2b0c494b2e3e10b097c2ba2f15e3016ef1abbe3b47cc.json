@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select\n    exists (\n        select 1\n        from users\n        where email = $1\n    ) as \"email_taken!\",\n    exists (\n        select 1\n        from users\n        where username = $2\n    ) as \"username_taken!\";\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "email_taken!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "username_taken!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "e4bbca93c1c1ac04b86b2b0c494b2e3e10b097c2ba2f15e3016ef1abbe3b47cc"
+}
