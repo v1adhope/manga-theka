@@ -387,8 +387,7 @@ async fn get_books_desc_order_confirmed() {
 async fn get_books_zero_limit_returns_422() {
     let app = TestApp::new().await;
 
-    let req = Request::get("/books?limit=0").body(Body::empty()).unwrap();
-    let resp = app.send(req).await;
+    let resp = app.get_raw("/books?limit=0").await;
 
     assert_error(resp, StatusCode::UNPROCESSABLE_ENTITY).await;
 }
@@ -397,10 +396,7 @@ async fn get_books_zero_limit_returns_422() {
 async fn get_books_invalid_cursor_returns_400() {
     let app = TestApp::new().await;
 
-    let req = Request::get("/books?cursor=not-a-cursor!!")
-        .body(Body::empty())
-        .unwrap();
-    let resp = app.send(req).await;
+    let resp = app.get_raw("/books?cursor=not-a-cursor!!").await;
 
     assert_error(resp, StatusCode::BAD_REQUEST).await;
 }
@@ -512,8 +508,7 @@ async fn a_cursor_minted_under_another_filter_returns_400() {
         format!("/books?labels={ACTION}&kind=Manga&limit=2&cursor={cursor}"),
         format!("/books?limit=2&cursor={cursor}"),
     ] {
-        let req = Request::get(&changed).body(Body::empty()).unwrap();
-        let resp = app.send(req).await;
+        let resp = app.get_raw(&changed).await;
 
         assert_error(resp, StatusCode::BAD_REQUEST).await;
     }
@@ -630,10 +625,7 @@ async fn get_books_rejects_malformed_and_out_of_range_queries() {
     ];
 
     for (query, expected) in cases {
-        let req = Request::get(format!("/books{query}"))
-            .body(Body::empty())
-            .unwrap();
-        let resp = app.send(req).await;
+        let resp = app.get_raw(&format!("/books{query}")).await;
 
         assert_eq!(resp.status(), expected, "{query:?}");
     }
