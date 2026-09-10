@@ -5,7 +5,10 @@ use manga_theka::entity::{Role, Session};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
-use crate::helpers::{KNOWN_PASSWORD, TestApp, assert_error, cookie_pair, refresh_cookie};
+use crate::helpers::{
+    AccessTokenBody, KNOWN_PASSWORD, RespWrapper, TestApp, assert_error, cookie_pair,
+    refresh_cookie,
+};
 
 #[tokio::test]
 async fn login_with_valid_credentials_returns_201_a_token_and_a_scoped_cookie() {
@@ -31,12 +34,14 @@ async fn login_with_valid_credentials_returns_201_a_token_and_a_scoped_cookie() 
     }
 
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let body: RespWrapper<AccessTokenBody> = serde_json::from_slice(&bytes).unwrap();
     assert!(
-        v["data"]["accessToken"]
-            .as_str()
-            .is_some_and(|t| !t.is_empty()),
+        !body.data.access_token.is_empty(),
         "login body must carry a non-empty access token"
+    );
+    assert!(
+        body.data.expires_in > 0,
+        "login body must carry a positive access-token lifetime"
     );
 }
 

@@ -16,6 +16,13 @@ pub struct RespWrapper<T, C = Uuid> {
     pub next_cursor: Option<C>,
 }
 
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct AccessTokenBody {
+    pub access_token: String,
+    pub expires_in: i64,
+}
+
 pub async fn assert_error(resp: Response, expected: StatusCode) {
     assert_eq!(resp.status(), expected);
 
