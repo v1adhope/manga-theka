@@ -103,7 +103,8 @@ impl BookAccess {
             BookVisibility::Draft => Err(EntityError::Forbidden),
             BookVisibility::Hidden if claims.can_moderate() => Ok(()),
             BookVisibility::Hidden => Err(EntityError::Forbidden),
-            BookVisibility::Listed => Ok(()),
+            BookVisibility::Listed if claims.is_content_writer() => Ok(()),
+            BookVisibility::Listed => Err(EntityError::Forbidden),
             blocked => Err(EntityError::BookNotWritable(blocked)),
         }
     }
@@ -539,6 +540,19 @@ mod tests {
             .ensure_record_writable(&claims(Uuid::now_v7(), &[Role::Uploader]));
 
         assert!(res.is_ok());
+    }
+
+    #[test]
+    fn a_listed_book_refuses_a_bare_reader_even_its_creator() {
+        let owner = Uuid::now_v7();
+
+        let res = access(BookVisibility::Listed, owner)
+            .ensure_record_writable(&claims(owner, &[Role::Reader]));
+
+        assert!(
+            res.is_err(),
+            "listed writes still require a content-writer role"
+        );
     }
 
     #[test]

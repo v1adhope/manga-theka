@@ -1,5 +1,5 @@
 use axum::body::Body;
-use axum::http::{Request, StatusCode, header};
+use axum::http::{Method, Request, StatusCode, header};
 use fake::Fake;
 use http_body_util::BodyExt;
 use manga_theka::entity::{BookQuery, BookVisibility, Role};
@@ -542,12 +542,17 @@ async fn book_writes_are_refused_unless_the_book_is_draft_listed_or_hidden() {
     let app = TestApp::new().await;
 
     for visibility in EVERY_VISIBILITY {
+        // Moderator covers all three success paths in one caller: it is the
+        // Draft book's own created_by, it satisfies Hidden's moderator-only
+        // gate, and it satisfies Listed's content-writer gate.
+        let creator = app.db_seed_user(&[Role::Moderator]).await;
         let book: BookQuery = BookFaker {
             visibility,
+            created_by: Some(creator.id),
             ..Default::default()
         }
         .fake();
-        app.fixture_insert_book(&book).await;
+        app.db_insert_book(&book).await;
 
         let body = serde_json::json!({
             "name": book.name.as_ref(),
@@ -560,11 +565,20 @@ async fn book_writes_are_refused_unless_the_book_is_draft_listed_or_hidden() {
             "publicationDemographic": book.publication_demographic.as_ref(),
         });
         let update = app
-            .put_json(&format!("/books/{}", book.id), body)
+            .json_as_user(
+                Method::PUT,
+                &format!("/books/{}", book.id),
+                body,
+                creator.id,
+                &[Role::Moderator],
+            )
             .await
             .status();
 
-        let cover = app.post_cover(book.id, COVER_PNG).await.status();
+        let cover = app
+            .post_cover_as(book.id, COVER_PNG, creator.id, &[Role::Moderator])
+            .await
+            .status();
 
         let expected = match visibility {
             BookVisibility::Draft | BookVisibility::Listed | BookVisibility::Hidden => {
@@ -581,11 +595,20 @@ async fn cover_writes_are_refused_unless_the_book_is_draft_listed_or_hidden() {
     let app = TestApp::new().await;
 
     for visibility in EVERY_VISIBILITY {
-        let book_id = app.db_insert_book_with_visibility(visibility).await;
+        // Moderator covers all three success paths in one caller: it is the
+        // Draft book's own created_by, it satisfies Hidden's moderator-only
+        // gate, and it satisfies Listed's content-writer gate.
+        let creator = app.db_seed_user(&[Role::Moderator]).await;
+        let book_id = app.db_insert_book_as(visibility, creator.id).await;
         let cover_id = app.fixture_insert_cover(book_id, COVER_JPG).await;
 
-        let promote = app.put_main_cover(book_id, cover_id).await;
-        let delete = app.delete_cover(cover_id).await.status();
+        let promote = app
+            .put_main_cover_as(book_id, cover_id, creator.id, &[Role::Moderator])
+            .await;
+        let delete = app
+            .delete_cover_as(cover_id, creator.id, &[Role::Moderator])
+            .await
+            .status();
 
         let expected = match visibility {
             BookVisibility::Draft | BookVisibility::Listed | BookVisibility::Hidden => {

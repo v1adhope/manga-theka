@@ -148,6 +148,26 @@ impl TestApp {
         self.send_authed(req).await
     }
 
+    async fn multipart_as(
+        &self,
+        path: &str,
+        parts: &[&[u8]],
+        sub: Uuid,
+        roles: &[Role],
+    ) -> Response {
+        let form = Self::multipart_body(parts);
+        let req = Request::post(path)
+            .header(header::CONTENT_TYPE, form.content_type())
+            .header(
+                header::AUTHORIZATION,
+                self.bearer(sub, Uuid::now_v7(), roles),
+            )
+            .body(Body::from(form))
+            .unwrap();
+
+        self.send_raw(req).await
+    }
+
     fn multipart_body(parts: &[&[u8]]) -> MultipartForm {
         parts
             .iter()
@@ -270,6 +290,17 @@ impl TestApp {
             .await
     }
 
+    pub async fn post_cover_as(
+        &self,
+        book_id: Uuid,
+        image: &[u8],
+        sub: Uuid,
+        roles: &[Role],
+    ) -> Response {
+        self.multipart_as(&format!("/books/{book_id}/covers"), &[image], sub, roles)
+            .await
+    }
+
     pub async fn get_covers(&self, book_id: Uuid) -> Response {
         self.get_raw(&format!("/books/{book_id}/covers")).await
     }
@@ -288,8 +319,31 @@ impl TestApp {
         .status()
     }
 
+    pub async fn put_main_cover_as(
+        &self,
+        book_id: Uuid,
+        cover_id: Uuid,
+        sub: Uuid,
+        roles: &[Role],
+    ) -> StatusCode {
+        self.json_as_user(
+            Method::PUT,
+            &format!("/books/{book_id}/main-cover"),
+            serde_json::json!({ "coverId": cover_id }),
+            sub,
+            roles,
+        )
+        .await
+        .status()
+    }
+
     pub async fn delete_cover(&self, cover_id: Uuid) -> Response {
         self.delete_authed(&format!("/covers/{cover_id}")).await
+    }
+
+    pub async fn delete_cover_as(&self, cover_id: Uuid, sub: Uuid, roles: &[Role]) -> Response {
+        self.delete_authed_as(&format!("/covers/{cover_id}"), sub, Uuid::now_v7(), roles)
+            .await
     }
 
     pub async fn get_creator(&self, id: Uuid) -> Response {

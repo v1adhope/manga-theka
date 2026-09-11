@@ -1,6 +1,6 @@
 use axum::{
     body::Body,
-    http::{Request, StatusCode, header},
+    http::{Method, Request, StatusCode, header},
 };
 
 use crate::helpers::fakers::{BookFaker, CONTENT_RATINGS, CreatorFaker, LabelFaker, UserFaker};
@@ -9,7 +9,7 @@ use crate::helpers::{
     title_keys,
 };
 use fake::Fake;
-use manga_theka::entity::{BookQuery, Creator, Label, Role, UserQuery};
+use manga_theka::entity::{BookQuery, BookVisibility, Creator, Label, Role, UserQuery};
 
 #[tokio::test]
 async fn store_book_with_valid_body_passes() {
@@ -581,6 +581,72 @@ async fn update_book_leaves_other_books_untouched() {
     assert_eq!(sample.labels, other.labels.len() as i64);
     assert_eq!(sample.links, other.links.len() as i64);
     assert_eq!(sample.titles, other.titles.len() as i64);
+}
+
+#[tokio::test]
+async fn update_book_on_a_draft_by_its_creator_reader_succeeds() {
+    let app = TestApp::new().await;
+    let creator = app.db_seed_user(&[Role::Reader]).await;
+    let book_id = app
+        .db_insert_book_as(BookVisibility::Draft, creator.id)
+        .await;
+
+    let updated: BookQuery = BookFaker::default().fake();
+    let body = serde_json::json!({
+        "name": updated.name.as_ref(),
+        "description": updated.description.as_ref(),
+        "publicationYear": updated.publication_year,
+        "contentRatingId": updated.content_rating.id,
+        "status": updated.status.as_ref(),
+        "kind": updated.kind.as_ref(),
+        "publicationLanguageId": updated.publication_language.id,
+        "publicationDemographic": updated.publication_demographic.as_ref(),
+    });
+
+    let resp = app
+        .json_as_user(
+            Method::PUT,
+            &format!("/books/{book_id}"),
+            body,
+            creator.id,
+            &[Role::Reader],
+        )
+        .await;
+
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn update_book_on_a_draft_by_a_reader_who_is_not_its_creator_returns_403() {
+    let app = TestApp::new().await;
+    let creator = app.db_seed_user(&[Role::Reader]).await;
+    let book_id = app
+        .db_insert_book_as(BookVisibility::Draft, creator.id)
+        .await;
+
+    let updated: BookQuery = BookFaker::default().fake();
+    let body = serde_json::json!({
+        "name": updated.name.as_ref(),
+        "description": updated.description.as_ref(),
+        "publicationYear": updated.publication_year,
+        "contentRatingId": updated.content_rating.id,
+        "status": updated.status.as_ref(),
+        "kind": updated.kind.as_ref(),
+        "publicationLanguageId": updated.publication_language.id,
+        "publicationDemographic": updated.publication_demographic.as_ref(),
+    });
+
+    let resp = app
+        .json_as_user(
+            Method::PUT,
+            &format!("/books/{book_id}"),
+            body,
+            uuid::Uuid::now_v7(),
+            &[Role::Reader],
+        )
+        .await;
+
+    assert_error(resp, StatusCode::FORBIDDEN).await;
 }
 
 #[tokio::test]
