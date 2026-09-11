@@ -17,9 +17,9 @@ An anonymous visitor with no account. Can read content and submit `Feedback`; ha
 _Avoid_: Anonymous, visitor
 
 **Created By**:
-The `User` who brought an entity into being, holding standing over it that follows from having created it, not from any `Role`. A `Moderator+` holds the same standing on every entity. Applies to two entities:
+The `User` who brought an entity into being, holding standing over it that follows from having created it, not from any `Role`. A `Moderator+` holds the same standing on every entity, with one exception: editing a `Book` while it is a `Draft` is the creator's alone -- not even a `Moderator+` may write to it in place. Applies to two entities:
 
-- A `Book`: the `User` who proposed it as a `Draft` -- one per `Book`, the only non-`Moderator+` who can send it for review or edit it while it is a `Draft`, the audience for its `Book Note`, and able to read the `Book`, its `Chapter`s, and its `Cover`s in any `Book Visibility` -- but not the `Chapter Page`s of a `Chapter Release` they did not create.
+- A `Book`: the `User` who proposed it as a `Draft` -- one per `Book`; the only `User` at all, `Moderator+` included, who can edit it while it is a `Draft`; the only non-`Moderator+` who can send it for review; the audience for its `Book Note`; and able to read the `Book`, its `Chapter`s, and its `Cover`s in any `Book Visibility` -- but not the `Chapter Page`s of a `Chapter Release` they did not create.
 - A `Chapter Release`: the `User` who created it -- one per `Chapter Release`; the only non-`Moderator+` who can stage `Chapter Page`s into it, commit it, delete it, read its `Chapter Page`s while its `Book` is not `Listed`, or see its staged pages.
 
 _Avoid_: Submitter, Owner, Proposer, Uploader (a `Role`, not a relation to one entity)

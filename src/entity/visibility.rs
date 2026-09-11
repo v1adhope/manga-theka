@@ -99,12 +99,10 @@ impl BookAccess {
 
     pub fn ensure_record_writable(&self, claims: &UserClaims) -> Result<(), EntityError> {
         match self.visibility {
-            BookVisibility::Draft | BookVisibility::Hidden
-                if claims.has_standing_over(self.created_by) =>
-            {
-                Ok(())
-            }
-            BookVisibility::Draft | BookVisibility::Hidden => Err(EntityError::Forbidden),
+            BookVisibility::Draft if claims.id == self.created_by => Ok(()),
+            BookVisibility::Draft => Err(EntityError::Forbidden),
+            BookVisibility::Hidden if claims.has_standing_over(self.created_by) => Ok(()),
+            BookVisibility::Hidden => Err(EntityError::Forbidden),
             BookVisibility::Listed => Ok(()),
             blocked => Err(EntityError::BookNotWritable(blocked)),
         }
@@ -501,20 +499,35 @@ mod tests {
     }
 
     #[test]
-    fn draft_and_hidden_writes_admit_the_creator_and_a_moderator_only() {
-        for visibility in [BookVisibility::Draft, BookVisibility::Hidden] {
-            let owner = Uuid::now_v7();
+    fn draft_writes_admit_only_the_creator() {
+        let owner = Uuid::now_v7();
 
-            let by_owner = access(visibility, owner).ensure_record_writable(&claims(owner, &[]));
-            let by_moderator = access(visibility, owner)
-                .ensure_record_writable(&claims(Uuid::now_v7(), &[Role::Moderator]));
-            let by_stranger = access(visibility, owner)
-                .ensure_record_writable(&claims(Uuid::now_v7(), &[Role::Uploader]));
+        let by_owner =
+            access(BookVisibility::Draft, owner).ensure_record_writable(&claims(owner, &[]));
+        let by_moderator = access(BookVisibility::Draft, owner)
+            .ensure_record_writable(&claims(Uuid::now_v7(), &[Role::Moderator]));
+        let by_stranger = access(BookVisibility::Draft, owner)
+            .ensure_record_writable(&claims(Uuid::now_v7(), &[Role::Uploader]));
 
-            assert!(by_owner.is_ok(), "{visibility} must admit its creator");
-            assert!(by_moderator.is_ok(), "{visibility} must admit a moderator");
-            assert!(by_stranger.is_err(), "{visibility} must refuse a stranger");
-        }
+        assert!(by_owner.is_ok(), "draft must admit its creator");
+        assert!(by_moderator.is_err(), "draft must refuse even a moderator");
+        assert!(by_stranger.is_err(), "draft must refuse a stranger");
+    }
+
+    #[test]
+    fn hidden_writes_admit_the_creator_and_a_moderator() {
+        let owner = Uuid::now_v7();
+
+        let by_owner =
+            access(BookVisibility::Hidden, owner).ensure_record_writable(&claims(owner, &[]));
+        let by_moderator = access(BookVisibility::Hidden, owner)
+            .ensure_record_writable(&claims(Uuid::now_v7(), &[Role::Moderator]));
+        let by_stranger = access(BookVisibility::Hidden, owner)
+            .ensure_record_writable(&claims(Uuid::now_v7(), &[Role::Uploader]));
+
+        assert!(by_owner.is_ok(), "hidden must admit its creator");
+        assert!(by_moderator.is_ok(), "hidden must admit a moderator");
+        assert!(by_stranger.is_err(), "hidden must refuse a stranger");
     }
 
     #[test]
