@@ -7,12 +7,8 @@ use manga_theka::entity::{BookQuery, BookVisibility, Role};
 use crate::helpers::fakers::{BookFaker, COVER_JPG, COVER_PNG, EVERY_VISIBILITY};
 use crate::helpers::{RespWrapper, TestApp, assert_error, assert_stored};
 
-#[tokio::test]
-async fn store_book_starts_it_as_a_draft() {
-    let app = TestApp::new().await;
-    let book: BookQuery = BookFaker::default().fake();
-
-    let body = serde_json::json!({
+fn book_body(book: &BookQuery) -> serde_json::Value {
+    serde_json::json!({
         "name": book.name.as_ref(),
         "description": book.description.as_ref(),
         "publicationYear": book.publication_year,
@@ -21,9 +17,15 @@ async fn store_book_starts_it_as_a_draft() {
         "kind": book.kind.as_ref(),
         "publicationLanguageId": book.publication_language.id,
         "publicationDemographic": book.publication_demographic.as_ref(),
-    });
+    })
+}
 
-    let resp = app.post_json("/books", body).await;
+#[tokio::test]
+async fn store_book_starts_it_as_a_draft() {
+    let app = TestApp::new().await;
+    let book: BookQuery = BookFaker::default().fake();
+
+    let resp = app.post_json("/books", book_body(&book)).await;
     let id = assert_stored(resp).await;
 
     let state = app.db_fetch_book_visibility_state(id).await;
@@ -241,7 +243,7 @@ async fn get_chapter_page_is_public_only_while_the_book_is_listed() {
 }
 
 #[tokio::test]
-async fn get_cover_image_follows_the_record_tier() {
+async fn get_cover_image_is_public_only_while_the_book_is_publicly_listable() {
     let app = TestApp::new().await;
 
     for visibility in EVERY_VISIBILITY {
@@ -305,7 +307,7 @@ async fn a_moderator_reads_content_in_every_visibility() {
 }
 
 #[tokio::test]
-async fn a_withheld_page_resource_answers_403_while_a_missing_one_answers_404() {
+async fn page_resources_behind_a_withheld_release_answer_403_even_for_absent_pages() {
     let app = TestApp::new().await;
     let book_id = app
         .db_insert_book_with_visibility(BookVisibility::Hidden)
@@ -317,7 +319,6 @@ async fn a_withheld_page_resource_answers_403_while_a_missing_one_answers_404() 
         .await;
     let absent = uuid::Uuid::now_v7();
 
-    // A hidden book withholds its page content: 403, naming the state.
     for withheld in [
         format!("/releases/{release_id}/pages"),
         format!("/releases/{release_id}/pages/1"),
@@ -332,8 +333,6 @@ async fn a_withheld_page_resource_answers_403_while_a_missing_one_answers_404() 
         );
     }
 
-    // Standing is resolved before sub-resource existence: an absent page id or
-    // number behind a withheld release is still 403, not 404.
     for still_withheld in [
         format!("/releases/{release_id}/pages/9"),
         format!("/releases/{release_id}/pages/{absent}/image"),
@@ -341,12 +340,18 @@ async fn a_withheld_page_resource_answers_403_while_a_missing_one_answers_404() 
         let status = app.get_raw(&still_withheld).await.status();
         assert_eq!(status, StatusCode::FORBIDDEN, "{still_withheld}");
     }
+}
 
-    // An entirely absent release is a genuine 404.
+#[tokio::test]
+async fn get_pages_for_a_missing_release_answers_404() {
+    let app = TestApp::new().await;
+    let absent = uuid::Uuid::now_v7();
+
     let missing = app
         .get_raw(&format!("/releases/{absent}/pages"))
         .await
         .status();
+
     assert_eq!(missing, StatusCode::NOT_FOUND);
 }
 
@@ -451,8 +456,6 @@ async fn update_book_visibility_rejects_an_untabled_move() {
         .db_insert_book_as(BookVisibility::Listed, creator.id)
         .await;
 
-    // The creator clears the standing check, so the untabled Listed -> PendingReview
-    // move is what the domain guard refuses.
     let resp = app
         .json_as_user(
             axum::http::Method::PUT,
@@ -542,9 +545,6 @@ async fn book_writes_are_refused_unless_the_book_is_draft_listed_or_hidden() {
     let app = TestApp::new().await;
 
     for visibility in EVERY_VISIBILITY {
-        // Moderator covers all three success paths in one caller: it is the
-        // Draft book's own created_by, it satisfies Hidden's moderator-only
-        // gate, and it satisfies Listed's content-writer gate.
         let creator = app.db_seed_user(&[Role::Moderator]).await;
         let book: BookQuery = BookFaker {
             visibility,
@@ -554,21 +554,11 @@ async fn book_writes_are_refused_unless_the_book_is_draft_listed_or_hidden() {
         .fake();
         app.db_insert_book(&book).await;
 
-        let body = serde_json::json!({
-            "name": book.name.as_ref(),
-            "description": book.description.as_ref(),
-            "publicationYear": book.publication_year,
-            "contentRatingId": book.content_rating.id,
-            "status": book.status.as_ref(),
-            "kind": book.kind.as_ref(),
-            "publicationLanguageId": book.publication_language.id,
-            "publicationDemographic": book.publication_demographic.as_ref(),
-        });
         let update = app
             .json_as_user(
                 Method::PUT,
                 &format!("/books/{}", book.id),
-                body,
+                book_body(&book),
                 creator.id,
                 &[Role::Moderator],
             )
@@ -595,9 +585,6 @@ async fn cover_writes_are_refused_unless_the_book_is_draft_listed_or_hidden() {
     let app = TestApp::new().await;
 
     for visibility in EVERY_VISIBILITY {
-        // Moderator covers all three success paths in one caller: it is the
-        // Draft book's own created_by, it satisfies Hidden's moderator-only
-        // gate, and it satisfies Listed's content-writer gate.
         let creator = app.db_seed_user(&[Role::Moderator]).await;
         let book_id = app.db_insert_book_as(visibility, creator.id).await;
         let cover_id = app.fixture_insert_cover(book_id, COVER_JPG).await;
@@ -689,19 +676,6 @@ async fn delete_book_is_allowed_in_every_visibility() {
             "removal must never be blocked, not even while {visibility}"
         );
     }
-}
-
-fn book_body(book: &BookQuery) -> serde_json::Value {
-    serde_json::json!({
-        "name": book.name.as_ref(),
-        "description": book.description.as_ref(),
-        "publicationYear": book.publication_year,
-        "contentRatingId": book.content_rating.id,
-        "status": book.status.as_ref(),
-        "kind": book.kind.as_ref(),
-        "publicationLanguageId": book.publication_language.id,
-        "publicationDemographic": book.publication_demographic.as_ref(),
-    })
 }
 
 #[tokio::test]
