@@ -139,6 +139,9 @@ impl Service {
             .map_err(Into::into)
     }
 
+    // Visibility must be checked before page existence: a caller who fails the
+    // readability check must get 403, not 404, even for a missing page id, so
+    // this stays a second sequenced step here rather than one database query.
     pub(crate) async fn ensure_page_readable(
         &self,
         release_id: Uuid,
