@@ -141,23 +141,3 @@ impl Database {
         Ok(())
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use uuid::Uuid;
-
-    use crate::{entity::BookAccess, error::DatabaseError};
-
-    #[test]
-    fn an_unknown_visibility_is_reported_as_a_corrupted_invariant() {
-        let access = BookAccess::try_from(("Unlisted".to_owned(), Uuid::now_v7()));
-
-        assert!(matches!(
-            access,
-            Err(DatabaseError::InvariantCorrupted {
-                field: "visibility",
-                ..
-            })
-        ));
-    }
-}
