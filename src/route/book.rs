@@ -287,7 +287,8 @@ pub async fn get_books(
     Query(query): Query<BookListQuery>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let restricted = query.visibility.is_some_and(|v| !v.is_publicly_listable());
-    if restricted && !claims.is_some_and(|c| c.can_moderate()) {
+    let cannot_moderate = !claims.is_some_and(|c| c.can_moderate());
+    if restricted && cannot_moderate {
         return Err(RouteError::Forbidden.into());
     }
 

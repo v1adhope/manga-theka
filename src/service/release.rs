@@ -145,8 +145,6 @@ impl Service {
         number: Ordinal,
         claims: Option<&UserClaims>,
     ) -> Result<String, ServiceError> {
-        // Standing before sub-resource existence: gate on the release before
-        // resolving the page number, so a denied caller gets `403`, not `404`.
         self.ensure_release_content_readable(release_id, claims)
             .await?;
 

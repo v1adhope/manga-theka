@@ -145,8 +145,6 @@ impl Service {
         page_id: Uuid,
         claims: Option<&UserClaims>,
     ) -> Result<(), ServiceError> {
-        // Standing before sub-resource existence: a caller who fails the tier
-        // gets `403` even when the page id in the path is also absent.
         self.database
             .get_release_access(release_id)
             .await?

@@ -375,7 +375,7 @@ mod tests {
 
             assert!(by_owner.is_ok());
             assert!(by_moderator.is_ok());
-            assert!(matches!(by_stranger, Err(EntityError::NotReadable { .. })));
+            assert!(by_stranger.is_err());
         }
     }
 

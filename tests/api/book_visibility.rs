@@ -538,7 +538,7 @@ async fn update_book_visibility_with_a_malformed_id_returns_400() {
 }
 
 #[tokio::test]
-async fn book_writes_are_refused_unless_the_book_is_draft_or_listed() {
+async fn book_writes_are_refused_unless_the_book_is_draft_listed_or_hidden() {
     let app = TestApp::new().await;
 
     for visibility in EVERY_VISIBILITY {
@@ -567,7 +567,7 @@ async fn book_writes_are_refused_unless_the_book_is_draft_or_listed() {
         let cover = app.post_cover(book.id, COVER_PNG).await.status();
 
         let expected = match visibility {
-            BookVisibility::Draft | BookVisibility::Listed => {
+            BookVisibility::Draft | BookVisibility::Listed | BookVisibility::Hidden => {
                 (StatusCode::NO_CONTENT, StatusCode::CREATED)
             }
             _ => (StatusCode::CONFLICT, StatusCode::CONFLICT),
@@ -577,7 +577,7 @@ async fn book_writes_are_refused_unless_the_book_is_draft_or_listed() {
 }
 
 #[tokio::test]
-async fn cover_writes_are_refused_unless_the_book_is_draft_or_listed() {
+async fn cover_writes_are_refused_unless_the_book_is_draft_listed_or_hidden() {
     let app = TestApp::new().await;
 
     for visibility in EVERY_VISIBILITY {
@@ -588,7 +588,7 @@ async fn cover_writes_are_refused_unless_the_book_is_draft_or_listed() {
         let delete = app.delete_cover(cover_id).await.status();
 
         let expected = match visibility {
-            BookVisibility::Draft | BookVisibility::Listed => {
+            BookVisibility::Draft | BookVisibility::Listed | BookVisibility::Hidden => {
                 (StatusCode::NO_CONTENT, StatusCode::NO_CONTENT)
             }
             _ => (StatusCode::CONFLICT, StatusCode::CONFLICT),

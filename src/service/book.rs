@@ -20,11 +20,7 @@ impl Service {
         claims: Option<&UserClaims>,
     ) -> Result<BookQuery, ServiceError> {
         let book = self.database.get_book(id).await?;
-        BookAccess {
-            visibility: book.visibility,
-            created_by: book.created_by,
-        }
-        .ensure_record_readable::<Book>(claims)?;
+        BookAccess::from(&book).ensure_record_readable::<Book>(claims)?;
 
         Ok(book)
     }
@@ -47,9 +43,6 @@ impl Service {
         item: VisibilityTransition,
         claims: UserClaims,
     ) -> Result<(), ServiceError> {
-        // Fail in order (mirrors the release mutation gate, ADR-0003): `404`
-        // unknown book, then `403` caller lacks standing, then `409`/`422` the
-        // move itself is illegal.
         let access = self.database.get_book_access(item.id).await?;
         access.ensure_visibility_settable(item.visibility, &claims)?;
         let update = BookVisibilityUpdate::try_from((access.visibility, item))?;
