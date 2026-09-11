@@ -8,7 +8,7 @@ use crate::{
 
 impl Service {
     pub async fn store_chapter(&self, item: Chapter) -> Result<(), ServiceError> {
-        self.ensure_content_writable(item.book_id).await?;
+        self.ensure_book_content_writable(item.book_id).await?;
 
         self.database.store_chapter(&item).await.map_err(Into::into)
     }
@@ -29,7 +29,7 @@ impl Service {
         filter: Filter,
         claims: Option<&UserClaims>,
     ) -> Result<(Vec<Chapter>, Option<Uuid>), ServiceError> {
-        self.ensure_book_readable::<Chapter>(book_id, claims)
+        self.ensure_book_record_readable::<Chapter>(book_id, claims)
             .await?;
 
         self.database
@@ -39,7 +39,8 @@ impl Service {
     }
 
     pub async fn update_chapter(&self, item: Chapter) -> Result<(), ServiceError> {
-        self.ensure_content_writable_by_chapter(item.id).await?;
+        self.ensure_book_content_writable_by_chapter(item.id)
+            .await?;
 
         self.database
             .update_chapter(&item)
@@ -48,7 +49,7 @@ impl Service {
     }
 
     pub async fn delete_chapter(&self, id: Uuid) -> Result<(), ServiceError> {
-        self.ensure_content_writable_by_chapter(id).await?;
+        self.ensure_book_content_writable_by_chapter(id).await?;
 
         self.database.delete_chapter(id).await.map_err(Into::into)
     }

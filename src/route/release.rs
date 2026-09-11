@@ -71,7 +71,7 @@ pub async fn upload_chapter_pages(
     mut multipart: Multipart,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     service
-        .ensure_chapter_release_writable(release_id, &claims)
+        .ensure_release_content_writable(release_id, &claims)
         .await?;
 
     let mut images = Vec::with_capacity(MAX_PARTS_PER_REQUEST);

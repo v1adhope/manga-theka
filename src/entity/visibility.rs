@@ -73,22 +73,22 @@ pub struct BookAccess {
 }
 
 impl BookAccess {
-    fn admits(&self, claims: Option<&UserClaims>) -> bool {
+    fn has_standing(&self, claims: Option<&UserClaims>) -> bool {
         claims.is_some_and(|c| c.has_standing_over(self.created_by))
     }
 
-    pub fn ensure_readable<T: Entity>(
+    pub fn ensure_record_readable<T: Entity>(
         &self,
         claims: Option<&UserClaims>,
     ) -> Result<(), EntityError> {
-        if self.visibility.is_publicly_listable() || self.admits(claims) {
+        if self.visibility.is_publicly_listable() || self.has_standing(claims) {
             return Ok(());
         }
 
         Err(EntityError::not_readable::<T>(self.visibility))
     }
 
-    pub fn ensure_book_writable(&self, claims: &UserClaims) -> Result<(), EntityError> {
+    pub fn ensure_record_writable(&self, claims: &UserClaims) -> Result<(), EntityError> {
         match self.visibility {
             BookVisibility::Draft if claims.has_standing_over(self.created_by) => Ok(()),
             BookVisibility::Draft => Err(EntityError::Forbidden),
@@ -437,9 +437,9 @@ mod tests {
         let owner = Uuid::now_v7();
 
         for visibility in [BookVisibility::Listed, BookVisibility::Hidden] {
-            let guest = access(visibility, owner).ensure_readable::<Book>(None);
+            let guest = access(visibility, owner).ensure_record_readable::<Book>(None);
             let stranger = access(visibility, owner)
-                .ensure_readable::<Book>(Some(&claims(Uuid::now_v7(), &[])));
+                .ensure_record_readable::<Book>(Some(&claims(Uuid::now_v7(), &[])));
 
             assert!(guest.is_ok(), "{visibility} must be public to a guest");
             assert!(
@@ -455,9 +455,9 @@ mod tests {
 
         for visibility in PRIVATE_VISIBILITY {
             let by_owner = access(visibility, owner)
-                .ensure_readable::<Book>(Some(&claims(owner, &[Role::Reader])));
+                .ensure_record_readable::<Book>(Some(&claims(owner, &[Role::Reader])));
             let by_moderator = access(visibility, owner)
-                .ensure_readable::<Book>(Some(&claims(Uuid::now_v7(), &[Role::Moderator])));
+                .ensure_record_readable::<Book>(Some(&claims(Uuid::now_v7(), &[Role::Moderator])));
 
             assert!(
                 by_owner.is_ok(),
@@ -475,9 +475,9 @@ mod tests {
         let owner = Uuid::now_v7();
 
         for visibility in PRIVATE_VISIBILITY {
-            let guest = access(visibility, owner).ensure_readable::<Book>(None);
+            let guest = access(visibility, owner).ensure_record_readable::<Book>(None);
             let stranger = access(visibility, owner)
-                .ensure_readable::<Book>(Some(&claims(Uuid::now_v7(), &[Role::Uploader])));
+                .ensure_record_readable::<Book>(Some(&claims(Uuid::now_v7(), &[Role::Uploader])));
 
             assert!(
                 matches!(guest, Err(EntityError::NotReadable { state, .. }) if state == visibility),
@@ -495,11 +495,11 @@ mod tests {
         let owner = Uuid::now_v7();
 
         let by_owner =
-            access(BookVisibility::Draft, owner).ensure_book_writable(&claims(owner, &[]));
+            access(BookVisibility::Draft, owner).ensure_record_writable(&claims(owner, &[]));
         let by_moderator = access(BookVisibility::Draft, owner)
-            .ensure_book_writable(&claims(Uuid::now_v7(), &[Role::Moderator]));
+            .ensure_record_writable(&claims(Uuid::now_v7(), &[Role::Moderator]));
         let by_stranger = access(BookVisibility::Draft, owner)
-            .ensure_book_writable(&claims(Uuid::now_v7(), &[Role::Uploader]));
+            .ensure_record_writable(&claims(Uuid::now_v7(), &[Role::Uploader]));
 
         assert!(by_owner.is_ok());
         assert!(by_moderator.is_ok());
@@ -509,7 +509,7 @@ mod tests {
     #[test]
     fn a_listed_book_is_writable_by_any_content_writer() {
         let res = access(BookVisibility::Listed, Uuid::now_v7())
-            .ensure_book_writable(&claims(Uuid::now_v7(), &[Role::Uploader]));
+            .ensure_record_writable(&claims(Uuid::now_v7(), &[Role::Uploader]));
 
         assert!(res.is_ok());
     }
@@ -523,8 +523,8 @@ mod tests {
             BookVisibility::Rejected,
             BookVisibility::Hidden,
         ] {
-            let res =
-                access(visibility, owner).ensure_book_writable(&claims(owner, &[Role::Moderator]));
+            let res = access(visibility, owner)
+                .ensure_record_writable(&claims(owner, &[Role::Moderator]));
 
             assert!(
                 matches!(res, Err(EntityError::BookNotWritable(state)) if state == visibility),

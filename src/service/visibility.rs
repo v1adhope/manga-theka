@@ -7,7 +7,7 @@ use crate::{
 };
 
 impl Service {
-    pub(crate) async fn ensure_book_readable<T: Entity>(
+    pub(crate) async fn ensure_book_record_readable<T: Entity>(
         &self,
         book_id: Uuid,
         claims: Option<&UserClaims>,
@@ -15,7 +15,7 @@ impl Service {
         self.database
             .get_book_access(book_id)
             .await?
-            .ensure_readable::<T>(claims)
+            .ensure_record_readable::<T>(claims)
             .map_err(Into::into)
     }
 
@@ -27,7 +27,7 @@ impl Service {
         self.database
             .get_book_access_by_chapter(chapter_id)
             .await?
-            .ensure_readable::<Chapter>(claims)
+            .ensure_record_readable::<Chapter>(claims)
             .map_err(Into::into)
     }
 
@@ -39,7 +39,7 @@ impl Service {
         self.database
             .get_book_access_by_cover(cover_id)
             .await?
-            .ensure_readable::<BookCover>(claims)
+            .ensure_record_readable::<BookCover>(claims)
             .map_err(Into::into)
     }
 
@@ -51,7 +51,7 @@ impl Service {
         self.database
             .get_book_access(book_id)
             .await?
-            .ensure_book_writable(claims)
+            .ensure_record_writable(claims)
             .map_err(Into::into)
     }
 
@@ -63,11 +63,14 @@ impl Service {
         self.database
             .get_book_access_by_cover(cover_id)
             .await?
-            .ensure_book_writable(claims)
+            .ensure_record_writable(claims)
             .map_err(Into::into)
     }
 
-    pub(crate) async fn ensure_content_writable(&self, book_id: Uuid) -> Result<(), ServiceError> {
+    pub(crate) async fn ensure_book_content_writable(
+        &self,
+        book_id: Uuid,
+    ) -> Result<(), ServiceError> {
         self.database
             .get_book_access(book_id)
             .await?
@@ -76,7 +79,7 @@ impl Service {
             .map_err(Into::into)
     }
 
-    pub(crate) async fn ensure_content_writable_by_chapter(
+    pub(crate) async fn ensure_book_content_writable_by_chapter(
         &self,
         chapter_id: Uuid,
     ) -> Result<(), ServiceError> {
@@ -88,7 +91,7 @@ impl Service {
             .map_err(Into::into)
     }
 
-    pub(crate) async fn ensure_release_mutable(
+    pub async fn ensure_release_content_writable(
         &self,
         release_id: Uuid,
         claims: &UserClaims,
@@ -96,7 +99,7 @@ impl Service {
         self.database
             .get_release_access(release_id)
             .await?
-            .ensure_mutable(claims)
+            .ensure_content_writable(claims)
             .map_err(Into::into)
     }
 

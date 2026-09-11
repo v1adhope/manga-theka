@@ -84,11 +84,11 @@ pub struct ReleaseAccess {
 }
 
 impl ReleaseAccess {
-    fn admits(&self, claims: Option<&UserClaims>) -> bool {
+    fn has_standing(&self, claims: Option<&UserClaims>) -> bool {
         claims.is_some_and(|c| c.has_standing_over(self.created_by))
     }
 
-    pub fn ensure_mutable(&self, claims: &UserClaims) -> Result<(), EntityError> {
+    pub fn ensure_content_writable(&self, claims: &UserClaims) -> Result<(), EntityError> {
         if !claims.has_standing_over(self.created_by) {
             return Err(EntityError::Forbidden);
         }
@@ -97,7 +97,7 @@ impl ReleaseAccess {
     }
 
     pub fn ensure_record_readable(&self, claims: Option<&UserClaims>) -> Result<(), EntityError> {
-        if self.visibility.is_publicly_listable() || self.admits(claims) {
+        if self.visibility.is_publicly_listable() || self.has_standing(claims) {
             return Ok(());
         }
 
@@ -105,7 +105,7 @@ impl ReleaseAccess {
     }
 
     pub fn ensure_content_readable(&self, claims: Option<&UserClaims>) -> Result<(), EntityError> {
-        if self.visibility == BookVisibility::Listed || self.admits(claims) {
+        if self.visibility == BookVisibility::Listed || self.has_standing(claims) {
             return Ok(());
         }
 
@@ -113,7 +113,7 @@ impl ReleaseAccess {
     }
 
     pub fn ensure_staged_readable(&self, claims: Option<&UserClaims>) -> Result<(), EntityError> {
-        if self.admits(claims) {
+        if self.has_standing(claims) {
             return Ok(());
         }
 
@@ -283,7 +283,7 @@ mod tests {
             created_by: owner,
         };
 
-        let res = access.ensure_mutable(&claims(owner, &[Role::Uploader]));
+        let res = access.ensure_content_writable(&claims(owner, &[Role::Uploader]));
 
         assert!(res.is_ok());
     }
@@ -295,7 +295,7 @@ mod tests {
             created_by: Uuid::now_v7(),
         };
 
-        let res = access.ensure_mutable(&claims(Uuid::now_v7(), &[Role::Moderator]));
+        let res = access.ensure_content_writable(&claims(Uuid::now_v7(), &[Role::Moderator]));
 
         assert!(res.is_ok());
     }
@@ -307,7 +307,7 @@ mod tests {
             created_by: Uuid::now_v7(),
         };
 
-        let res = access.ensure_mutable(&claims(Uuid::now_v7(), &[Role::Uploader]));
+        let res = access.ensure_content_writable(&claims(Uuid::now_v7(), &[Role::Uploader]));
 
         assert!(matches!(res, Err(EntityError::Forbidden)));
     }
@@ -319,7 +319,7 @@ mod tests {
             created_by: Uuid::now_v7(),
         };
 
-        let res = access.ensure_mutable(&claims(Uuid::now_v7(), &[Role::Uploader]));
+        let res = access.ensure_content_writable(&claims(Uuid::now_v7(), &[Role::Uploader]));
 
         assert!(matches!(res, Err(EntityError::Forbidden)));
     }
@@ -332,7 +332,7 @@ mod tests {
             created_by: owner,
         };
 
-        let res = access.ensure_mutable(&claims(owner, &[Role::Uploader]));
+        let res = access.ensure_content_writable(&claims(owner, &[Role::Uploader]));
 
         assert!(matches!(res, Err(EntityError::BookNotWritable(_))));
     }

@@ -24,7 +24,7 @@ impl Service {
             visibility: book.visibility,
             created_by: book.created_by,
         }
-        .ensure_readable::<Book>(claims)?;
+        .ensure_record_readable::<Book>(claims)?;
 
         Ok(book)
     }
@@ -90,7 +90,7 @@ impl Service {
         book_id: Uuid,
         claims: Option<&UserClaims>,
     ) -> Result<Vec<BookCoverQuery>, ServiceError> {
-        self.ensure_book_readable::<BookCover>(book_id, claims)
+        self.ensure_book_record_readable::<BookCover>(book_id, claims)
             .await?;
 
         self.database
