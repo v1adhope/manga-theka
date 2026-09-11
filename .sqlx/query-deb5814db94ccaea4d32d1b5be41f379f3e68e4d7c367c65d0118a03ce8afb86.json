@@ -1,0 +1,107 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select r.id, r.chapter_id, r.version, r.created_by,\n       l.id as language_id, l.code as language_code, l.name as language_name,\n       (select count(*)\n        from chapter_pages p\n        where p.release_id = r.id and p.sort_order is not null) as \"page_count!\"\nfrom chapter_releases r\njoin languages l on l.id = r.language_id\nwhere r.chapter_id = $1\norder by r.id;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "chapter_releases",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "chapter_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "chapter_releases",
+            "name": "chapter_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "chapter_releases",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "created_by",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "chapter_releases",
+            "name": "created_by"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "language_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "languages",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "language_code",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "languages",
+            "name": "code"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "language_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "languages",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "page_count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "deb5814db94ccaea4d32d1b5be41f379f3e68e4d7c367c65d0118a03ce8afb86"
+}

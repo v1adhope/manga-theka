@@ -1,0 +1,43 @@
+mod book;
+mod chapter;
+mod content_rating;
+mod creator;
+mod feedback;
+mod label;
+mod language;
+mod release;
+mod session;
+mod user;
+mod visibility;
+
+use crate::{
+    database::Database, hasher::Hasher, jwt::Jwt, memory_storage::MemoryStore,
+    object_storage::ObjectStorage,
+};
+
+#[derive(Debug, Clone)]
+pub struct Service {
+    database: Database,
+    storage: ObjectStorage,
+    hasher: Hasher,
+    jwt: Jwt,
+    memory: MemoryStore,
+}
+
+impl Service {
+    pub fn new(
+        database: Database,
+        storage: ObjectStorage,
+        hasher: Hasher,
+        jwt: Jwt,
+        memory: MemoryStore,
+    ) -> Self {
+        Self {
+            database,
+            storage,
+            hasher,
+            jwt,
+            memory,
+        }
+    }
+}

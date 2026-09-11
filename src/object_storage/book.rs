@@ -1,0 +1,33 @@
+use tracing::instrument;
+use uuid::Uuid;
+
+use crate::{
+    entity::BookCover,
+    error::ObjectStorageError,
+    object_storage::{DEFAULT_PRESIGN_TTL, ObjectStorage},
+};
+
+impl ObjectStorage {
+    #[instrument(name = "object_storage.book_cover.upload", skip_all, fields(book.id = %item.book_id, cover.id = %item.image.id))]
+    pub async fn upload_book_cover(&self, item: &BookCover) -> Result<(), ObjectStorageError> {
+        self.upload(
+            &self.covers_bucket,
+            &item.image.id.to_string(),
+            item.image.content.to_bytes(),
+            item.image.extension.content_type(),
+            &item.image.content_disposition(),
+        )
+        .await
+    }
+
+    #[instrument(name = "object_storage.book_cover.presign", skip_all, fields(cover.id = %id))]
+    pub async fn presign_book_cover(&self, id: Uuid) -> Result<String, ObjectStorageError> {
+        self.presign(&self.covers_bucket, &id.to_string(), DEFAULT_PRESIGN_TTL)
+            .await
+    }
+
+    #[instrument(name = "object_storage.book_cover.delete", skip_all, fields(covers = ids.len()))]
+    pub async fn delete_book_covers(&self, ids: &[Uuid]) -> Result<(), ObjectStorageError> {
+        self.delete_many(&self.covers_bucket, ids).await
+    }
+}

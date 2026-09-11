@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select b.visibility, b.created_by\nfrom books b\njoin book_covers bc on bc.book_id = b.id\nwhere bc.id = $1;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "visibility",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "books",
+            "name": "visibility"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "created_by",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "books",
+            "name": "created_by"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "e06371234d5daf40959377973c1ce36fc8f8f7b2c9ef4f8db7f951043847b8e7"
+}

@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select b.visibility, cr.created_by\nfrom books b\njoin chapter_releases cr on cr.book_id = b.id\nwhere cr.id = $1;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "visibility",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "books",
+            "name": "visibility"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "created_by",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "chapter_releases",
+            "name": "created_by"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "663e856ab4249c4db8cc0a841317b805a01a6072e14acef6c0fc51af879d5a72"
+}

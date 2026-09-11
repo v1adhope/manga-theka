@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update book_covers\nset is_main = false\nwhere book_id = $1 and is_main;\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "732327b8f044c3d7c2fcce2925b31b248602a90915c919a285ac14e56d21a3ad"
+}

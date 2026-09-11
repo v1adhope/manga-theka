@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into creators(id, first_name, last_name, created_at)\nvalues($1, $2, $3, $4);\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "99bac2e1f228f1e06c047cf79afca45b68bc6ce60c5b5c615531018982443770"
+}

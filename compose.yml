@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgres:18
+    restart: always
+    shm_size: 1gb
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: ${APP_DATABASE__PASSWORD}
+      POSTGRES_USER: ${APP_DATABASE__USERNAME}
+      POSTGRES_DB: ${APP_DATABASE__DATABASE_NAME}
+    volumes:
+      - pgdata:/var/lib/postgresql
+
+  rustfs:
+    image: rustfs/rustfs:latest
+    restart: always
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      RUSTFS_ACCESS_KEY: ${APP_OBJECT_STORAGE__ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${APP_OBJECT_STORAGE__SECRET_KEY}
+      RUSTFS_VOLUMES: /data/rustfs0
+      RUSTFS_CONSOLE_ENABLE: "true"
+    volumes:
+      - rustfsdata:/data
+
+  redis:
+    image: redis:8
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+
+volumes:
+  pgdata:
+  rustfsdata:
+  redisdata:

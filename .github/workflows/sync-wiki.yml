@@ -1,0 +1,53 @@
+name: Sync Wiki
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'wiki/**'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  sync-wiki:
+    # Disabled: GitHub wiki not enabled for this repo yet. Remove this line once it is.
+    if: false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main repo
+        uses: actions/checkout@v7
+        with:
+          path: main-repo
+
+      - name: Checkout wiki repo
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository }}.wiki
+          path: wiki-repo
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Copy wiki content
+        run: |
+          # Remove old content from wiki repo (except .git) so deleted/renamed
+          # pages don't linger, then copy fresh content from wiki/ folder.
+          find wiki-repo -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
+          cp -r main-repo/wiki/* wiki-repo/
+
+      - name: Commit and push changes
+        run: |
+          cd wiki-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No changes to sync."
+            exit 0
+          fi
+
+          git commit -m "Sync wiki from main repo (${{ github.sha }})"
+          git push

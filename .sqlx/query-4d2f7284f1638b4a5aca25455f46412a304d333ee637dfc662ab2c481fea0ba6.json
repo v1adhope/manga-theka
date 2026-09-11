@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select bl.book_id, l.id, l.name, l.kind\nfrom labels l\njoin book_labels bl on bl.label_id = l.id\nwhere bl.book_id = any($1::uuid[])\norder by l.name;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "book_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "book_labels",
+            "name": "book_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "labels",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "labels",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "labels",
+            "name": "kind"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "4d2f7284f1638b4a5aca25455f46412a304d333ee637dfc662ab2c481fea0ba6"
+}

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into book_titles(book_id, language_id, name)\nselect $1, title.language_id, title.name\nfrom unnest($2::uuid[], $3::text[]) as title(language_id, name);\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e522b30d043110264527f815c88e6eb28b89e3f29fc13d65e29619d2f9d8047b"
+}

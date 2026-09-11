@@ -3,7 +3,7 @@ name = "manga-theka"
 version = "0.1.0"
 authors = ["Vladislav Gardner <vladislavgardner@proton.me>"]
 edition = "2024"
-description = "API backend for manga theka"
+description = "API backend for Manga Theka"
 documentation = "TODO"
 readme = "README.md"
 homepage = "TODO"
@@ -17,16 +17,74 @@ path = "src/lib.rs"
 name = "manga-theka"
 path = "src/main.rs"
 
+[[test]]
+name = "api"
+path = "tests/api/mod.rs"
+
 [dependencies]
-axum = "0.8"
-tokio = { version = "1", features = ["full"] }
+axum = { version = "0.8", features = ["multipart"] }
+tokio = { version = "1", features = [
+  "rt-multi-thread",
+  "macros",
+  "net",
+  "signal",
+  "sync",
+  "time",
+] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = [
   "env-filter",
   "fmt",
   "json",
+  "time",
 ] }
 tracing-log = "0.2"
+uuid = { version = "1", features = ["v7", "serde"] }
+time = { version = "0.3", features = ["serde", "serde-human-readable"] }
+sqlx = { version = "0.9", features = [
+  "runtime-tokio",
+  "postgres",
+  "macros",
+  "migrate",
+  "uuid",
+  "time",
+] }
+thiserror = "2"
+url = { version = "2", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+secrecy = { version = "0.10", features = ["serde"] }
+envious = "0.3"
+aws-sdk-s3 = { version = "1", default-features = false, features = [
+  "rt-tokio",
+  "behavior-version-latest",
+  "default-https-client",
+] }
+bytes = "1"
+aws-config = { version = "1", default-features = false, features = [
+  "rt-tokio",
+  "default-https-client",
+  "behavior-version-latest",
+] }
+anyhow = "1"
+regex = "1"
+sanitize-filename = "0.6"
+axum-extra = { version = "0.12", features = ["query", "cookie"] }
+base64 = "0.23"
+blake3 = "1"
+argon2 = "0.6"
+jsonwebtoken = { version = "11", default-features = false, features = [
+  "rust_crypto",
+  "use_pem",
+] }
+redis = { version = "1", default-features = false, features = [
+  "tokio-comp",
+  "connection-manager",
+] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+fake = "5"
+axum-test = "21"
+ed25519-dalek = { version = "3", features = ["pkcs8", "pem"] }

@@ -1,0 +1,25 @@
+{
+  "attribution": {
+    "sessionUrl": false
+  },
+  "permissions": {
+    "defaultMode": "bypassPermissions"
+  },
+  "bypassPermissionsModeAccepted": true,
+  "skipDangerousModePermissionPrompt": true,
+  "model": "sonnet",
+  "disableRemoteControl": true,
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/statusline.sh"
+  },
+  "effortLevel": "xhigh",
+  "theme": "auto",
+  "editorMode": "normal",
+  "agentPushNotifEnabled": false,
+  "modelSettings": {
+    "claude-sonnet-5": {
+      "effortLevel": "high"
+    }
+  }
+}

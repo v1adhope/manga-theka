@@ -1,0 +1,43 @@
+create table if not exists chapter_releases (
+	id uuid,
+	chapter_id uuid not null,
+	book_id uuid not null,
+	language_id uuid not null,
+	version integer not null,
+	created_by uuid not null,
+
+	constraint pk_chapter_releases_id primary key(id),
+	constraint fk_chapter_releases_chapters_chapter_id foreign key(chapter_id) references chapters(id) on delete restrict,
+	constraint fk_chapter_releases_books_book_id foreign key(book_id) references books(id) on delete restrict,
+	constraint fk_chapter_releases_languages_language_id foreign key(language_id) references languages(id) on delete restrict,
+	constraint fk_chapter_releases_users_created_by foreign key(created_by) references users(id) on delete restrict,
+	constraint check_range_chapter_releases_version check(version >= 1)
+);
+
+create index if not exists idx_chapter_releases_chapter_id on chapter_releases(chapter_id);
+
+create index if not exists idx_chapter_releases_book_id_language_id on chapter_releases(book_id, language_id);
+
+create function check_chapter_releases_language_not_publication() returns trigger as $$
+declare
+	v_publication_language uuid;
+begin
+	select publication_language into v_publication_language
+	from books
+	where id = new.book_id;
+
+	if v_publication_language = new.language_id then
+		raise exception using
+			errcode = '23514',
+			constraint = 'check_chapter_releases_language_not_publication',
+			message = 'chapter release language must differ from the book publication language';
+	end if;
+
+	return new;
+end;
+$$ language plpgsql;
+
+create trigger check_chapter_releases_language_not_publication
+	before insert or update of language_id on chapter_releases
+	for each row
+	execute function check_chapter_releases_language_not_publication();

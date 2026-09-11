@@ -1,0 +1,11 @@
+[advisories]
+ignore = [
+  # RUSTSEC-2023-0071 -- Marvin timing side-channel in `rsa` 0.9.x (no fixed
+  # release exists). `rsa` is pulled in transitively by `jsonwebtoken`'s
+  # `rust_crypto` feature bundle, which has no per-algorithm split. This service
+  # signs and verifies EdDSA (Ed25519) tokens only and pins `Validation` to
+  # `Algorithm::EdDSA` server-side, so no RSA key is ever constructed and the
+  # vulnerable code path is unreachable. Revisit if jsonwebtoken gains a
+  # non-RSA feature or `rsa` ships a fix.
+  "RUSTSEC-2023-0071",
+]

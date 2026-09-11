@@ -4,38 +4,118 @@ dotenv: [".env"]
 
 tasks:
   run:
+    desc: Run the application in debug mode
     cmds:
       - cargo run
 
   build:
+    desc: Compile the project in debug mode
     cmds:
       - cargo build
 
   test:
+    desc: Run all tests
     cmds:
       - cargo test
 
+  test-watch:
+    desc: Background test watching
+    cmds:
+      - bacon test
+
   fmt:
+    desc: Check code formatting
     cmds:
       - cargo fmt -- --check
 
   lint:
+    desc: Run clippy and deny all warnings
     cmds:
       - cargo clippy -- -D warnings
 
   audit:
+    desc: Scan dependencies for known security vulnerabilities
     cmds:
       - cargo audit
 
+  machete:
+    desc: Detect unused dependencies
+    cmds:
+      - cargo machete
+
   code-cov:
+    desc: Measure test coverage with tarpaulin (ignoring tests)
     cmds:
       - cargo tarpaulin --ignore-tests
 
-  prepare:
+  push-prepare:
+    desc: Run all git pre-push checks (sqlx-prepare, fmt, lint, audit, machete, test)
     cmds:
+      - task: sqlx-prepare
       - task: fmt
       - task: lint
       - task: audit
+      - task: machete
       - task: test
-      - task: build
-      - task: code-cov
+
+  up:
+    desc: Build and start docker compose services in detached mode, then apply migrations
+    cmds:
+      - docker compose up -d --build
+      - task: migration-up
+
+  down:
+    desc: Stop and remove docker compose services
+    cmds:
+      - docker compose down
+
+  restart:
+    desc: Restart docker compose services
+    cmds:
+      - task: down
+      - task: up
+
+  clean:
+    desc: "[DANGEROUS] Stop services and delete the postgres, rustfs, and redis data volumes (irreversible)"
+    cmds:
+      - task: down
+      - cmd: docker volume rm manga-theka_pgdata
+        ignore_error: true
+      - cmd: docker volume rm manga-theka_rustfsdata
+        ignore_error: true
+      - cmd: docker volume rm manga-theka_redisdata
+        ignore_error: true
+
+  migration-add:
+    desc: Create a new reversible sqlx migration
+    cmds:
+      - sqlx migrate add -r {{.name}}
+    requires:
+      vars: [name]
+
+  migration-up:
+    desc: Apply all pending database migrations
+    cmds:
+      - sqlx migrate run
+
+  migration-down:
+    desc: Revert the most recent database migration
+    cmds:
+      - sqlx migrate revert
+
+  sqlx-prepare:
+    desc: Generate sqlx offline query data for cargo build
+    cmds:
+      - cargo sqlx prepare --all
+
+  keys-generate:
+    desc: Generate the Ed25519 PKCS#8 PEM keypairs the JWT layer loads at startup
+    status:
+      - test -f .keys/jwt_access_private.pem
+      - test -f .keys/jwt_refresh_private.pem
+    cmds:
+      - mkdir -p .keys
+      - openssl genpkey -algorithm ed25519 -out .keys/jwt_access_private.pem
+      - openssl pkey -in .keys/jwt_access_private.pem -pubout -out .keys/jwt_access_public.pem
+      - openssl genpkey -algorithm ed25519 -out .keys/jwt_refresh_private.pem
+      - openssl pkey -in .keys/jwt_refresh_private.pem -pubout -out .keys/jwt_refresh_public.pem

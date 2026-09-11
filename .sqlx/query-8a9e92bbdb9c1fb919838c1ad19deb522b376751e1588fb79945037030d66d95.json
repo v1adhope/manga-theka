@@ -1,0 +1,71 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select c.id, c.first_name, c.last_name, c.created_at,\n       coalesce(array_agg(distinct bc.role order by bc.role) filter (where bc.role is not null), array[]::text[]) as \"roles!\"\nfrom creators c\nleft join book_creators bc on bc.creator_id = c.id\nwhere c.id = $1\ngroup by c.id;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "creators",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "first_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "creators",
+            "name": "first_name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "last_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "creators",
+            "name": "last_name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "creators",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "roles!",
+        "type_info": "TextArray",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "8a9e92bbdb9c1fb919838c1ad19deb522b376751e1588fb79945037030d66d95"
+}

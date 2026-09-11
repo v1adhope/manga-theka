@@ -1,0 +1,83 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select bc.book_id, c.id, c.first_name, c.last_name,\n       array_agg(bc.role order by bc.role) as \"roles!\", c.created_at\nfrom book_creators bc\njoin creators c on c.id = bc.creator_id\nwhere bc.book_id = any($1::uuid[])\ngroup by bc.book_id, c.id\norder by c.id;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "book_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "book_creators",
+            "name": "book_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "creators",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "first_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "creators",
+            "name": "first_name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "last_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "creators",
+            "name": "last_name"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "roles!",
+        "type_info": "TextArray",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "creators",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null,
+      false
+    ]
+  },
+  "hash": "dec47142b80b13fc9d4c371b7b767da71f5deedc6c1a290a8b9323a9217d3858"
+}

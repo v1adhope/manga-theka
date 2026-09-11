@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into book_labels(book_id, label_id)\nselect $1, label_id\nfrom unnest($2::uuid[]) as label_id;\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1abb7856f21fc0f3acb15eeb42a65ca16859ea01261dab9ae9e79decd3ca534a"
+}

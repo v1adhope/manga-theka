@@ -1,0 +1,573 @@
+use serde::{Deserialize, Serialize};
+use std::{fmt, str::FromStr};
+use uuid::Uuid;
+
+use crate::{
+    entity::{BookQuery, Entity, Text, Timestamp, UserClaims},
+    error::EntityError,
+};
+
+pub const SUBMITTED_NOTE: &str = "Your submission has been received and is currently under review. \
+                                  We'll process it within 3 business days - thanks for your patience!";
+
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
+pub enum BookVisibility {
+    Draft,
+    PendingReview,
+    Listed,
+    Rejected,
+    Hidden,
+}
+
+impl FromStr for BookVisibility {
+    type Err = EntityError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Draft" => Ok(Self::Draft),
+            "PendingReview" => Ok(Self::PendingReview),
+            "Listed" => Ok(Self::Listed),
+            "Rejected" => Ok(Self::Rejected),
+            "Hidden" => Ok(Self::Hidden),
+            other => Err(EntityError::InvalidBookVisibility(other.to_owned())),
+        }
+    }
+}
+
+impl AsRef<str> for BookVisibility {
+    fn as_ref(&self) -> &str {
+        match self {
+            Self::Draft => "Draft",
+            Self::PendingReview => "PendingReview",
+            Self::Listed => "Listed",
+            Self::Rejected => "Rejected",
+            Self::Hidden => "Hidden",
+        }
+    }
+}
+
+impl fmt::Display for BookVisibility {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_ref())
+    }
+}
+
+impl BookVisibility {
+    pub fn is_publicly_listable(&self) -> bool {
+        matches!(self, Self::Listed | Self::Hidden)
+    }
+
+    pub fn ensure_content_writable(&self) -> Result<(), EntityError> {
+        match self {
+            Self::Listed => Ok(()),
+            blocked => Err(EntityError::BookNotWritable(*blocked)),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct BookAccess {
+    pub visibility: BookVisibility,
+    pub created_by: Uuid,
+}
+
+impl From<&BookQuery> for BookAccess {
+    fn from(book: &BookQuery) -> Self {
+        BookAccess {
+            visibility: book.visibility,
+            created_by: book.created_by,
+        }
+    }
+}
+
+impl BookAccess {
+    fn has_standing(&self, claims: Option<&UserClaims>) -> bool {
+        claims.is_some_and(|c| c.has_standing_over(self.created_by))
+    }
+
+    pub fn ensure_record_readable<T: Entity>(
+        &self,
+        claims: Option<&UserClaims>,
+    ) -> Result<(), EntityError> {
+        if self.visibility.is_publicly_listable() || self.has_standing(claims) {
+            return Ok(());
+        }
+
+        Err(EntityError::not_readable::<T>(self.visibility))
+    }
+
+    pub fn ensure_record_writable(&self, claims: &UserClaims) -> Result<(), EntityError> {
+        match self.visibility {
+            BookVisibility::Draft if claims.id == self.created_by => Ok(()),
+            BookVisibility::Draft => Err(EntityError::Forbidden),
+            BookVisibility::Hidden if claims.can_moderate() => Ok(()),
+            BookVisibility::Hidden => Err(EntityError::Forbidden),
+            BookVisibility::Listed if claims.is_content_writer() => Ok(()),
+            BookVisibility::Listed => Err(EntityError::Forbidden),
+            blocked => Err(EntityError::BookNotWritable(blocked)),
+        }
+    }
+
+    pub fn ensure_visibility_settable(
+        &self,
+        target: BookVisibility,
+        claims: &UserClaims,
+    ) -> Result<(), EntityError> {
+        let allowed = if target == BookVisibility::PendingReview {
+            claims.id == self.created_by
+        } else {
+            claims.can_moderate()
+        };
+
+        allowed.then_some(()).ok_or(EntityError::Forbidden)
+    }
+}
+
+#[derive(Debug)]
+pub struct VisibilityTransition {
+    pub id: Uuid,
+    pub visibility: BookVisibility,
+    pub note: Option<Text>,
+    pub now: Timestamp,
+}
+
+#[derive(Debug)]
+pub struct BookVisibilityUpdate {
+    pub id: Uuid,
+    pub from: BookVisibility,
+    pub to: BookVisibility,
+    pub note: Option<Text>,
+    pub submitted_at: Option<Timestamp>,
+    pub updated_at: Timestamp,
+}
+
+impl TryFrom<(BookVisibility, VisibilityTransition)> for BookVisibilityUpdate {
+    type Error = EntityError;
+
+    fn try_from(ctx: (BookVisibility, VisibilityTransition)) -> Result<Self, Self::Error> {
+        use BookVisibility::{Draft, Hidden, Listed, PendingReview, Rejected};
+
+        let (from, item) = ctx;
+        let VisibilityTransition {
+            id,
+            visibility,
+            note,
+            now,
+        } = item;
+
+        match (from, visibility) {
+            (Draft, Draft | PendingReview | Rejected | Hidden)
+            | (PendingReview, PendingReview | Draft | Listed | Rejected | Hidden)
+            | (Listed, Listed | Hidden | Rejected)
+            | (Hidden, Hidden | Listed | Rejected)
+            | (Rejected, Rejected) => {}
+            _ => return Err(EntityError::IllegalVisibilityTransition(from, visibility)),
+        }
+
+        let (note, submitted_at) = match visibility {
+            PendingReview => (
+                Some(Text::try_from(SUBMITTED_NOTE.to_owned())?),
+                (from != visibility).then_some(now),
+            ),
+            Listed => (note, None),
+            Draft | Rejected | Hidden => (
+                Some(note.ok_or(EntityError::BookNoteRequired(visibility))?),
+                None,
+            ),
+        };
+
+        Ok(Self {
+            id,
+            from,
+            to: visibility,
+            note,
+            submitted_at,
+            updated_at: now,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use uuid::Uuid;
+
+    use crate::{
+        entity::fixtures::{PRIVATE_VISIBILITY, access, claims, transition},
+        entity::{
+            Book, BookVisibility, BookVisibilityUpdate, Role, SUBMITTED_NOTE, Text, Timestamp,
+            VisibilityTransition,
+        },
+    };
+
+    const EVERY_VISIBILITY: [BookVisibility; 5] = [
+        BookVisibility::Draft,
+        BookVisibility::PendingReview,
+        BookVisibility::Listed,
+        BookVisibility::Rejected,
+        BookVisibility::Hidden,
+    ];
+
+    #[test]
+    fn every_book_visibility_round_trips() {
+        for visibility in EVERY_VISIBILITY {
+            let parsed: BookVisibility = visibility.as_ref().parse().unwrap();
+            assert_eq!(parsed, visibility);
+        }
+    }
+
+    #[test]
+    fn unknown_book_visibility_is_rejected() {
+        let res = "Published".parse::<BookVisibility>();
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn any_live_book_can_be_rejected_or_hidden() {
+        for from in EVERY_VISIBILITY {
+            if from == BookVisibility::Rejected {
+                continue;
+            }
+
+            for to in [BookVisibility::Rejected, BookVisibility::Hidden] {
+                let res =
+                    BookVisibilityUpdate::try_from((from, transition(to, Some("moderation"))));
+
+                assert!(res.is_ok(), "{from} must be able to reach {to}");
+            }
+        }
+    }
+
+    #[test]
+    fn every_state_transitions_to_itself() {
+        for visibility in EVERY_VISIBILITY {
+            let res =
+                BookVisibilityUpdate::try_from((visibility, transition(visibility, Some("same"))));
+
+            assert!(res.is_ok(), "{visibility} -> itself was refused");
+        }
+    }
+
+    #[test]
+    fn rejected_is_a_terminal_state() {
+        for to in EVERY_VISIBILITY {
+            if to == BookVisibility::Rejected {
+                continue;
+            }
+
+            let res = BookVisibilityUpdate::try_from((
+                BookVisibility::Rejected,
+                transition(to, Some("why")),
+            ));
+
+            assert!(res.is_err(), "rejected must not reach {to}");
+        }
+    }
+
+    #[test]
+    fn review_returns_a_book_to_draft() {
+        let res = BookVisibilityUpdate::try_from((
+            BookVisibility::PendingReview,
+            transition(BookVisibility::Draft, Some("back to you")),
+        ));
+
+        assert!(res.is_ok(), "review must be able to return a book to draft");
+    }
+
+    #[test]
+    fn an_approved_book_never_re_enters_the_pipeline() {
+        for from in [BookVisibility::Listed, BookVisibility::Hidden] {
+            for to in [BookVisibility::Draft, BookVisibility::PendingReview] {
+                let res = BookVisibilityUpdate::try_from((from, transition(to, Some("why"))));
+
+                assert!(res.is_err(), "{from} must not re-enter {to}");
+            }
+        }
+    }
+
+    #[test]
+    fn listed_is_reachable_from_pending_review_hidden_and_itself() {
+        for from in [
+            BookVisibility::PendingReview,
+            BookVisibility::Hidden,
+            BookVisibility::Listed,
+        ] {
+            let res =
+                BookVisibilityUpdate::try_from((from, transition(BookVisibility::Listed, None)));
+
+            assert!(res.is_ok(), "{from} must be able to reach listed");
+        }
+    }
+
+    #[test]
+    fn listed_is_unreachable_from_draft_or_rejected() {
+        for from in [BookVisibility::Draft, BookVisibility::Rejected] {
+            let res =
+                BookVisibilityUpdate::try_from((from, transition(BookVisibility::Listed, None)));
+
+            assert!(res.is_err(), "{from} must not reach listed");
+        }
+    }
+
+    #[test]
+    fn submitting_stamps_the_code_authored_note() {
+        let update = BookVisibilityUpdate::try_from((
+            BookVisibility::Draft,
+            transition(BookVisibility::PendingReview, Some("mine")),
+        ))
+        .unwrap();
+
+        assert_eq!(update.note.unwrap().as_ref(), SUBMITTED_NOTE);
+    }
+
+    #[test]
+    fn submitting_stamps_the_submission_time() {
+        let update = BookVisibilityUpdate::try_from((
+            BookVisibility::Draft,
+            transition(BookVisibility::PendingReview, None),
+        ))
+        .unwrap();
+
+        assert!(update.submitted_at.is_some());
+    }
+
+    #[test]
+    fn every_transition_stamps_the_update_time() {
+        let now = Timestamp::now();
+        let update = BookVisibilityUpdate::try_from((
+            BookVisibility::Draft,
+            VisibilityTransition {
+                id: Uuid::now_v7(),
+                visibility: BookVisibility::Hidden,
+                note: Some(Text::try_from("parked".to_owned()).unwrap()),
+                now,
+            },
+        ))
+        .unwrap();
+
+        assert_eq!(update.updated_at, now);
+    }
+
+    #[test]
+    fn a_book_already_in_review_is_not_restamped() {
+        let update = BookVisibilityUpdate::try_from((
+            BookVisibility::PendingReview,
+            transition(BookVisibility::PendingReview, None),
+        ))
+        .unwrap();
+
+        assert_eq!(update.submitted_at, None);
+    }
+
+    #[test]
+    fn listing_without_a_note_clears_it() {
+        let update = BookVisibilityUpdate::try_from((
+            BookVisibility::PendingReview,
+            transition(BookVisibility::Listed, None),
+        ))
+        .unwrap();
+
+        assert_eq!(update.note, None);
+    }
+
+    #[test]
+    fn listing_with_a_note_replaces_it() {
+        let update = BookVisibilityUpdate::try_from((
+            BookVisibility::PendingReview,
+            transition(BookVisibility::Listed, Some("welcome")),
+        ))
+        .unwrap();
+
+        assert_eq!(update.note.unwrap().as_ref(), "welcome");
+    }
+
+    #[test]
+    fn moves_that_explain_themselves_require_a_note() {
+        for to in [
+            BookVisibility::Draft,
+            BookVisibility::Rejected,
+            BookVisibility::Hidden,
+        ] {
+            let res = BookVisibilityUpdate::try_from((
+                BookVisibility::PendingReview,
+                transition(to, None),
+            ));
+
+            assert!(res.is_err(), "{to} without a note must be rejected");
+        }
+    }
+
+    #[test]
+    fn a_self_transition_takes_its_own_note_rule() {
+        let cleared = BookVisibilityUpdate::try_from((
+            BookVisibility::Listed,
+            transition(BookVisibility::Listed, None),
+        ))
+        .unwrap();
+        let refused = BookVisibilityUpdate::try_from((
+            BookVisibility::Hidden,
+            transition(BookVisibility::Hidden, None),
+        ));
+
+        assert_eq!(cleared.note, None);
+        assert!(refused.is_err(), "a hidden book still owes a reason");
+    }
+
+    #[test]
+    fn a_publicly_listable_book_record_is_readable_by_anyone() {
+        let owner = Uuid::now_v7();
+
+        for visibility in [BookVisibility::Listed, BookVisibility::Hidden] {
+            let guest = access(visibility, owner).ensure_record_readable::<Book>(None);
+            let stranger = access(visibility, owner)
+                .ensure_record_readable::<Book>(Some(&claims(Uuid::now_v7(), &[])));
+
+            assert!(guest.is_ok(), "{visibility} must be public to a guest");
+            assert!(
+                stranger.is_ok(),
+                "{visibility} must be public to a stranger"
+            );
+        }
+    }
+
+    #[test]
+    fn a_private_book_record_admits_only_its_creator_or_a_moderator() {
+        let owner = Uuid::now_v7();
+
+        for visibility in PRIVATE_VISIBILITY {
+            let by_owner = access(visibility, owner)
+                .ensure_record_readable::<Book>(Some(&claims(owner, &[Role::Reader])));
+            let by_moderator = access(visibility, owner)
+                .ensure_record_readable::<Book>(Some(&claims(Uuid::now_v7(), &[Role::Moderator])));
+
+            assert!(
+                by_owner.is_ok(),
+                "the creator must read a {visibility} book"
+            );
+            assert!(
+                by_moderator.is_ok(),
+                "a moderator must read a {visibility} book"
+            );
+        }
+    }
+
+    #[test]
+    fn a_private_book_record_is_not_readable_by_a_stranger_or_guest() {
+        let owner = Uuid::now_v7();
+
+        for visibility in PRIVATE_VISIBILITY {
+            let guest = access(visibility, owner).ensure_record_readable::<Book>(None);
+            let stranger = access(visibility, owner)
+                .ensure_record_readable::<Book>(Some(&claims(Uuid::now_v7(), &[Role::Uploader])));
+
+            assert!(
+                guest.is_err(),
+                "a guest must be refused a {visibility} book"
+            );
+            assert!(
+                stranger.is_err(),
+                "a stranger must be refused a {visibility} book"
+            );
+        }
+    }
+
+    #[test]
+    fn draft_writes_admit_only_the_creator() {
+        let owner = Uuid::now_v7();
+
+        let by_owner =
+            access(BookVisibility::Draft, owner).ensure_record_writable(&claims(owner, &[]));
+        let by_moderator = access(BookVisibility::Draft, owner)
+            .ensure_record_writable(&claims(Uuid::now_v7(), &[Role::Moderator]));
+        let by_stranger = access(BookVisibility::Draft, owner)
+            .ensure_record_writable(&claims(Uuid::now_v7(), &[Role::Uploader]));
+
+        assert!(by_owner.is_ok(), "draft must admit its creator");
+        assert!(by_moderator.is_err(), "draft must refuse even a moderator");
+        assert!(by_stranger.is_err(), "draft must refuse a stranger");
+    }
+
+    #[test]
+    fn hidden_writes_admit_only_a_moderator() {
+        let owner = Uuid::now_v7();
+
+        let by_owner =
+            access(BookVisibility::Hidden, owner).ensure_record_writable(&claims(owner, &[]));
+        let by_moderator = access(BookVisibility::Hidden, owner)
+            .ensure_record_writable(&claims(Uuid::now_v7(), &[Role::Moderator]));
+        let by_stranger = access(BookVisibility::Hidden, owner)
+            .ensure_record_writable(&claims(Uuid::now_v7(), &[Role::Uploader]));
+
+        assert!(
+            by_owner.is_err(),
+            "hidden must refuse its creator without moderator standing"
+        );
+        assert!(by_moderator.is_ok(), "hidden must admit a moderator");
+        assert!(by_stranger.is_err(), "hidden must refuse a stranger");
+    }
+
+    #[test]
+    fn a_listed_book_is_writable_by_any_content_writer() {
+        let res = access(BookVisibility::Listed, Uuid::now_v7())
+            .ensure_record_writable(&claims(Uuid::now_v7(), &[Role::Uploader]));
+
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn a_listed_book_refuses_a_bare_reader_even_its_creator() {
+        let owner = Uuid::now_v7();
+
+        let res = access(BookVisibility::Listed, owner)
+            .ensure_record_writable(&claims(owner, &[Role::Reader]));
+
+        assert!(
+            res.is_err(),
+            "listed writes still require a content-writer role"
+        );
+    }
+
+    #[test]
+    fn a_frozen_book_is_writable_by_no_one_not_even_its_creator() {
+        let owner = Uuid::now_v7();
+
+        for visibility in [BookVisibility::PendingReview, BookVisibility::Rejected] {
+            let res = access(visibility, owner)
+                .ensure_record_writable(&claims(owner, &[Role::Moderator]));
+
+            assert!(res.is_err(), "{visibility} must be frozen");
+        }
+    }
+
+    #[test]
+    fn a_move_to_pending_review_is_the_creators_alone() {
+        let owner = Uuid::now_v7();
+
+        let by_owner = access(BookVisibility::Draft, owner)
+            .ensure_visibility_settable(BookVisibility::PendingReview, &claims(owner, &[]));
+        let by_moderator = access(BookVisibility::Draft, owner).ensure_visibility_settable(
+            BookVisibility::PendingReview,
+            &claims(Uuid::now_v7(), &[Role::Moderator]),
+        );
+
+        assert!(by_owner.is_ok(), "the creator submits their own book");
+        assert!(
+            by_moderator.is_err(),
+            "a moderator has no path to PendingReview"
+        );
+    }
+
+    #[test]
+    fn every_other_transition_is_a_moderator_action() {
+        let owner = Uuid::now_v7();
+
+        let by_moderator = access(BookVisibility::Draft, owner).ensure_visibility_settable(
+            BookVisibility::Hidden,
+            &claims(Uuid::now_v7(), &[Role::Moderator]),
+        );
+        let by_owner = access(BookVisibility::Draft, owner)
+            .ensure_visibility_settable(BookVisibility::Hidden, &claims(owner, &[Role::Uploader]));
+
+        assert!(by_moderator.is_ok());
+        assert!(by_owner.is_err(), "the creator cannot hide their own book");
+    }
+}
