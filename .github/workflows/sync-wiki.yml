@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'wiki/**'
+      - "wiki/**"
   workflow_dispatch: {}
 
 permissions:
@@ -13,8 +13,6 @@ permissions:
 
 jobs:
   sync-wiki:
-    # Disabled: GitHub wiki not enabled for this repo yet. Remove this line once it is.
-    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout main repo
