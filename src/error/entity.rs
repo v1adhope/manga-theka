@@ -52,8 +52,11 @@ pub enum EntityError {
     #[error("A book and its contents can't be changed while {0}")]
     BookNotWritable(BookVisibility),
 
-    #[error("{entity} not found")]
-    NotReadable { entity: &'static str },
+    #[error("{entity} is not readable: book is {state}")]
+    NotReadable {
+        entity: &'static str,
+        state: BookVisibility,
+    },
 
     #[error("Forbidden")]
     Forbidden,
@@ -153,8 +156,11 @@ pub enum EntityError {
 }
 
 impl EntityError {
-    pub fn not_readable<T: Entity>() -> Self {
-        Self::NotReadable { entity: T::NAME }
+    pub fn not_readable<T: Entity>(state: BookVisibility) -> Self {
+        Self::NotReadable {
+            entity: T::NAME,
+            state,
+        }
     }
 }
 
@@ -166,8 +172,7 @@ impl IntoResponse for EntityError {
             Self::IllegalVisibilityTransition(_, _)
             | Self::BookNotWritable(_)
             | Self::SessionTooNewToRevoke => StatusCode::CONFLICT,
-            Self::NotReadable { .. } => StatusCode::NOT_FOUND,
-            Self::Forbidden => StatusCode::FORBIDDEN,
+            Self::NotReadable { .. } | Self::Forbidden => StatusCode::FORBIDDEN,
             Self::CursorSelectionMismatch => StatusCode::BAD_REQUEST,
             _ => StatusCode::UNPROCESSABLE_ENTITY,
         };

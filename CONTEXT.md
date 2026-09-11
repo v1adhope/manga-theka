@@ -17,10 +17,10 @@ An anonymous visitor with no account. Can read content and submit `Feedback`; ha
 _Avoid_: Anonymous, visitor
 
 **Created By**:
-The `User` who brought an entity into being, holding change-and-delete standing over it that follows from having created it, not from any `Role`. Applies to two entities:
+The `User` who brought an entity into being, holding standing over it that follows from having created it, not from any `Role`. A `Moderator+` holds the same standing on every entity, except for the `Book`-write exceptions carried by `Book Visibility` (see there). Applies to two entities:
 
-- A `Book`: the `User` who proposed it as a `Draft` -- one per `Book`, the only one who can send it for review, reads it in any `Book Visibility`, and is the audience for its `Book Note`.
-- A `Chapter Release`: the `User` who created it -- one per `Chapter Release`; a `Moderator+` aside, the only one who can stage `Chapter Page`s into it, commit it, or delete it.
+- A `Book`: the `User` who proposed it as a `Draft` -- one per `Book`; the only non-`Moderator+` who can send it for review; the audience for its `Book Note`. Its read and write standing across each `Book Visibility` state is defined there.
+- A `Chapter Release`: the `User` who created it -- one per `Chapter Release`; the only non-`Moderator+` who can stage `Chapter Page`s into it, commit it, delete it, or see its staged pages. Its read standing across `Book Visibility` states is defined there.
 
 _Avoid_: Submitter, Owner, Proposer, Uploader (a `Role`, not a relation to one entity)
 
@@ -34,7 +34,7 @@ _Avoid_: Permission, scope, claim
 The default `Role` on signup; gates personal features -- creating and managing bookmark lists, managing one's own account, and proposing a new `Book` as a `Draft` and sending it for review (see `Book Visibility`).
 
 **Uploader**:
-A `Role` gating content writes -- editing an already-`Listed` `Book` and uploading its `Chapter`s, `Chapter Release`s, and `Chapter Page`s, none of which requires moderation. Any `Uploader` may create a `Chapter Release`, but mutating one -- staging pages, committing, deleting -- is its `Created By`'s alone (see `Created By`).
+A `Role` gating content writes -- uploading `Chapter`s, `Chapter Release`s, and `Chapter Page`s, none of which requires moderation; write access to the `Book` itself follows `Book Visibility` (see there). Any `Uploader` may create a `Chapter Release`, but mutating one is its `Created By`'s alone (see `Created By`).
 _Avoid_: Mod, Contributor (as a separate concept)
 
 **Moderator**:
@@ -151,7 +151,7 @@ _Avoid_: Draft page, Pending page, Unordered page
 ## Moderation
 
 **Book Visibility**:
-The lifecycle state of a `Book` as a catalog record, separate from `Book Status` -- `Draft` (being assembled, not yet submitted), `PendingReview` (submitted, awaiting moderation), `Listed` (approved and public), `Rejected` (declined and not retained), or `Hidden` (removed from public view by moderation). A closed, fixed set; exactly one per `Book`. Only a `Book`'s `Created By` can move it from `Draft` to `PendingReview`; a `Moderator+` owns every other transition. `PendingReview` is the only state that can return to `Draft`, so an approved or hidden `Book` never becomes a draft again. Writes follow the state: a `Draft` accepts its own metadata and gallery images but no `Chapter`s, a `Listed` `Book` accepts everything, and `PendingReview`, `Rejected`, and `Hidden` accept nothing. Reads follow the state as well: outside `Listed`, only a `Moderator+` or the `Book`'s `Created By` sees a `Book` and its contents.
+The lifecycle state of a `Book` as a catalog record, separate from `Book Status` -- `Draft` (being assembled, not yet submitted), `PendingReview` (submitted, awaiting moderation), `Listed` (approved and public), `Rejected` (declined and not retained), or `Hidden` (removed from public view by moderation). A closed, fixed set; exactly one per `Book`. Only a `Book`'s `Created By` can move it from `Draft` to `PendingReview`; a `Moderator+` owns every other transition. `PendingReview` is the only state that can return to `Draft`, so an approved or hidden `Book` never becomes a draft again. Writes follow the state: a `Draft` accepts its own metadata and gallery images -- from its `Created By` alone, not even a `Moderator+` -- but no `Chapter`s; a `Listed` `Book` accepts everything from any `Uploader`; a `Hidden` `Book` accepts metadata and gallery edits from a `Moderator+` only, while its `Chapter`s, `Chapter Release`s, and `Chapter Page`s stay frozen; `PendingReview` and `Rejected` freeze the `Book` and its children alike. Reads follow the state in two tiers: a `Book`, its `Chapter`s, and its `Cover`s are readable by anyone while `Listed` or `Hidden` and otherwise only by a `Moderator+` or the `Book`'s `Created By`, with a `Chapter Release` substituting its own `Created By` for the `Book`'s; `Chapter Page` content is readable by anyone only while `Listed`, and otherwise only by a `Moderator+` or the owning `Chapter Release`'s `Created By`. A read refused for want of standing names the blocking state rather than masking it as a missing record.
 _Avoid_: Status, State, Scope, Publication state, Published (see `Chapter Release`), Draft/Listed/Hidden as standalone terms
 
 **Book Note**:

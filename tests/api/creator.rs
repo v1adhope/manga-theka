@@ -4,16 +4,17 @@ use time::OffsetDateTime;
 use crate::helpers::fakers::CreatorFaker;
 use crate::helpers::{RespWrapper, TestApp, assert_error, assert_stored};
 use fake::Fake;
-use manga_theka::entity::{Creator, CreatorQuery, CreatorRole};
+use manga_theka::entity::{Creator, CreatorQuery, CreatorRole, Role};
 
 #[tokio::test]
-async fn store_creator_with_valid_body_passes() {
+async fn store_creator_with_valid_body_as_reader_passes() {
     let app = TestApp::new().await;
 
     let resp = app
-        .post_json(
+        .post_json_as(
             "/creators",
             serde_json::json!({ "firstName": "John", "lastName": "Doe" }),
+            &[Role::Reader],
         )
         .await;
     let id = assert_stored(resp).await;

@@ -3,7 +3,7 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use axum_test::multipart::{MultipartForm, Part};
-use manga_theka::entity::{BookCoverQuery, ImageExtension};
+use manga_theka::entity::{BookCoverQuery, BookVisibility, ImageExtension, Role};
 use uuid::Uuid;
 
 use crate::helpers::fakers::{COVER_JPG, COVER_PNG, COVER_WEBP};
@@ -103,6 +103,50 @@ async fn store_book_cover_with_malformed_book_id_returns_400() {
 
     let resp = app.send_authed(req).await;
     assert_error(resp, StatusCode::BAD_REQUEST).await;
+}
+
+#[tokio::test]
+async fn store_book_cover_on_a_draft_by_its_creator_reader_succeeds() {
+    let app = TestApp::new().await;
+    let creator = app.db_seed_user(&[Role::Reader]).await;
+    let book_id = app
+        .db_insert_book_as(BookVisibility::Draft, creator.id)
+        .await;
+
+    let resp = app
+        .post_cover_as(book_id, COVER_PNG, creator.id, &[Role::Reader])
+        .await;
+
+    assert_stored(resp).await;
+}
+
+#[tokio::test]
+async fn store_book_cover_on_a_draft_by_a_reader_who_is_not_its_creator_returns_403() {
+    let app = TestApp::new().await;
+    let creator = app.db_seed_user(&[Role::Reader]).await;
+    let book_id = app
+        .db_insert_book_as(BookVisibility::Draft, creator.id)
+        .await;
+
+    let resp = app
+        .post_cover_as(book_id, COVER_PNG, Uuid::now_v7(), &[Role::Reader])
+        .await;
+
+    assert_error(resp, StatusCode::FORBIDDEN).await;
+}
+
+#[tokio::test]
+async fn store_book_cover_on_a_listed_book_by_a_bare_reader_returns_403() {
+    let app = TestApp::new().await;
+    let book_id = app
+        .db_insert_book_with_visibility(BookVisibility::Listed)
+        .await;
+
+    let resp = app
+        .post_cover_as(book_id, COVER_PNG, Uuid::now_v7(), &[Role::Reader])
+        .await;
+
+    assert_error(resp, StatusCode::FORBIDDEN).await;
 }
 
 #[tokio::test]
@@ -257,6 +301,70 @@ async fn promote_book_cover_of_another_book_returns_404() {
 
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(flagged_count, 0,);
+}
+
+#[tokio::test]
+async fn promote_book_cover_on_a_draft_by_its_creator_reader_succeeds() {
+    let app = TestApp::new().await;
+    let creator = app.db_seed_user(&[Role::Reader]).await;
+    let book_id = app
+        .db_insert_book_as(BookVisibility::Draft, creator.id)
+        .await;
+    let cover_id = app.fixture_insert_cover(book_id, COVER_PNG).await;
+
+    let status = app
+        .put_main_cover_as(book_id, cover_id, creator.id, &[Role::Reader])
+        .await;
+
+    assert_eq!(status, StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn promote_book_cover_on_a_draft_by_a_reader_who_is_not_its_creator_returns_403() {
+    let app = TestApp::new().await;
+    let creator = app.db_seed_user(&[Role::Reader]).await;
+    let book_id = app
+        .db_insert_book_as(BookVisibility::Draft, creator.id)
+        .await;
+    let cover_id = app.fixture_insert_cover(book_id, COVER_PNG).await;
+
+    let status = app
+        .put_main_cover_as(book_id, cover_id, Uuid::now_v7(), &[Role::Reader])
+        .await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn delete_book_cover_on_a_draft_by_its_creator_reader_succeeds() {
+    let app = TestApp::new().await;
+    let creator = app.db_seed_user(&[Role::Reader]).await;
+    let book_id = app
+        .db_insert_book_as(BookVisibility::Draft, creator.id)
+        .await;
+    let cover_id = app.fixture_insert_cover(book_id, COVER_PNG).await;
+
+    let resp = app
+        .delete_cover_as(cover_id, creator.id, &[Role::Reader])
+        .await;
+
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn delete_book_cover_on_a_draft_by_a_reader_who_is_not_its_creator_returns_403() {
+    let app = TestApp::new().await;
+    let creator = app.db_seed_user(&[Role::Reader]).await;
+    let book_id = app
+        .db_insert_book_as(BookVisibility::Draft, creator.id)
+        .await;
+    let cover_id = app.fixture_insert_cover(book_id, COVER_PNG).await;
+
+    let resp = app
+        .delete_cover_as(cover_id, Uuid::now_v7(), &[Role::Reader])
+        .await;
+
+    assert_error(resp, StatusCode::FORBIDDEN).await;
 }
 
 #[tokio::test]

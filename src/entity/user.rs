@@ -184,6 +184,14 @@ impl UserClaims {
     pub fn can_moderate(&self) -> bool {
         self.holds(Role::Moderator) || self.holds(Role::Admin)
     }
+
+    pub fn is_content_writer(&self) -> bool {
+        self.holds(Role::Uploader) || self.can_moderate()
+    }
+
+    pub fn has_standing_over(&self, owner: Uuid) -> bool {
+        self.id == owner || self.can_moderate()
+    }
 }
 
 #[cfg(test)]
@@ -240,6 +248,14 @@ mod tests {
         assert!(claims(&[Role::Moderator]).can_moderate());
         assert!(claims(&[Role::Admin]).can_moderate());
         assert!(!claims(&[Role::Reader, Role::Uploader]).can_moderate());
+    }
+
+    #[test]
+    fn uploaders_moderators_and_admins_are_content_writers() {
+        assert!(claims(&[Role::Uploader]).is_content_writer());
+        assert!(claims(&[Role::Moderator]).is_content_writer());
+        assert!(claims(&[Role::Admin]).is_content_writer());
+        assert!(!claims(&[Role::Reader]).is_content_writer());
     }
 
     #[test]

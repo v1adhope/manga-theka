@@ -42,22 +42,24 @@ pub async fn store_chapter_release(
     Ok(json_data_response(StatusCode::CREATED, StoreResp { id }))
 }
 
-// TODO: re-shape authz
 pub async fn get_chapter_releases(
     State(service): State<Service>,
+    claims: Option<UserClaims>,
     Path(chapter_id): Path<Uuid>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    let releases = service.get_chapter_releases(chapter_id).await?;
+    let releases = service
+        .get_chapter_releases(chapter_id, claims.as_ref())
+        .await?;
 
     Ok(json_data_response(StatusCode::OK, releases))
 }
 
-// TODO: re-shape authz
 pub async fn get_chapter_release(
     State(service): State<Service>,
+    claims: Option<UserClaims>,
     Path(id): Path<Uuid>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    let release = service.get_chapter_release(id).await?;
+    let release = service.get_chapter_release(id, claims.as_ref()).await?;
 
     Ok(json_data_response(StatusCode::OK, release))
 }
@@ -69,7 +71,7 @@ pub async fn upload_chapter_pages(
     mut multipart: Multipart,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     service
-        .ensure_chapter_release_writable(release_id, &claims)
+        .ensure_release_content_writable(release_id, &claims)
         .await?;
 
     let mut images = Vec::with_capacity(MAX_PARTS_PER_REQUEST);
@@ -116,7 +118,6 @@ pub async fn commit_chapter_release(
     Ok(StatusCode::NO_CONTENT)
 }
 
-// TODO: re-shape authz
 pub async fn get_chapter_pages(
     State(service): State<Service>,
     Path(release_id): Path<Uuid>,
@@ -130,7 +131,6 @@ pub async fn get_chapter_pages(
     Ok(json_data_response(StatusCode::OK, pages))
 }
 
-// TODO: re-shape authz
 pub async fn get_chapter_page_image(
     State(service): State<Service>,
     Path((release_id, page_id)): Path<(Uuid, Uuid)>,
@@ -143,7 +143,6 @@ pub async fn get_chapter_page_image(
     Ok((StatusCode::FOUND, [(header::LOCATION, url)]))
 }
 
-// TODO: re-shape authz
 pub async fn get_chapter_page(
     State(service): State<Service>,
     Path((release_id, page_number)): Path<(Uuid, i32)>,

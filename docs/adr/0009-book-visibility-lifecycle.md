@@ -4,7 +4,7 @@ A `Book` has a `visibility` axis -- `Draft`, `PendingReview`, `Listed`, `Rejecte
 
 ## Transitions
 
-Every `Book` is created `Draft`. `POST /books` is open to any signed-in user (`Reader` and up), not just `Uploader` -- proposing a title is personal, publishing it is not. The `created_by` user's only move is `Draft -> PendingReview`, with no way to pull it back, so a moderator always reviews a state that user can't mutate underneath them. Every other transition is a moderator action through `PUT /books/{id}/visibility` with `{ visibility, note? }`, guarded by a fixed table:
+Every `Book` is created `Draft`. `POST /books` is open to any signed-in user (`Reader` and up), not just `Uploader` -- proposing a title is personal, publishing it is not. The `created_by` user's only move is `Draft -> PendingReview`, with no way to pull it back, so a moderator always reviews a state that user can't mutate underneath them. That move is the `created_by` user's alone -- enforced by comparing `books.created_by`, with no `Moderator+` path to `PendingReview` (see Auth wiring). Every other transition is a moderator action through `PUT /books/{id}/visibility` with `{ visibility, note? }`, guarded by a fixed table:
 
 - `Draft -> {PendingReview, Rejected, Hidden}`
 - `PendingReview -> {Draft, Listed, Rejected, Hidden}`
@@ -27,24 +27,35 @@ The note is written by code on `Draft -> PendingReview` (a fixed message: queued
 
 ## Writes are tiered by state
 
-- `Draft` -- accepts the `Book` row and its covers (the `created_by` user assembles metadata and artwork before review), but not chapters, releases, or pages: content cannot precede approval, so a moderator reviews a proposal rather than a library.
-- `Listed` -- accepts everything.
-- `PendingReview`, `Rejected`, `Hidden` -- accept nothing, so review sees a stable snapshot, a rejected book stops changing before the sweeper reaches it, and a hidden book is inert the moment a complaint lands.
+- `Draft` -- accepts the `Book` row and its covers, but not chapters, releases, or pages: content cannot precede approval, so a moderator reviews a proposal rather than a library. These writes are the `created_by` user's alone, with no `Moderator+` override -- the pre-review phase is that user's workspace, not even a moderator's; a moderator's only lever over a `Draft` is a visibility move (`Rejected`, `Hidden`), not an in-place edit.
+- `Listed` -- accepts everything, gated to any `Uploader` (`Moderator+` included, per the `Role` hierarchy).
+- `Hidden` -- the `Book` row and its covers accept edits from a `Moderator+` only; the creator's own standing lapses the moment a `Book` is pulled for cause, so the fix comes from the moderator who reviewed the report, not the original uploader. Chapters, releases, and pages stay frozen regardless of who asks (next bullet).
+- `PendingReview`, `Rejected` -- accept nothing at all, so review sees a stable snapshot and a rejected book stops changing before the sweeper reaches it.
+- Chapters, releases, and pages -- accept writes only while the owning `Book` is `Listed`; frozen in every other state, `Hidden` included, with no `Moderator+` override there either.
 
-Every refused write answers `409` naming the blocking state. `Hidden` being frozen reverses this ADR's first draft (which let an uploader fix the reported problem in place): a book pulled from public view for cause should not keep changing while the cause is assessed, so the repair path is `Hidden -> Listed` then an ordinary edit. `Rejected` is a dead end; a deferred sweeper reclaims rejected books and their media.
+A `Book`/cover write refused for want of standing (wrong person, right state) answers `403`; one refused because the state itself accepts no writes (`PendingReview`, `Rejected`, or any chapter/release/page write outside `Listed`) answers `409` naming the blocking state. `Hidden` freezing content but leaving the record and covers open reverses this ADR's first draft, which froze the whole subtree: a book pulled from public view for cause should not keep taking uploads while the cause is assessed, but a moderator does need to correct the metadata or gallery that triggered the report without relisting it first. `Rejected` is a dead end; a deferred sweeper reclaims rejected books and their media.
 
-## Reads split in two
+## Reads follow visibility, split by what is read
 
-- *Metadata* is unlisted, not secret: `GET /books/{id}` and the by-id chapter and release routes serve a `Book` in any state to anyone holding the id; only `GET /books` filters, to `Listed` by default with `?visibility=<value>` overriding it for the moderator queue.
-- *Page content* is not: a `Moderator` (or above) and the `Book`'s `created_by` user may read pages in any state; everyone else reads only `Listed`. `GET /releases/{id}/pages`, `/pages/{page_number}`, `/pages/{page_id}/image`, and `GET /covers/{id}/image` all answer `404` unless the owning `Book` is `Listed` or the caller can moderate -- cover art is content too.
+Tiered on the request's target.
+
+**Record and cover** -- `GET /books/{id}`, `GET /chapters/{id}`, `GET /books/{id}/covers`, `GET /covers/{id}/image`, and the nested `GET /books/{id}/chapters` and `GET /chapters/{id}/releases` lists. Readable by anyone while the `Book` is `Listed` or `Hidden`; by a `Moderator+` or the `Book`'s `created_by` in `Draft`, `PendingReview`, or `Rejected`. `Hidden` is public here on purpose: hiding a `Book` is a soft takedown that pulls its pages, not its catalog entry or its art.
+
+**Release by id** -- `GET /releases/{id}`. Same shape, but the carve-out is the *release*'s own `created_by`, not the `Book`'s: a `Book` creator who did not create a given release has no standing on it. They still see its row in the `GET /chapters/{id}/releases` list (gated on the `Book`), which carries the same fields -- the asymmetry between the list row and the singular read is accepted.
+
+**Page content** -- `GET /releases/{id}/pages` (committed list), `/pages/{page_number}`, `/pages/{page_id}/image`. Readable by anyone only while the `Book` is `Listed`; otherwise by a `Moderator+` or the `Chapter Release`'s `created_by`. The `?status=Staged` view of the page list is narrower -- that `created_by` or a `Moderator+` in every state, `Listed` included -- because a staging area is not reader-facing. A `Book` with committed pages is always `Listed`, `Hidden`, or `Rejected` (content cannot be added before `Listed`, and `Listed` never returns to `Draft`/`PendingReview`), so "not `Listed`" means `Hidden` or `Rejected` in practice.
+
+**Catalog list** -- `GET /books` defaults to `Listed`, opens `?visibility=Hidden` to anyone, and keeps `?visibility=Draft|PendingReview|Rejected` to a `Moderator+`, with no `created_by` path: a global list cannot be scoped to one caller's own submissions.
+
+**Denied reads.** An unknown id is `404`. A row that exists but the caller may not see is `403`, its plain-text body naming the blocking `BookVisibility` -- the state is not a secret, and a `Guest` gets the same answer as a signed-in caller. Standing is resolved before sub-resource existence: a caller who fails the tier gets `403` even when the page number or id in the path is also absent; a `404` for a missing page is reached only after the tier passes. This retires the earlier blanket `404`: `EntityError::NotReadable` now maps to `403` and carries the state, mirroring the `409 BookNotWritable(state)` the write path already returns.
 
 ## Auth wiring
 
 The `Option<UserClaims>` behind every gate is populated from the access JWT by ADR-0003's global middleware (an earlier `x-user-id`/`x-user-role` dev stand-in is deleted).
 
-Enforced (role half): `POST /books` -> any signed-in role. `PUT /books/{id}/visibility` -> a transition whose target is `PendingReview` is open to any signed-in user (the domain guard still refuses `PendingReview` from any state but `Draft`, and `PendingReview -> PendingReview` is inert); every other target requires `Moderator`/`Admin`. `GET /books?visibility=<v>` -> `Moderator`/`Admin` only; the bare list stays public, default `Listed`. The content gate's identity-free half (moderator-or-above reads any state) is `UserClaims::can_moderate`.
+**Roles.** `POST /books` -> any signed-in role. `PUT /books/{id}/visibility` with a target of `PendingReview` -> the `Book`'s `created_by` alone, no `Moderator+` path (the domain guard still refuses `PendingReview` from any state but `Draft`; `PendingReview -> PendingReview` stays inert; a moderator who wants a queued book changed bounces it with `PendingReview -> Draft`); every other target -> `Moderator`/`Admin`. `PUT /books/{id}`, `POST /books/{id}/covers`, `PUT /books/{id}/main-cover`, `DELETE /covers/{id}` sit behind `SIGNED_IN` at the route layer only -- a bare `Reader` must be able to reach their own `Draft`, so the real gate is visibility-keyed and lives in `BookAccess::ensure_record_writable`: `Draft` -> `created_by` alone; `Listed` -> `UserClaims::is_content_writer()` (`Uploader`/`Moderator`/`Admin`); `Hidden` -> `Moderator`/`Admin` alone; `PendingReview`/`Rejected` -> nobody. `GET /books?visibility=<v>` for a value other than `Listed`/`Hidden` -> `Moderator`/`Admin` only; the bare list stays public, default `Listed`, and `?visibility=Hidden` is public. The content gate's identity-free half (moderator-or-above reads any state) is `UserClaims::can_moderate`.
 
-Deferred (`created_by` half): `chapter_pages` records no `uploaded_by`, and no handler compares `books.created_by`, so "only the `created_by` user submits their own `Draft`", "edits their own `Draft`", "reads their own non-`Listed` book and its content", and "staged pages scoped to the calling uploader" are not enforced (`// deferred` comments naming only that scope).
+**`created_by`.** Enforced by comparing `books.created_by` / `chapter_releases.created_by` against `UserClaims::id`, alongside `UserClaims::can_moderate`: the submit transition, `Draft` writes, record/chapter/cover reads in a private state (`Book`'s `created_by`), release-by-id and page-content reads outside `Listed` (release's `created_by`), and the `?status=Staged` view. `chapter_pages` still records no `uploaded_by` -- a per-page owner was weighed and declined in ADR-0006, and nothing here needs one: a `Chapter Release` has exactly one `created_by`, which is the identity every page check uses. This closes the `created_by` half deferred in the first cut of this ADR; nothing from it remains outstanding.
 
 ## Schema
 

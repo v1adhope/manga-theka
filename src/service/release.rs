@@ -4,7 +4,7 @@ use uuid::Uuid;
 use crate::{
     entity::{
         ChapterPageParams, ChapterPageQuery, ChapterPages, ChapterRelease, ChapterReleaseQuery,
-        Ordinal, PageOrder, UPLOAD_CHUNK_SIZE, UserClaims,
+        Ordinal, PageOrder, PageStatus, UPLOAD_CHUNK_SIZE, UserClaims,
     },
     error::{ObjectStorageError, ServiceError},
     service::Service,
@@ -12,7 +12,7 @@ use crate::{
 
 impl Service {
     pub async fn store_chapter_release(&self, item: ChapterRelease) -> Result<(), ServiceError> {
-        self.ensure_content_writable_by_chapter(item.chapter_id)
+        self.ensure_book_content_writable_by_chapter(item.chapter_id)
             .await?;
 
         self.database
@@ -21,7 +21,13 @@ impl Service {
             .map_err(Into::into)
     }
 
-    pub async fn get_chapter_release(&self, id: Uuid) -> Result<ChapterReleaseQuery, ServiceError> {
+    pub async fn get_chapter_release(
+        &self,
+        id: Uuid,
+        claims: Option<&UserClaims>,
+    ) -> Result<ChapterReleaseQuery, ServiceError> {
+        self.ensure_release_record_readable(id, claims).await?;
+
         self.database
             .get_chapter_release(id)
             .await
@@ -31,8 +37,10 @@ impl Service {
     pub async fn get_chapter_releases(
         &self,
         chapter_id: Uuid,
+        claims: Option<&UserClaims>,
     ) -> Result<Vec<ChapterReleaseQuery>, ServiceError> {
-        self.ensure_book_exists_by_chapter(chapter_id).await?;
+        self.ensure_book_record_readable_by_chapter(chapter_id, claims)
+            .await?;
 
         self.database
             .get_chapter_releases(chapter_id)
@@ -47,20 +55,13 @@ impl Service {
             .map_err(Into::into)
     }
 
-    pub async fn ensure_chapter_release_writable(
-        &self,
-        id: Uuid,
-        claims: &UserClaims,
-    ) -> Result<(), ServiceError> {
-        self.ensure_release_mutable(id, claims).await
-    }
-
     pub async fn store_chapter_pages(
         &self,
         item: ChapterPages,
         claims: &UserClaims,
     ) -> Result<(), ServiceError> {
-        self.ensure_release_mutable(item.release_id, claims).await?;
+        self.ensure_release_content_writable(item.release_id, claims)
+            .await?;
 
         let existing = self.database.count_chapter_pages(item.release_id).await? as usize;
         ChapterRelease::ensure_row_capacity(existing, item.images.len())?;
@@ -93,7 +94,7 @@ impl Service {
         order: &PageOrder,
         claims: &UserClaims,
     ) -> Result<(), ServiceError> {
-        self.ensure_release_mutable(id, claims).await?;
+        self.ensure_release_content_writable(id, claims).await?;
 
         let removed = self.database.commit_chapter_release(id, order).await?;
 
@@ -108,7 +109,16 @@ impl Service {
         params: ChapterPageParams,
         claims: Option<&UserClaims>,
     ) -> Result<Vec<ChapterPageQuery>, ServiceError> {
-        self.ensure_release_readable(release_id, claims).await?;
+        match params.status {
+            Some(PageStatus::Staged) => {
+                self.ensure_release_staged_readable(release_id, claims)
+                    .await?;
+            }
+            None => {
+                self.ensure_release_content_readable(release_id, claims)
+                    .await?;
+            }
+        }
 
         self.database
             .get_chapter_pages(release_id, params)
@@ -136,9 +146,12 @@ impl Service {
         number: Ordinal,
         claims: Option<&UserClaims>,
     ) -> Result<String, ServiceError> {
+        self.ensure_release_content_readable(release_id, claims)
+            .await?;
+
         let id = self
             .database
-            .get_chapter_page_id(release_id, number, claims)
+            .get_chapter_page_id(release_id, number)
             .await?;
 
         self.storage
@@ -152,7 +165,7 @@ impl Service {
         id: Uuid,
         claims: &UserClaims,
     ) -> Result<(), ServiceError> {
-        self.ensure_release_mutable(id, claims).await?;
+        self.ensure_release_content_writable(id, claims).await?;
 
         let page_ids = self.database.get_chapter_release_page_ids(id).await?;
 

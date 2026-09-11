@@ -168,9 +168,9 @@ pub async fn store_book(
     Ok(json_data_response(StatusCode::CREATED, StoreResp { id }))
 }
 
-// TODO: re-shape authz
 pub async fn update_book(
     State(service): State<Service>,
+    claims: UserClaims,
     Path(id): Path<Uuid>,
     Json(req): Json<BookReq>,
 ) -> Result<StatusCode, AppError> {
@@ -184,7 +184,7 @@ pub async fn update_book(
     }
     .try_into()?;
 
-    service.update_book(book).await?;
+    service.update_book(book, claims).await?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -281,13 +281,14 @@ impl TryFrom<(BookListQuery, Option<BookCursor>)> for BookFilter {
     }
 }
 
-// TODO: re-shape authz
 pub async fn get_books(
     State(service): State<Service>,
     claims: Option<UserClaims>,
     Query(query): Query<BookListQuery>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    if query.visibility.is_some() && !claims.is_some_and(|c| c.can_moderate()) {
+    let restricted = query.visibility.is_some_and(|v| !v.is_publicly_listable());
+    let cannot_moderate = !claims.is_some_and(|c| c.can_moderate());
+    if restricted && cannot_moderate {
         return Err(RouteError::Forbidden.into());
     }
 
@@ -303,7 +304,6 @@ pub async fn get_books(
     ))
 }
 
-// TODO: re-shape authz
 pub async fn get_book(
     State(service): State<Service>,
     claims: Option<UserClaims>,
@@ -342,17 +342,12 @@ impl TryFrom<BookVisibilityWithContext> for VisibilityTransition {
     }
 }
 
-// TODO: re-shape authz
 pub async fn update_book_visibility(
     State(service): State<Service>,
     claims: UserClaims,
     Path(id): Path<Uuid>,
     Json(req): Json<BookVisibilityReq>,
 ) -> Result<StatusCode, AppError> {
-    if req.visibility != BookVisibility::PendingReview && !claims.can_moderate() {
-        return Err(RouteError::Forbidden.into());
-    }
-
     let transition: VisibilityTransition = BookVisibilityWithContext {
         req,
         id,
@@ -360,7 +355,7 @@ pub async fn update_book_visibility(
     }
     .try_into()?;
 
-    service.set_book_visibility(transition).await?;
+    service.set_book_visibility(transition, claims).await?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -373,9 +368,9 @@ pub async fn delete_book(
     Ok(StatusCode::NO_CONTENT)
 }
 
-// TODO: re-shape authz
 pub async fn store_book_cover(
     State(service): State<Service>,
+    claims: UserClaims,
     Path(book_id): Path<Uuid>,
     mut multipart: Multipart,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
@@ -390,22 +385,21 @@ pub async fn store_book_cover(
     let id = image.id;
     let cover = BookCover { book_id, image };
 
-    service.store_book_cover(cover).await?;
+    service.store_book_cover(cover, claims).await?;
 
     Ok(json_data_response(StatusCode::CREATED, StoreResp { id }))
 }
 
-// TODO: re-shape authz
 pub async fn get_book_covers(
     State(service): State<Service>,
+    claims: Option<UserClaims>,
     Path(book_id): Path<Uuid>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
-    let covers = service.get_book_covers(book_id).await?;
+    let covers = service.get_book_covers(book_id, claims.as_ref()).await?;
 
     Ok(json_data_response(StatusCode::OK, covers))
 }
 
-// TODO: re-shape authz
 pub async fn get_book_cover_image(
     State(service): State<Service>,
     Path(cover_id): Path<Uuid>,
@@ -426,18 +420,22 @@ pub struct MainCoverReq {
 
 pub async fn update_book_main_cover(
     State(service): State<Service>,
+    claims: UserClaims,
     Path(book_id): Path<Uuid>,
     Json(req): Json<MainCoverReq>,
 ) -> Result<StatusCode, AppError> {
-    service.promote_book_cover(book_id, req.cover_id).await?;
+    service
+        .promote_book_cover(book_id, req.cover_id, claims)
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn delete_book_cover(
     State(service): State<Service>,
+    claims: UserClaims,
     Path(cover_id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    service.delete_book_cover(cover_id).await?;
+    service.delete_book_cover(cover_id, claims).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

@@ -656,7 +656,10 @@ async fn get_staged_chapter_pages_lists_a_staged_page_with_all_its_fields() {
     let staged_id = app.fixture_insert_page(release_id, None, COVER_WEBP).await;
 
     let wrapper: RespWrapper<Vec<ChapterPageQuery>> = app
-        .get_ok_json(&format!("/releases/{release_id}/pages?status=Staged"))
+        .get_ok_json_as(
+            &format!("/releases/{release_id}/pages?status=Staged"),
+            &[Role::Moderator],
+        )
         .await;
 
     assert_eq!(wrapper.data.len(), 1);

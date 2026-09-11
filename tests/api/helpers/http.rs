@@ -75,10 +75,14 @@ impl TestApp {
     }
 
     async fn get_as(&self, path: &str, roles: &[Role]) -> Response {
+        self.get_as_user(path, Uuid::now_v7(), roles).await
+    }
+
+    pub async fn get_as_user(&self, path: &str, sub: Uuid, roles: &[Role]) -> Response {
         let req = Request::get(path)
             .header(
                 header::AUTHORIZATION,
-                self.bearer(Uuid::now_v7(), Uuid::now_v7(), roles),
+                self.bearer(sub, Uuid::now_v7(), roles),
             )
             .body(Body::empty())
             .unwrap();
@@ -142,6 +146,26 @@ impl TestApp {
             .unwrap();
 
         self.send_authed(req).await
+    }
+
+    async fn multipart_as(
+        &self,
+        path: &str,
+        parts: &[&[u8]],
+        sub: Uuid,
+        roles: &[Role],
+    ) -> Response {
+        let form = Self::multipart_body(parts);
+        let req = Request::post(path)
+            .header(header::CONTENT_TYPE, form.content_type())
+            .header(
+                header::AUTHORIZATION,
+                self.bearer(sub, Uuid::now_v7(), roles),
+            )
+            .body(Body::from(form))
+            .unwrap();
+
+        self.send_raw(req).await
     }
 
     fn multipart_body(parts: &[&[u8]]) -> MultipartForm {
@@ -209,6 +233,28 @@ impl TestApp {
         self.send_raw(req).await
     }
 
+    pub async fn json_as_user(
+        &self,
+        method: Method,
+        path: &str,
+        body: serde_json::Value,
+        sub: Uuid,
+        roles: &[Role],
+    ) -> Response {
+        let req = Request::builder()
+            .method(method)
+            .uri(path)
+            .header(header::CONTENT_TYPE, "application/json")
+            .header(
+                header::AUTHORIZATION,
+                self.bearer(sub, Uuid::now_v7(), roles),
+            )
+            .body(Body::from(body.to_string()))
+            .unwrap();
+
+        self.send_raw(req).await
+    }
+
     pub async fn put_visibility(&self, id: Uuid, visibility: &str, note: Option<&str>) -> Response {
         let body = match note {
             Some(note) => serde_json::json!({ "visibility": visibility, "note": note }),
@@ -244,6 +290,17 @@ impl TestApp {
             .await
     }
 
+    pub async fn post_cover_as(
+        &self,
+        book_id: Uuid,
+        image: &[u8],
+        sub: Uuid,
+        roles: &[Role],
+    ) -> Response {
+        self.multipart_as(&format!("/books/{book_id}/covers"), &[image], sub, roles)
+            .await
+    }
+
     pub async fn get_covers(&self, book_id: Uuid) -> Response {
         self.get_raw(&format!("/books/{book_id}/covers")).await
     }
@@ -262,8 +319,31 @@ impl TestApp {
         .status()
     }
 
+    pub async fn put_main_cover_as(
+        &self,
+        book_id: Uuid,
+        cover_id: Uuid,
+        sub: Uuid,
+        roles: &[Role],
+    ) -> StatusCode {
+        self.json_as_user(
+            Method::PUT,
+            &format!("/books/{book_id}/main-cover"),
+            serde_json::json!({ "coverId": cover_id }),
+            sub,
+            roles,
+        )
+        .await
+        .status()
+    }
+
     pub async fn delete_cover(&self, cover_id: Uuid) -> Response {
         self.delete_authed(&format!("/covers/{cover_id}")).await
+    }
+
+    pub async fn delete_cover_as(&self, cover_id: Uuid, sub: Uuid, roles: &[Role]) -> Response {
+        self.delete_authed_as(&format!("/covers/{cover_id}"), sub, Uuid::now_v7(), roles)
+            .await
     }
 
     pub async fn get_creator(&self, id: Uuid) -> Response {

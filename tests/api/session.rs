@@ -5,10 +5,11 @@ use axum::http::{Request, StatusCode, header};
 use fake::Fake;
 use fake::faker::internet::en::{IP, UserAgent};
 use http_body_util::BodyExt;
-use manga_theka::entity::{Role, Session, SessionQuery, ShortText};
+use manga_theka::entity::{Chapter, Role, Session, SessionQuery, ShortText};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
+use crate::helpers::fakers::ChapterFaker;
 use crate::helpers::{
     AccessTokenBody, KNOWN_PASSWORD, RespWrapper, TestApp, assert_error, cookie_pair,
     refresh_cookie,
@@ -22,6 +23,21 @@ async fn login_and_get_cookie(app: &TestApp) -> String {
 
 fn creator_body() -> serde_json::Value {
     serde_json::json!({ "firstName": "Gate", "lastName": "Probe" })
+}
+
+fn chapter_body(book_id: Uuid) -> serde_json::Value {
+    let chapter: Chapter = ChapterFaker {
+        book_id,
+        localizations: 1..=1,
+    }
+    .fake();
+
+    serde_json::json!({
+        "number": chapter.number,
+        "name": chapter.name,
+        "volume": chapter.volume,
+        "localizations": &chapter.localizations,
+    })
 }
 
 #[tokio::test]
@@ -408,10 +424,15 @@ async fn a_gated_route_without_a_token_returns_401() {
 #[tokio::test]
 async fn a_gated_route_with_a_role_below_the_gate_returns_403() {
     let app = TestApp::new().await;
+    let book_id = Uuid::now_v7();
 
     assert_error(
-        app.post_json_as("/creators", creator_body(), &[Role::Reader])
-            .await,
+        app.post_json_as(
+            &format!("/books/{book_id}/chapters"),
+            chapter_body(book_id),
+            &[Role::Reader],
+        )
+        .await,
         StatusCode::FORBIDDEN,
     )
     .await;
@@ -420,9 +441,14 @@ async fn a_gated_route_with_a_role_below_the_gate_returns_403() {
 #[tokio::test]
 async fn a_gated_route_with_a_role_at_the_gate_passes() {
     let app = TestApp::new().await;
+    let book_id = app.db_insert_random_book().await;
 
     let resp = app
-        .post_json_as("/creators", creator_body(), &[Role::Uploader])
+        .post_json_as(
+            &format!("/books/{book_id}/chapters"),
+            chapter_body(book_id),
+            &[Role::Uploader],
+        )
         .await;
     assert_eq!(resp.status(), StatusCode::CREATED);
 }

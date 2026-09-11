@@ -80,7 +80,7 @@ impl App {
             .route(
                 "/creators",
                 post(store_creator)
-                    .layer(require_roles(CONTENT_WRITERS))
+                    .layer(require_roles(SIGNED_IN))
                     .merge(get(get_creators)),
             )
             .route(
@@ -98,7 +98,7 @@ impl App {
             .route(
                 "/books/{id}",
                 get(get_book)
-                    .merge(put(update_book).layer(require_roles(CONTENT_WRITERS)))
+                    .merge(put(update_book).layer(require_roles(SIGNED_IN)))
                     .merge(delete(delete_book).layer(require_roles(MODERATORS))),
             )
             .route(
@@ -106,17 +106,17 @@ impl App {
                 get(get_book_covers).merge(
                     post(store_book_cover)
                         .layer(DefaultBodyLimit::max(DEFAULT_IMAGE_MAX_BYTES))
-                        .layer(require_roles(CONTENT_WRITERS)),
+                        .layer(require_roles(SIGNED_IN)),
                 ),
             )
             .route(
                 "/covers/{id}",
-                delete(delete_book_cover).layer(require_roles(CONTENT_WRITERS)),
+                delete(delete_book_cover).layer(require_roles(SIGNED_IN)),
             )
             .route("/covers/{id}/image", get(get_book_cover_image))
             .route(
                 "/books/{id}/main-cover",
-                put(update_book_main_cover).layer(require_roles(CONTENT_WRITERS)),
+                put(update_book_main_cover).layer(require_roles(SIGNED_IN)),
             )
             .route("/books/{id}/visibility", put(update_book_visibility))
             .route(
