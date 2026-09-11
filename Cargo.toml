@@ -88,4 +88,3 @@ http-body-util = "0.1"
 fake = "5"
 axum-test = "21"
 ed25519-dalek = { version = "3", features = ["pkcs8", "pem"] }
-rstest = { version = "0.27", default-features = false }

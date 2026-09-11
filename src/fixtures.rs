@@ -5,7 +5,6 @@ use ed25519_dalek::{
     SigningKey,
     pkcs8::{EncodePrivateKey, EncodePublicKey, spki::der::pem::LineEnding},
 };
-use rstest::fixture;
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
@@ -36,7 +35,6 @@ pub(crate) const REFRESH_TTL: i64 = 7200;
 const SELECTION_HASH: &str = "0123456789abcdef";
 pub(crate) const STALE_HASH: &str = "fedcba9876543210";
 
-#[fixture]
 pub(crate) fn unfiltered_selection() -> BookSelection {
     BookSelection {
         visibility: BookVisibility::Listed,

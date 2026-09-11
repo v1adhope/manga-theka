@@ -156,8 +156,6 @@ impl BookFilter {
 
 #[cfg(test)]
 mod tests {
-    use rstest::rstest;
-
     use crate::{
         entity::{
             BookCursor, BookFilter, BookSelection, BookSort, BookSortField, Limit, Timestamp,
@@ -167,38 +165,36 @@ mod tests {
         },
     };
 
-    #[rstest]
-    fn a_cursor_from_the_same_filter_is_accepted(unfiltered_selection: BookSelection) {
-        let filter = filter_paged(unfiltered_selection, cursor_for());
+    #[test]
+    fn a_cursor_from_the_same_filter_is_accepted() {
+        let filter = filter_paged(unfiltered_selection(), cursor_for());
 
         assert!(filter.ensure_cursor_fits().is_ok());
     }
 
-    #[rstest]
-    fn no_cursor_is_always_accepted(unfiltered_selection: BookSelection) {
-        let filter = filter(unfiltered_selection);
+    #[test]
+    fn no_cursor_is_always_accepted() {
+        let filter = filter(unfiltered_selection());
 
         assert!(filter.ensure_cursor_fits().is_ok());
     }
 
-    #[rstest]
-    fn a_cursor_whose_selection_hash_no_longer_matches_is_rejected(
-        unfiltered_selection: BookSelection,
-    ) {
+    #[test]
+    fn a_cursor_whose_selection_hash_no_longer_matches_is_rejected() {
         let cursor = BookCursor {
             selection_hash: short_hash(STALE_HASH),
             ..cursor_for()
         };
-        let filter = filter_paged(unfiltered_selection, cursor);
+        let filter = filter_paged(unfiltered_selection(), cursor);
 
         assert!(filter.ensure_cursor_fits().is_err());
     }
 
-    #[rstest]
-    fn a_cursor_for_another_sort_field_is_rejected(unfiltered_selection: BookSelection) {
+    #[test]
+    fn a_cursor_for_another_sort_field_is_rejected() {
         let selection = BookSelection {
             sort_field: BookSortField::Name,
-            ..unfiltered_selection
+            ..unfiltered_selection()
         };
         let cursor = cursor_for();
         let filter = filter_paged(selection, cursor);
@@ -206,12 +202,12 @@ mod tests {
         assert!(filter.ensure_cursor_fits().is_err());
     }
 
-    #[rstest]
-    fn page_size_is_outside_the_selection_hash(unfiltered_selection: BookSelection) {
+    #[test]
+    fn page_size_is_outside_the_selection_hash() {
         let cursor = cursor_for();
         let resized = BookFilter {
             limit: Limit::try_from(50).unwrap(),
-            ..filter_paged(unfiltered_selection, cursor)
+            ..filter_paged(unfiltered_selection(), cursor)
         };
 
         assert!(
