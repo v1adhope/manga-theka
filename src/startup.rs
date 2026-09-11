@@ -80,7 +80,7 @@ impl App {
             .route(
                 "/creators",
                 post(store_creator)
-                    .layer(require_roles(CONTENT_WRITERS))
+                    .layer(require_roles(SIGNED_IN))
                     .merge(get(get_creators)),
             )
             .route(

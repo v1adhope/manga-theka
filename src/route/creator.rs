@@ -40,7 +40,8 @@ impl TryFrom<(CreatorReq, Uuid, OffsetDateTime)> for Creator {
     }
 }
 
-// TODO: re-shape authz
+// TODO: any signed-in User can now propose a Creator with no Book attached; add a sweeper
+// that deletes Creator rows unreferenced by book_creators after some retention window.
 pub async fn store_creator(
     State(service): State<Service>,
     Json(req): Json<CreatorReq>,
