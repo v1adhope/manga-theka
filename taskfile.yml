@@ -110,6 +110,9 @@ tasks:
 
   keys-generate:
     desc: Generate the Ed25519 PKCS#8 PEM keypairs the JWT layer loads at startup
+    status:
+      - test -f .keys/jwt_access_private.pem
+      - test -f .keys/jwt_refresh_private.pem
     cmds:
       - mkdir -p .keys
       - openssl genpkey -algorithm ed25519 -out .keys/jwt_access_private.pem
