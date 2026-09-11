@@ -50,27 +50,13 @@ impl Coder {
 
 #[cfg(test)]
 mod tests {
-    use time::OffsetDateTime;
     use uuid::Uuid;
 
     use crate::{
         coder::Coder,
-        entity::{BookCursor, BookSort, ShortHexHash, Timestamp},
+        entity::fixtures::{every_sort_value, selection_hash},
+        entity::{BookCursor, BookSort},
     };
-
-    fn hash() -> ShortHexHash {
-        ShortHexHash::try_from("0123456789abcdef".to_owned()).unwrap()
-    }
-
-    fn every_sort_value() -> [BookSort; 3] {
-        [
-            BookSort::CreatedAt(Timestamp::from(
-                OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap(),
-            )),
-            BookSort::Name("Solo Leveling".to_owned()),
-            BookSort::PublicationYear(2016),
-        ]
-    }
 
     #[test]
     fn every_sort_field_round_trips_through_a_cursor() {
@@ -78,7 +64,7 @@ mod tests {
             let cursor = BookCursor {
                 id: Uuid::now_v7(),
                 sort: value.clone(),
-                selection_hash: hash(),
+                selection_hash: selection_hash(),
             };
 
             let encoded = Coder::encode(cursor.clone()).unwrap();
@@ -93,7 +79,7 @@ mod tests {
         let cursor = BookCursor {
             id: Uuid::now_v7(),
             sort: BookSort::Name("a/b+c d".to_owned()),
-            selection_hash: hash(),
+            selection_hash: selection_hash(),
         };
 
         let encoded = Coder::encode(cursor).unwrap();
@@ -145,7 +131,7 @@ mod tests {
         let cursor = BookCursor {
             id: Uuid::now_v7(),
             sort: every_sort_value()[0].clone(),
-            selection_hash: hash(),
+            selection_hash: selection_hash(),
         };
         let encoded = Coder::encode(cursor).unwrap();
 

@@ -305,35 +305,14 @@ pub type BookCreators = BoundedVec<BookCreator, BookCreatorsBound>;
 mod tests {
     use uuid::Uuid;
 
-    use crate::entity::{
-        AlternativeTitle, BookCreatorsQuery, BookLabelIds, BookLink, BookLinkKind, BookLinks,
-        BookName, BookTitles, CreatorQuery, CreatorRole, LinkUrl, MAX_BOOK_CREATORS,
-        MAX_BOOK_LABELS, MAX_BOOK_LINKS, MAX_BOOK_TITLES, Name, PublicationDemographic, Timestamp,
+    use crate::{
+        entity::fixtures::{sample_creator, sample_link, sample_title},
+        entity::{
+            AlternativeTitle, BookCreatorsQuery, BookLabelIds, BookLink, BookLinks, BookName,
+            BookTitles, CreatorQuery, LinkUrl, MAX_BOOK_CREATORS, MAX_BOOK_LABELS, MAX_BOOK_LINKS,
+            MAX_BOOK_TITLES, PublicationDemographic,
+        },
     };
-
-    fn sample_link() -> BookLink {
-        BookLink {
-            kind: BookLinkKind::WhereToRead,
-            url: LinkUrl::try_from("https://example.com/read".to_owned()).unwrap(),
-        }
-    }
-
-    fn sample_title() -> AlternativeTitle {
-        AlternativeTitle {
-            language_id: Uuid::now_v7(),
-            name: BookName::try_from("Alt title".to_owned()).unwrap(),
-        }
-    }
-
-    fn sample_creator() -> CreatorQuery {
-        CreatorQuery {
-            id: Uuid::now_v7(),
-            first_name: Name::try_from("Jane".to_owned()).unwrap(),
-            last_name: Name::try_from("Doe".to_owned()).unwrap(),
-            roles: vec![CreatorRole::Author],
-            created_at: Timestamp::now(),
-        }
-    }
 
     #[test]
     fn every_publication_demographic_round_trips() {

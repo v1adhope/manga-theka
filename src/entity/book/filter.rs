@@ -155,68 +155,15 @@ impl BookFilter {
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
-    use uuid::Uuid;
-
-    use crate::entity::{
-        BookCursor, BookFilter, BookKinds, BookLabelIds, BookSelection, BookSort, BookSortField,
-        BookStatuses, BookVisibility, CreatedAtRange, FilterLookupIds, LabelFilter, LabelsMode,
-        Limit, PublicationDemographics, PublicationYearRange, ShortHexHash, SortOrder, Timestamp,
+mod tests {
+    use crate::{
+        entity::fixtures::{
+            STALE_HASH, cursor_for, filter, filter_paged, short_hash, unfiltered_selection,
+        },
+        entity::{
+            BookCursor, BookFilter, BookSelection, BookSort, BookSortField, Limit, Timestamp,
+        },
     };
-
-    const SELECTION_HASH: &str = "0123456789abcdef";
-    const STALE_HASH: &str = "fedcba9876543210";
-
-    pub(crate) fn unfiltered_selection() -> BookSelection {
-        BookSelection {
-            visibility: BookVisibility::Listed,
-            sort_field: BookSortField::CreatedAt,
-            order: SortOrder::Desc,
-            labels: LabelFilter {
-                included: BookLabelIds::try_from(vec![]).unwrap(),
-                mode: LabelsMode::And,
-                excluded: BookLabelIds::try_from(vec![]).unwrap(),
-            },
-            kinds: BookKinds::try_from(vec![]).unwrap(),
-            statuses: BookStatuses::try_from(vec![]).unwrap(),
-            content_rating_ids: FilterLookupIds::try_from(vec![]).unwrap(),
-            publication_language_ids: FilterLookupIds::try_from(vec![]).unwrap(),
-            publication_demographics: PublicationDemographics::try_from(vec![]).unwrap(),
-            available_translated_language_ids: FilterLookupIds::try_from(vec![]).unwrap(),
-            publication_year: PublicationYearRange::try_new(None, None).unwrap(),
-            created_at: CreatedAtRange::try_new(None, None).unwrap(),
-        }
-    }
-
-    fn short_hash(hex: &str) -> ShortHexHash {
-        ShortHexHash::try_from(hex.to_owned()).unwrap()
-    }
-
-    fn filter(selection: BookSelection) -> BookFilter {
-        BookFilter {
-            limit: Limit::DEFAULT,
-            cursor: None,
-            selection_hash: short_hash(SELECTION_HASH),
-            selection,
-        }
-    }
-
-    fn filter_paged(selection: BookSelection, cursor: BookCursor) -> BookFilter {
-        BookFilter {
-            limit: Limit::DEFAULT,
-            cursor: Some(cursor),
-            selection_hash: short_hash(SELECTION_HASH),
-            selection,
-        }
-    }
-
-    fn cursor_for() -> BookCursor {
-        BookCursor {
-            id: Uuid::now_v7(),
-            sort: BookSort::CreatedAt(Timestamp::UNIX_EPOCH),
-            selection_hash: short_hash(SELECTION_HASH),
-        }
-    }
 
     #[test]
     fn a_cursor_from_the_same_filter_is_accepted() {

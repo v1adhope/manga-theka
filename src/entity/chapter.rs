@@ -118,19 +118,13 @@ pub type ChapterLocalizations = BoundedVec<ChapterLocalization, ChapterLocalizat
 
 #[cfg(test)]
 mod tests {
-    use uuid::Uuid;
-
-    use crate::entity::{
-        ChapterLocalization, ChapterLocalizations, ChapterName, ChapterNumber, ChapterVolume,
-        MAX_CHAPTER_LOCALIZATIONS,
+    use crate::{
+        entity::fixtures::sample_localization,
+        entity::{
+            ChapterLocalization, ChapterLocalizations, ChapterName, ChapterNumber, ChapterVolume,
+            MAX_CHAPTER_LOCALIZATIONS,
+        },
     };
-
-    fn sample_localization() -> ChapterLocalization {
-        ChapterLocalization {
-            language_id: Uuid::now_v7(),
-            name: ChapterName::try_from("Chapter 1".to_owned()).unwrap(),
-        }
-    }
 
     #[test]
     fn chapter_localizations_at_the_ceiling_is_valid() {

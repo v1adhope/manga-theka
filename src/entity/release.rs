@@ -196,18 +196,13 @@ pub struct ChapterPageParams {
 mod tests {
     use uuid::Uuid;
 
-    use crate::entity::{
-        BookVisibility, ChapterRelease, MAX_COMMITTED_PAGES, MAX_PARTS_PER_REQUEST,
-        MAX_RELEASE_ROWS, PageOrder, ReleaseAccess, Role, UserClaims,
+    use crate::{
+        entity::fixtures::{PRIVATE_VISIBILITY, claims, release},
+        entity::{
+            BookVisibility, ChapterRelease, MAX_COMMITTED_PAGES, MAX_PARTS_PER_REQUEST,
+            MAX_RELEASE_ROWS, PageOrder, ReleaseAccess, Role,
+        },
     };
-
-    fn claims(id: Uuid, roles: &[Role]) -> UserClaims {
-        UserClaims {
-            id,
-            sid: Uuid::now_v7(),
-            roles: roles.to_vec(),
-        }
-    }
 
     #[test]
     fn row_capacity_at_the_ceiling_is_valid() {
@@ -333,19 +328,6 @@ mod tests {
 
         assert!(res.is_err());
     }
-
-    fn release(visibility: BookVisibility, owner: Uuid) -> ReleaseAccess {
-        ReleaseAccess {
-            visibility,
-            created_by: owner,
-        }
-    }
-
-    const PRIVATE_VISIBILITY: [BookVisibility; 3] = [
-        BookVisibility::Draft,
-        BookVisibility::PendingReview,
-        BookVisibility::Rejected,
-    ];
 
     #[test]
     fn a_release_record_is_public_while_the_book_is_publicly_listable() {

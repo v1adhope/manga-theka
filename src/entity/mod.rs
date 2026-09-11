@@ -3,8 +3,7 @@ mod book;
 #[path = "book/cover.rs"]
 mod book_cover;
 #[path = "book/filter.rs"]
-// TODO: place fixtures in one place
-pub(crate) mod book_filter;
+mod book_filter;
 mod chapter;
 mod content_rating;
 mod creator;
@@ -15,6 +14,9 @@ mod release;
 mod session;
 mod user;
 mod visibility;
+
+#[cfg(test)]
+pub(crate) mod fixtures;
 
 #[path = "shared/bounded_vec.rs"]
 mod bounded_vec;

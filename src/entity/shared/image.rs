@@ -221,11 +221,13 @@ impl Images {
 #[cfg(test)]
 mod tests {
     use bytes::Bytes;
-    use uuid::Uuid;
 
-    use crate::entity::{
-        DEFAULT_IMAGE_MAX_BYTES, FileName, Image, ImageContent, ImageExtension, Images,
-        MAX_PARTS_PER_REQUEST,
+    use crate::{
+        entity::fixtures::{default_image, image},
+        entity::{
+            DEFAULT_IMAGE_MAX_BYTES, FileName, Image, ImageContent, ImageExtension, Images,
+            MAX_PARTS_PER_REQUEST,
+        },
     };
 
     use super::PNG_SIGNATURE;
@@ -252,21 +254,6 @@ mod tests {
     fn incoming_capacity_over_the_ceiling_is_rejected() {
         let res = ImageContent::ensure_incoming_capacity(DEFAULT_IMAGE_MAX_BYTES, 1);
         assert!(res.is_err());
-    }
-
-    fn image(content: ImageContent, file_name: FileName) -> Image {
-        Image {
-            id: Uuid::from_u128(1),
-            extension: ImageExtension::Png,
-            content,
-            file_name,
-        }
-    }
-
-    fn default_image() -> Image {
-        let content = ImageContent::try_from(Bytes::from(PNG_SIGNATURE.to_vec())).unwrap();
-        let file_name = FileName::try_from("page.png".to_owned()).unwrap();
-        image(content, file_name)
     }
 
     #[test]

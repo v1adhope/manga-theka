@@ -191,9 +191,12 @@ impl TryFrom<(BookVisibility, VisibilityTransition)> for BookVisibilityUpdate {
 mod tests {
     use uuid::Uuid;
 
-    use crate::entity::{
-        Book, BookAccess, BookVisibility, BookVisibilityUpdate, Role, SUBMITTED_NOTE, Text,
-        Timestamp, UserClaims, VisibilityTransition,
+    use crate::{
+        entity::fixtures::{PRIVATE_VISIBILITY, access, claims, transition},
+        entity::{
+            Book, BookVisibility, BookVisibilityUpdate, Role, SUBMITTED_NOTE, Text, Timestamp,
+            VisibilityTransition,
+        },
     };
 
     const EVERY_VISIBILITY: [BookVisibility; 5] = [
@@ -203,36 +206,6 @@ mod tests {
         BookVisibility::Rejected,
         BookVisibility::Hidden,
     ];
-
-    const PRIVATE_VISIBILITY: [BookVisibility; 3] = [
-        BookVisibility::Draft,
-        BookVisibility::PendingReview,
-        BookVisibility::Rejected,
-    ];
-
-    fn claims(id: Uuid, roles: &[Role]) -> UserClaims {
-        UserClaims {
-            id,
-            sid: Uuid::now_v7(),
-            roles: roles.to_vec(),
-        }
-    }
-
-    fn access(visibility: BookVisibility, owner: Uuid) -> BookAccess {
-        BookAccess {
-            visibility,
-            created_by: owner,
-        }
-    }
-
-    fn transition(visibility: BookVisibility, note: Option<&str>) -> VisibilityTransition {
-        VisibilityTransition {
-            id: Uuid::now_v7(),
-            visibility,
-            note: note.map(|n| Text::try_from(n.to_owned()).unwrap()),
-            now: Timestamp::now(),
-        }
-    }
 
     #[test]
     fn every_book_visibility_round_trips() {

@@ -79,22 +79,11 @@ impl From<Session> for SessionQuery {
 #[cfg(test)]
 mod tests {
     use time::Duration;
-    use uuid::Uuid;
 
-    use crate::entity::{HexHash, Session, SessionQuery, Timestamp};
-
-    fn session(age: Duration) -> Session {
-        let now = Timestamp::now();
-
-        Session {
-            sid: Uuid::now_v7(),
-            jti: HexHash::try_from("a".repeat(64)).unwrap(),
-            ua: None,
-            ip: None,
-            created_at: now - age,
-            updated_at: now - age,
-        }
-    }
+    use crate::{
+        entity::fixtures::session,
+        entity::{SessionQuery, Timestamp},
+    };
 
     #[test]
     fn a_session_older_than_24h_may_revoke() {

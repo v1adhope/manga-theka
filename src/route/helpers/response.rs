@@ -59,10 +59,7 @@ mod tests {
         AccessTokenResp, StoreResp, json_data, json_data_response, json_response,
         session_tokens_response,
     };
-    use crate::{
-        entity::{SessionTokens, Token},
-        route::cookie::REFRESH_COOKIE,
-    };
+    use crate::{entity::fixtures::session_tokens, route::cookie::REFRESH_COOKIE};
 
     #[test]
     fn store_resp_carries_the_id_under_an_id_key() {
@@ -107,19 +104,6 @@ mod tests {
 
         assert_eq!(status, StatusCode::ACCEPTED);
         assert_eq!(body.0, json!({ "data": [1, 2] }));
-    }
-
-    fn session_tokens() -> SessionTokens {
-        SessionTokens {
-            access: Token {
-                value: "access-value".to_owned(),
-                ttl: 900,
-            },
-            refresh: Token {
-                value: "refresh-value".to_owned(),
-                ttl: 1_209_600,
-            },
-        }
     }
 
     #[test]

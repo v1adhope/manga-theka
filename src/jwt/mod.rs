@@ -1,5 +1,8 @@
 mod tokens;
 
+#[cfg(test)]
+mod fixtures;
+
 pub use tokens::{AccessClaims, Jwt, RefreshClaims};
 
 use std::fs;
