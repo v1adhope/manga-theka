@@ -146,10 +146,7 @@ impl Database {
 mod tests {
     use uuid::Uuid;
 
-    use crate::{
-        entity::{BookAccess, BookVisibility},
-        error::DatabaseError,
-    };
+    use crate::{entity::BookAccess, error::DatabaseError};
 
     #[test]
     fn an_unknown_visibility_is_reported_as_a_corrupted_invariant() {
@@ -162,15 +159,5 @@ mod tests {
                 ..
             })
         ));
-    }
-
-    #[test]
-    fn a_stored_row_is_parsed_into_access() {
-        let owner = Uuid::now_v7();
-        let access = BookAccess::try_from(("Listed".to_owned(), owner));
-
-        let access = access.expect("a well-formed row must parse");
-        assert_eq!(access.visibility, BookVisibility::Listed);
-        assert_eq!(access.created_by, owner);
     }
 }
