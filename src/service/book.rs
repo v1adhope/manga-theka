@@ -97,7 +97,8 @@ impl Service {
         id: Uuid,
         claims: Option<&UserClaims>,
     ) -> Result<String, ServiceError> {
-        self.ensure_cover_readable(id, claims).await?;
+        self.ensure_book_record_readable_by_cover(id, claims)
+            .await?;
 
         self.storage
             .presign_book_cover(id)

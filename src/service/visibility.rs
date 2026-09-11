@@ -19,7 +19,7 @@ impl Service {
             .map_err(Into::into)
     }
 
-    pub(crate) async fn ensure_chapter_readable(
+    pub(crate) async fn ensure_book_record_readable_by_chapter(
         &self,
         chapter_id: Uuid,
         claims: Option<&UserClaims>,
@@ -31,7 +31,7 @@ impl Service {
             .map_err(Into::into)
     }
 
-    pub(crate) async fn ensure_cover_readable(
+    pub(crate) async fn ensure_book_record_readable_by_cover(
         &self,
         cover_id: Uuid,
         claims: Option<&UserClaims>,

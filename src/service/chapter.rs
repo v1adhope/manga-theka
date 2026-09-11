@@ -18,7 +18,8 @@ impl Service {
         id: Uuid,
         claims: Option<&UserClaims>,
     ) -> Result<Chapter, ServiceError> {
-        self.ensure_chapter_readable(id, claims).await?;
+        self.ensure_book_record_readable_by_chapter(id, claims)
+            .await?;
 
         self.database.get_chapter(id).await.map_err(Into::into)
     }

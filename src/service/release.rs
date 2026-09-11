@@ -39,7 +39,8 @@ impl Service {
         chapter_id: Uuid,
         claims: Option<&UserClaims>,
     ) -> Result<Vec<ChapterReleaseQuery>, ServiceError> {
-        self.ensure_chapter_readable(chapter_id, claims).await?;
+        self.ensure_book_record_readable_by_chapter(chapter_id, claims)
+            .await?;
 
         self.database
             .get_chapter_releases(chapter_id)
