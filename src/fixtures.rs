@@ -29,6 +29,7 @@ pub(crate) const PRIVATE_VISIBILITY: [BookVisibility; 3] = [
     BookVisibility::Rejected,
 ];
 
+pub(crate) const REALM: &str = "manga-theka";
 pub(crate) const ACCESS_TTL: i64 = 3600;
 pub(crate) const REFRESH_TTL: i64 = 7200;
 

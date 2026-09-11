@@ -121,10 +121,8 @@ mod tests {
 
     use crate::{
         entity::{Role, Timestamp},
-        fixtures::{ACCESS_TTL, REFRESH_TTL, jwt, jwt_shared},
+        fixtures::{ACCESS_TTL, REALM, REFRESH_TTL, jwt, jwt_shared},
     };
-
-    const REALM: &str = "manga-theka";
 
     #[test]
     fn an_issued_access_token_round_trips_its_claims() {
