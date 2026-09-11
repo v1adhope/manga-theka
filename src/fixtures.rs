@@ -34,6 +34,7 @@ pub(crate) const ACCESS_TTL: i64 = 3600;
 pub(crate) const REFRESH_TTL: i64 = 7200;
 
 const SELECTION_HASH: &str = "0123456789abcdef";
+pub(crate) const STALE_HASH: &str = "fedcba9876543210";
 
 #[fixture]
 pub(crate) fn unfiltered_selection() -> BookSelection {

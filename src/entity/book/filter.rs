@@ -162,10 +162,10 @@ mod tests {
         entity::{
             BookCursor, BookFilter, BookSelection, BookSort, BookSortField, Limit, Timestamp,
         },
-        fixtures::{cursor_for, filter, filter_paged, short_hash, unfiltered_selection},
+        fixtures::{
+            STALE_HASH, cursor_for, filter, filter_paged, short_hash, unfiltered_selection,
+        },
     };
-
-    const STALE_HASH: &str = "fedcba9876543210";
 
     #[rstest]
     fn a_cursor_from_the_same_filter_is_accepted(unfiltered_selection: BookSelection) {
