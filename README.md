@@ -5,9 +5,10 @@ Currently just the API; a frontend is planned.
 
 This is an idea being turned into an implementation, not a finished product -
 no promises about stability, completeness, or support. Free to use under the
-MIT license (see `LICENSE`).
+MIT license.
 
 See tests for how things work in practice.
 
-See the [wiki](https://github.com/v1adhope/manga-theka/wiki) for the roadmap
-and other notes.
+See [CONTEXT.md](CONTEXT.md) for domain information, and the
+[wiki](https://github.com/v1adhope/manga-theka/wiki) for the roadmap and other
+notes.
