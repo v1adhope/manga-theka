@@ -67,5 +67,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reads of book, cover, and release metadata stay visible while a book is
   `Listed` or `Hidden`; page and cover bytes require `Listed` (or a
   Moderator/Admin caller).
+- `wiki/` folder, synced to the GitHub wiki on push to `main`.
 
 [Unreleased]: https://github.com/v1adhope/manga-theka/commits/main

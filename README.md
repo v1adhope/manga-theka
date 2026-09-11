@@ -8,3 +8,6 @@ no promises about stability, completeness, or support. Free to use under the
 MIT license (see `LICENSE`).
 
 See tests for how things work in practice.
+
+See the [wiki](https://github.com/v1adhope/manga-theka/wiki) for the roadmap
+and other notes.
