@@ -119,11 +119,11 @@ pub type ChapterLocalizations = BoundedVec<ChapterLocalization, ChapterLocalizat
 #[cfg(test)]
 mod tests {
     use crate::{
+        entity::fixtures::sample_localization,
         entity::{
             ChapterLocalization, ChapterLocalizations, ChapterName, ChapterNumber, ChapterVolume,
             MAX_CHAPTER_LOCALIZATIONS,
         },
-        fixtures::sample_localization,
     };
 
     #[test]

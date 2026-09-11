@@ -59,7 +59,7 @@ mod tests {
         AccessTokenResp, StoreResp, json_data, json_data_response, json_response,
         session_tokens_response,
     };
-    use crate::{fixtures::session_tokens, route::cookie::REFRESH_COOKIE};
+    use crate::{entity::fixtures::session_tokens, route::cookie::REFRESH_COOKIE};
 
     #[test]
     fn store_resp_carries_the_id_under_an_id_key() {

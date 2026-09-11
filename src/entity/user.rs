@@ -199,8 +199,8 @@ mod tests {
     use uuid::Uuid;
 
     use crate::{
+        entity::fixtures::claims,
         entity::{MAX_USER_ROLES, Password, Role, Roles, Username},
-        fixtures::claims,
     };
 
     #[test]

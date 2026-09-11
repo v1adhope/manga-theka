@@ -121,7 +121,7 @@ mod tests {
 
     use crate::{
         entity::{Role, Timestamp},
-        fixtures::{ACCESS_TTL, REALM, REFRESH_TTL, jwt, jwt_shared},
+        jwt::fixtures::{ACCESS_TTL, REALM, REFRESH_TTL, jwt, jwt_shared},
     };
 
     #[test]

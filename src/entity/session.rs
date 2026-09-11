@@ -81,8 +81,8 @@ mod tests {
     use time::Duration;
 
     use crate::{
+        entity::fixtures::session,
         entity::{SessionQuery, Timestamp},
-        fixtures::session,
     };
 
     #[test]

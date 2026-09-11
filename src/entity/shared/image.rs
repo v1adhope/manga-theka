@@ -223,11 +223,11 @@ mod tests {
     use bytes::Bytes;
 
     use crate::{
+        entity::fixtures::{default_image, image},
         entity::{
             DEFAULT_IMAGE_MAX_BYTES, FileName, Image, ImageContent, ImageExtension, Images,
             MAX_PARTS_PER_REQUEST,
         },
-        fixtures::{default_image, image},
     };
 
     use super::PNG_SIGNATURE;

@@ -11,6 +11,3 @@ pub mod route;
 pub mod service;
 pub mod startup;
 pub mod telemetry;
-
-#[cfg(test)]
-pub(crate) mod fixtures;

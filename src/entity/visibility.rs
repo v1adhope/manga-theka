@@ -192,11 +192,11 @@ mod tests {
     use uuid::Uuid;
 
     use crate::{
+        entity::fixtures::{PRIVATE_VISIBILITY, access, claims, transition},
         entity::{
             Book, BookVisibility, BookVisibilityUpdate, Role, SUBMITTED_NOTE, Text, Timestamp,
             VisibilityTransition,
         },
-        fixtures::{PRIVATE_VISIBILITY, access, claims, transition},
     };
 
     const EVERY_VISIBILITY: [BookVisibility; 5] = [

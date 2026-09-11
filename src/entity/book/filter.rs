@@ -157,11 +157,11 @@ impl BookFilter {
 #[cfg(test)]
 mod tests {
     use crate::{
+        entity::fixtures::{
+            STALE_HASH, cursor_for, filter, filter_paged, short_hash, unfiltered_selection,
+        },
         entity::{
             BookCursor, BookFilter, BookSelection, BookSort, BookSortField, Limit, Timestamp,
-        },
-        fixtures::{
-            STALE_HASH, cursor_for, filter, filter_paged, short_hash, unfiltered_selection,
         },
     };
 

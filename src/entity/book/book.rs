@@ -306,12 +306,12 @@ mod tests {
     use uuid::Uuid;
 
     use crate::{
+        entity::fixtures::{sample_creator, sample_link, sample_title},
         entity::{
             AlternativeTitle, BookCreatorsQuery, BookLabelIds, BookLink, BookLinks, BookName,
             BookTitles, CreatorQuery, LinkUrl, MAX_BOOK_CREATORS, MAX_BOOK_LABELS, MAX_BOOK_LINKS,
             MAX_BOOK_TITLES, PublicationDemographic,
         },
-        fixtures::{sample_creator, sample_link, sample_title},
     };
 
     #[test]

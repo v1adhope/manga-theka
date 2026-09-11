@@ -197,11 +197,11 @@ mod tests {
     use uuid::Uuid;
 
     use crate::{
+        entity::fixtures::{PRIVATE_VISIBILITY, claims, release},
         entity::{
             BookVisibility, ChapterRelease, MAX_COMMITTED_PAGES, MAX_PARTS_PER_REQUEST,
             MAX_RELEASE_ROWS, PageOrder, ReleaseAccess, Role,
         },
-        fixtures::{PRIVATE_VISIBILITY, claims, release},
     };
 
     #[test]

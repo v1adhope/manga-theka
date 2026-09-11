@@ -88,11 +88,15 @@ mod tests {
     use time::{Duration, OffsetDateTime};
 
     use crate::{
+        entity::fixtures::unfiltered_selection,
         entity::{BookSelection, BookVisibility, CreatedAtRange, Password, Timestamp},
         error::HasherError,
-        fixtures::{hasher, unfiltered_selection},
         hasher::Hasher,
     };
+
+    fn hasher() -> Hasher {
+        Hasher::new(19456, 2, 1, b"test-pepper").unwrap()
+    }
 
     #[test]
     fn a_hash_is_stable_across_runs() {

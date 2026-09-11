@@ -54,8 +54,8 @@ mod tests {
 
     use crate::{
         coder::Coder,
+        entity::fixtures::{every_sort_value, selection_hash},
         entity::{BookCursor, BookSort},
-        fixtures::{every_sort_value, selection_hash},
     };
 
     #[test]

@@ -15,6 +15,9 @@ mod session;
 mod user;
 mod visibility;
 
+#[cfg(test)]
+pub(crate) mod fixtures;
+
 #[path = "shared/bounded_vec.rs"]
 mod bounded_vec;
 #[path = "shared/email.rs"]
