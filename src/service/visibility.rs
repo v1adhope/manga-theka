@@ -1,8 +1,8 @@
 use uuid::Uuid;
 
 use crate::{
-    entity::{BookCover, Chapter, Entity, UserClaims},
-    error::ServiceError,
+    entity::{BookCover, Chapter, ChapterPage, Entity, UserClaims},
+    error::{DatabaseError, ServiceError},
     service::Service,
 };
 
@@ -145,14 +145,17 @@ impl Service {
         page_id: Uuid,
         claims: Option<&UserClaims>,
     ) -> Result<(), ServiceError> {
-        self.database
-            .get_release_access(release_id)
-            .await?
-            .ensure_content_readable(claims)?;
+        let (access, page_exists) = self
+            .database
+            .get_release_access_by_page(release_id, page_id)
+            .await?;
 
-        self.database
-            .ensure_chapter_page_exists(release_id, page_id)
-            .await
-            .map_err(Into::into)
+        access.ensure_content_readable(claims)?;
+
+        if !page_exists {
+            return Err(DatabaseError::not_found::<ChapterPage>().into());
+        }
+
+        Ok(())
     }
 }
