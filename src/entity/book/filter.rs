@@ -157,48 +157,15 @@ impl BookFilter {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use uuid::Uuid;
 
     use crate::{
         entity::{
-            BookCursor, BookFilter, BookSelection, BookSort, BookSortField, Limit, ShortHexHash,
-            Timestamp,
+            BookCursor, BookFilter, BookSelection, BookSort, BookSortField, Limit, Timestamp,
         },
-        fixtures::unfiltered_selection,
+        fixtures::{cursor_for, filter, filter_paged, short_hash, unfiltered_selection},
     };
 
-    const SELECTION_HASH: &str = "0123456789abcdef";
     const STALE_HASH: &str = "fedcba9876543210";
-
-    fn short_hash(hex: &str) -> ShortHexHash {
-        ShortHexHash::try_from(hex.to_owned()).unwrap()
-    }
-
-    fn filter(selection: BookSelection) -> BookFilter {
-        BookFilter {
-            limit: Limit::DEFAULT,
-            cursor: None,
-            selection_hash: short_hash(SELECTION_HASH),
-            selection,
-        }
-    }
-
-    fn filter_paged(selection: BookSelection, cursor: BookCursor) -> BookFilter {
-        BookFilter {
-            limit: Limit::DEFAULT,
-            cursor: Some(cursor),
-            selection_hash: short_hash(SELECTION_HASH),
-            selection,
-        }
-    }
-
-    fn cursor_for() -> BookCursor {
-        BookCursor {
-            id: Uuid::now_v7(),
-            sort: BookSort::CreatedAt(Timestamp::UNIX_EPOCH),
-            selection_hash: short_hash(SELECTION_HASH),
-        }
-    }
 
     #[rstest]
     fn a_cursor_from_the_same_filter_is_accepted(unfiltered_selection: BookSelection) {

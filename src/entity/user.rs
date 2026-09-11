@@ -198,15 +198,10 @@ impl UserClaims {
 mod tests {
     use uuid::Uuid;
 
-    use crate::entity::{MAX_USER_ROLES, Password, Role, Roles, UserClaims, Username};
-
-    fn claims(roles: &[Role]) -> UserClaims {
-        UserClaims {
-            id: Uuid::now_v7(),
-            sid: Uuid::now_v7(),
-            roles: roles.to_vec(),
-        }
-    }
+    use crate::{
+        entity::{MAX_USER_ROLES, Password, Role, Roles, Username},
+        fixtures::claims,
+    };
 
     #[test]
     fn every_role_round_trips() {
@@ -245,17 +240,17 @@ mod tests {
 
     #[test]
     fn only_moderators_and_admins_moderate() {
-        assert!(claims(&[Role::Moderator]).can_moderate());
-        assert!(claims(&[Role::Admin]).can_moderate());
-        assert!(!claims(&[Role::Reader, Role::Uploader]).can_moderate());
+        assert!(claims(Uuid::now_v7(), &[Role::Moderator]).can_moderate());
+        assert!(claims(Uuid::now_v7(), &[Role::Admin]).can_moderate());
+        assert!(!claims(Uuid::now_v7(), &[Role::Reader, Role::Uploader]).can_moderate());
     }
 
     #[test]
     fn uploaders_moderators_and_admins_are_content_writers() {
-        assert!(claims(&[Role::Uploader]).is_content_writer());
-        assert!(claims(&[Role::Moderator]).is_content_writer());
-        assert!(claims(&[Role::Admin]).is_content_writer());
-        assert!(!claims(&[Role::Reader]).is_content_writer());
+        assert!(claims(Uuid::now_v7(), &[Role::Uploader]).is_content_writer());
+        assert!(claims(Uuid::now_v7(), &[Role::Moderator]).is_content_writer());
+        assert!(claims(Uuid::now_v7(), &[Role::Admin]).is_content_writer());
+        assert!(!claims(Uuid::now_v7(), &[Role::Reader]).is_content_writer());
     }
 
     #[test]
