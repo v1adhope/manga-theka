@@ -3,7 +3,7 @@ use axum::http::StatusCode;
 use crate::helpers::fakers::{ChapterFaker, LANGUAGES};
 use crate::helpers::{RespWrapper, TestApp, assert_error, assert_stored, localization_keys};
 use fake::Fake;
-use manga_theka::entity::{Chapter, ChapterNumber};
+use manga_theka::entity::{Chapter, ChapterNumber, Timestamp};
 
 #[tokio::test]
 async fn store_chapter_with_valid_body_passes() {
@@ -38,7 +38,7 @@ async fn store_chapter_with_valid_body_passes() {
         localization_keys(chapter.localizations.as_slice())
     );
     assert!(got.updated_at.is_none());
-    assert_ne!(got.created_at, time::OffsetDateTime::UNIX_EPOCH);
+    assert_ne!(got.created_at, Timestamp::UNIX_EPOCH);
 }
 
 #[tokio::test]

@@ -1,10 +1,9 @@
 use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
 use serde::Deserialize;
-use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
-    entity::{Email, Password, User, UserClaims, Username},
+    entity::{Email, Password, Timestamp, User, UserClaims, Username},
     error::{AppError, EntityError},
     route::{StoreResp, json_data_response},
     service::Service,
@@ -18,10 +17,10 @@ pub struct RegisterReq {
     pub password: String,
 }
 
-impl TryFrom<(RegisterReq, Uuid, OffsetDateTime)> for User {
+impl TryFrom<(RegisterReq, Uuid, Timestamp)> for User {
     type Error = EntityError;
 
-    fn try_from(ctx: (RegisterReq, Uuid, OffsetDateTime)) -> Result<Self, Self::Error> {
+    fn try_from(ctx: (RegisterReq, Uuid, Timestamp)) -> Result<Self, Self::Error> {
         let (req, id, created_at) = ctx;
 
         let email = Email::try_from(req.email)?;
@@ -33,7 +32,7 @@ impl TryFrom<(RegisterReq, Uuid, OffsetDateTime)> for User {
             email,
             username,
             password,
-            created_at: created_at.into(),
+            created_at,
         })
     }
 }
@@ -43,7 +42,7 @@ pub async fn register(
     Json(req): Json<RegisterReq>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let id = Uuid::now_v7();
-    let created_at = OffsetDateTime::now_utc();
+    let created_at = Timestamp::now();
     let user: User = (req, id, created_at).try_into()?;
 
     service.register(user).await?;

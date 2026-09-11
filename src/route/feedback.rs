@@ -5,13 +5,12 @@ use axum::{
     response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
     entity::{
         Email, Feedback, FeedbackFilter, FeedbackKind, FeedbackStatus, FeedbackStatusUpdate,
-        Filter, SortOrder, Text,
+        Filter, SortOrder, Text, Timestamp,
     },
     error::{AppError, EntityError},
     route::{PaginationQuery, StoreResp, json_data_response, json_response},
@@ -37,10 +36,10 @@ pub enum FeedbackReq {
     },
 }
 
-impl TryFrom<(FeedbackReq, Uuid, OffsetDateTime)> for Feedback {
+impl TryFrom<(FeedbackReq, Uuid, Timestamp)> for Feedback {
     type Error = EntityError;
 
-    fn try_from(ctx: (FeedbackReq, Uuid, OffsetDateTime)) -> Result<Self, Self::Error> {
+    fn try_from(ctx: (FeedbackReq, Uuid, Timestamp)) -> Result<Self, Self::Error> {
         let (req, id, created_at) = ctx;
 
         let (kind, email, note, book_id) = match req {
@@ -75,7 +74,7 @@ pub async fn store_feedback(
     Json(req): Json<FeedbackReq>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let id = Uuid::now_v7();
-    let created_at = OffsetDateTime::now_utc();
+    let created_at = Timestamp::now();
     let feedback: Feedback = (req, id, created_at).try_into()?;
 
     service.store_feedback(feedback).await?;
@@ -147,8 +146,8 @@ pub struct FeedbackStatusReq {
     pub status: FeedbackStatus,
 }
 
-impl From<(FeedbackStatusReq, Uuid, OffsetDateTime)> for FeedbackStatusUpdate {
-    fn from(ctx: (FeedbackStatusReq, Uuid, OffsetDateTime)) -> Self {
+impl From<(FeedbackStatusReq, Uuid, Timestamp)> for FeedbackStatusUpdate {
+    fn from(ctx: (FeedbackStatusReq, Uuid, Timestamp)) -> Self {
         let (req, id, updated_at) = ctx;
 
         Self {
@@ -164,7 +163,7 @@ pub async fn update_feedback_status(
     Path(id): Path<Uuid>,
     Json(req): Json<FeedbackStatusReq>,
 ) -> Result<StatusCode, AppError> {
-    let update: FeedbackStatusUpdate = (req, id, OffsetDateTime::now_utc()).into();
+    let update: FeedbackStatusUpdate = (req, id, Timestamp::now()).into();
 
     service.set_feedback_status(update).await?;
 
@@ -173,11 +172,10 @@ pub async fn update_feedback_status(
 
 #[cfg(test)]
 mod tests {
-    use time::OffsetDateTime;
     use uuid::Uuid;
 
     use crate::{
-        entity::{Feedback, FeedbackKind, FeedbackStatus},
+        entity::{Feedback, FeedbackKind, FeedbackStatus, Timestamp},
         route::FeedbackReq,
     };
 
@@ -200,7 +198,7 @@ mod tests {
             ),
         ] {
             let req: FeedbackReq = serde_json::from_value(body).expect("body must parse");
-            let feedback = Feedback::try_from((req, Uuid::now_v7(), OffsetDateTime::now_utc()))
+            let feedback = Feedback::try_from((req, Uuid::now_v7(), Timestamp::now()))
                 .expect("feedback must build");
 
             assert_eq!(feedback.kind, kind);
@@ -240,8 +238,7 @@ mod tests {
         }))
         .unwrap();
 
-        let feedback =
-            Feedback::try_from((req, Uuid::now_v7(), OffsetDateTime::now_utc())).unwrap();
+        let feedback = Feedback::try_from((req, Uuid::now_v7(), Timestamp::now())).unwrap();
 
         assert_eq!(feedback.book_id, Some(book_id));
     }
@@ -253,8 +250,7 @@ mod tests {
         }))
         .unwrap();
 
-        let feedback =
-            Feedback::try_from((req, Uuid::now_v7(), OffsetDateTime::now_utc())).unwrap();
+        let feedback = Feedback::try_from((req, Uuid::now_v7(), Timestamp::now())).unwrap();
 
         assert_eq!(feedback.book_id, None);
     }
@@ -262,7 +258,7 @@ mod tests {
     #[test]
     fn server_owned_fields_come_from_the_context_not_the_body() {
         let id = Uuid::now_v7();
-        let created_at = OffsetDateTime::now_utc();
+        let created_at = Timestamp::now();
         let req: FeedbackReq = serde_json::from_value(serde_json::json!({
             "kind": "General", "email": "a@b.co", "note": "n",
         }))
@@ -293,7 +289,7 @@ mod tests {
             ),
         ] {
             let req: FeedbackReq = serde_json::from_value(body).expect("body must parse");
-            let res = Feedback::try_from((req, Uuid::now_v7(), OffsetDateTime::now_utc()));
+            let res = Feedback::try_from((req, Uuid::now_v7(), Timestamp::now()));
 
             assert!(res.is_err(), "{label} must be rejected");
         }

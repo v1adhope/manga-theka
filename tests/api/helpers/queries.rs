@@ -72,12 +72,7 @@ values($1, $2, $3, $4, $5, $6, $7);
         user
     }
 
-    pub async fn memory_insert_session(
-        &self,
-        sub: Uuid,
-        sid: Uuid,
-        created_at: time::OffsetDateTime,
-    ) {
+    pub async fn memory_insert_session(&self, sub: Uuid, sid: Uuid, created_at: Timestamp) {
         let session = Session {
             sid,
             jti: self
@@ -86,8 +81,8 @@ values($1, $2, $3, $4, $5, $6, $7);
                 .expect("keyed jti hash"),
             ua: None,
             ip: None,
-            created_at: created_at.into(),
-            updated_at: created_at.into(),
+            created_at,
+            updated_at: created_at,
         };
 
         self.memory
@@ -221,9 +216,9 @@ values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15);
             b.publication_demographic.as_ref() as _,
             b.visibility.as_ref() as _,
             b.note.as_ref().map(AsRef::as_ref) as Option<&str>,
-            b.submitted_at,
-            b.updated_at,
-            b.created_at,
+            b.submitted_at.map(Timestamp::into_inner),
+            b.updated_at.map(Timestamp::into_inner),
+            b.created_at.into_inner(),
             b.created_by
         )
         .execute(&self.pool)
@@ -298,7 +293,7 @@ from unnest($2::uuid[], $3::text[]) as title(language_id, name);
             creator_ids.push(c.id);
             creator_first_names.push(c.first_name.as_ref().to_owned());
             creator_last_names.push(c.last_name.as_ref().to_owned());
-            creator_created_ats.push(c.created_at);
+            creator_created_ats.push(c.created_at.into_inner());
             for role in &c.roles {
                 credit_creator_ids.push(c.id);
                 credit_roles.push(role.as_ref().to_owned());
@@ -464,7 +459,7 @@ order by c.id;
                 .into_iter()
                 .map(|role| role.parse().expect("stored creator role must be valid"))
                 .collect(),
-            created_at: r.created_at,
+            created_at: r.created_at.into(),
         })
         .collect();
 
@@ -504,9 +499,9 @@ order by c.id;
                 .map(Text::try_from)
                 .transpose()
                 .expect("stored note must be valid"),
-            submitted_at: row.submitted_at,
-            updated_at: row.updated_at,
-            created_at: row.created_at,
+            submitted_at: row.submitted_at.map(Into::into),
+            updated_at: row.updated_at.map(Into::into),
+            created_at: row.created_at.into(),
             created_by: row.created_by,
         }
     }
@@ -585,8 +580,8 @@ values($1, $2, $3, $4, $5, $6, $7);
             c.number.as_f32(),
             c.name.as_ref().map(AsRef::as_ref),
             c.volume.map(ChapterVolume::as_i16),
-            c.updated_at,
-            c.created_at
+            c.updated_at.map(Timestamp::into_inner),
+            c.created_at.into_inner()
         )
         .execute(&self.pool)
         .await
@@ -679,8 +674,8 @@ order by language_id;
             localizations: localizations
                 .try_into()
                 .expect("too many localizations in test fixture"),
-            updated_at: row.updated_at,
-            created_at: row.created_at,
+            updated_at: row.updated_at.map(Into::into),
+            created_at: row.created_at.into(),
         }
     }
 
@@ -715,7 +710,7 @@ values($1, $2, $3, $4);
             c.id,
             c.first_name.as_ref(),
             c.last_name.as_ref(),
-            c.created_at
+            c.created_at.into_inner()
         )
         .execute(&self.pool)
         .await
@@ -749,8 +744,8 @@ values($1, $2, $3, $4, $5, $6, $7, $8);
             f.email.as_ref(),
             f.note.as_ref(),
             f.book_id,
-            f.updated_at,
-            f.created_at
+            f.updated_at.map(Timestamp::into_inner),
+            f.created_at.into_inner()
         )
         .execute(&self.pool)
         .await
@@ -777,8 +772,8 @@ where f.id = $1;
             email: Email::try_from(row.email).unwrap(),
             note: Text::try_from(row.note).unwrap(),
             book_id: row.book_id,
-            updated_at: row.updated_at,
-            created_at: row.created_at,
+            updated_at: row.updated_at.map(Into::into),
+            created_at: row.created_at.into(),
         }
     }
 

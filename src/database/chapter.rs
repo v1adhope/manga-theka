@@ -8,7 +8,7 @@ use crate::{
     database::{Database, Invariant},
     entity::{
         Chapter, ChapterLocalization, ChapterLocalizations, ChapterName, ChapterNumber,
-        ChapterVolume, Filter,
+        ChapterVolume, Filter, Timestamp,
     },
     error::{DatabaseError, LogInternal},
 };
@@ -77,8 +77,8 @@ impl TryFrom<ChapterWithRelations> for Chapter {
             name,
             volume,
             localizations,
-            updated_at: row.updated_at,
-            created_at: row.created_at,
+            updated_at: row.updated_at.map(Into::into),
+            created_at: row.created_at.into(),
         })
     }
 }
@@ -101,8 +101,8 @@ impl Database {
             item.number.as_f32(),
             item.name.as_ref().map(AsRef::as_ref),
             item.volume.map(ChapterVolume::as_i16),
-            item.updated_at,
-            item.created_at,
+            item.updated_at.map(Timestamp::into_inner),
+            item.created_at.into_inner(),
         )
         .execute(&mut *tx)
         .await?;
@@ -129,7 +129,7 @@ impl Database {
             item.number.as_f32(),
             item.name.as_ref().map(AsRef::as_ref),
             item.volume.map(ChapterVolume::as_i16),
-            item.updated_at,
+            item.updated_at.map(Timestamp::into_inner),
         )
         .fetch_optional(&mut *tx)
         .await?;

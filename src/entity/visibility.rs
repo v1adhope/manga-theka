@@ -1,10 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
-use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
-    entity::{BookQuery, Entity, Text, UserClaims},
+    entity::{BookQuery, Entity, Text, Timestamp, UserClaims},
     error::EntityError,
 };
 
@@ -129,7 +128,7 @@ pub struct VisibilityTransition {
     pub id: Uuid,
     pub visibility: BookVisibility,
     pub note: Option<Text>,
-    pub now: OffsetDateTime,
+    pub now: Timestamp,
 }
 
 #[derive(Debug)]
@@ -138,8 +137,8 @@ pub struct BookVisibilityUpdate {
     pub from: BookVisibility,
     pub to: BookVisibility,
     pub note: Option<Text>,
-    pub submitted_at: Option<OffsetDateTime>,
-    pub updated_at: OffsetDateTime,
+    pub submitted_at: Option<Timestamp>,
+    pub updated_at: Timestamp,
 }
 
 impl TryFrom<(BookVisibility, VisibilityTransition)> for BookVisibilityUpdate {
@@ -190,12 +189,11 @@ impl TryFrom<(BookVisibility, VisibilityTransition)> for BookVisibilityUpdate {
 
 #[cfg(test)]
 mod tests {
-    use time::OffsetDateTime;
     use uuid::Uuid;
 
     use crate::entity::{
         Book, BookAccess, BookVisibility, BookVisibilityUpdate, Role, SUBMITTED_NOTE, Text,
-        UserClaims, VisibilityTransition,
+        Timestamp, UserClaims, VisibilityTransition,
     };
 
     const EVERY_VISIBILITY: [BookVisibility; 5] = [
@@ -232,7 +230,7 @@ mod tests {
             id: Uuid::now_v7(),
             visibility,
             note: note.map(|n| Text::try_from(n.to_owned()).unwrap()),
-            now: OffsetDateTime::now_utc(),
+            now: Timestamp::now(),
         }
     }
 
@@ -361,7 +359,7 @@ mod tests {
 
     #[test]
     fn every_transition_stamps_the_update_time() {
-        let now = OffsetDateTime::now_utc();
+        let now = Timestamp::now();
         let update = BookVisibilityUpdate::try_from((
             BookVisibility::Draft,
             VisibilityTransition {

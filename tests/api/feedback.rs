@@ -1,10 +1,9 @@
 use axum::http::StatusCode;
-use time::OffsetDateTime;
 
 use crate::helpers::fakers::FeedbackFaker;
 use crate::helpers::{RespWrapper, TestApp, assert_error, assert_stored};
 use fake::Fake;
-use manga_theka::entity::{Feedback, FeedbackKind, FeedbackStatus, Role};
+use manga_theka::entity::{Feedback, FeedbackKind, FeedbackStatus, Role, Timestamp};
 
 fn general_body() -> serde_json::Value {
     serde_json::json!({
@@ -28,7 +27,7 @@ async fn store_general_feedback_with_valid_body_passes() {
     assert_eq!(stored.email.as_ref(), "reader@example.com");
     assert_eq!(stored.book_id, None);
     assert_eq!(stored.updated_at, None);
-    assert_ne!(stored.created_at, OffsetDateTime::UNIX_EPOCH);
+    assert_ne!(stored.created_at, Timestamp::UNIX_EPOCH);
 }
 
 #[tokio::test]

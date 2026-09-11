@@ -1,5 +1,5 @@
 use manga_theka::entity::{
-    AlternativeTitle, BookLink, BookQuery, ChapterLocalization, CreatorQuery, Label,
+    AlternativeTitle, BookLink, BookQuery, ChapterLocalization, CreatorQuery, Label, Timestamp,
 };
 use uuid::Uuid;
 
@@ -28,12 +28,13 @@ pub fn label_keys(labels: &[Label]) -> Vec<(Uuid, &str, &str)> {
     sorted_keys(labels, |l| (l.id, l.name.as_str(), l.kind.as_ref()))
 }
 
-pub fn day(n: i64) -> time::OffsetDateTime {
-    time::OffsetDateTime::UNIX_EPOCH + time::Duration::days(n)
+pub fn day(n: i64) -> Timestamp {
+    Timestamp::UNIX_EPOCH + time::Duration::days(n)
 }
 
-pub fn rfc3339(at: time::OffsetDateTime) -> String {
-    at.format(&time::format_description::well_known::Rfc3339)
+pub fn rfc3339(at: Timestamp) -> String {
+    at.into_inner()
+        .format(&time::format_description::well_known::Rfc3339)
         .expect("a fixture timestamp must render")
 }
 

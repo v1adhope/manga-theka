@@ -9,7 +9,7 @@ use crate::helpers::{
     title_keys,
 };
 use fake::Fake;
-use manga_theka::entity::{BookQuery, BookVisibility, Creator, Label, Role, UserQuery};
+use manga_theka::entity::{BookQuery, BookVisibility, Creator, Label, Role, Timestamp, UserQuery};
 
 #[tokio::test]
 async fn store_book_with_valid_body_passes() {
@@ -86,7 +86,7 @@ async fn store_book_with_valid_body_passes() {
         )]
     );
     assert!(got.updated_at.is_none());
-    assert_ne!(got.created_at, time::OffsetDateTime::UNIX_EPOCH);
+    assert_ne!(got.created_at, Timestamp::UNIX_EPOCH);
     assert_eq!(got.created_by, user.id);
 }
 

@@ -6,11 +6,10 @@ use axum::{
 };
 use axum_extra::extract::CookieJar;
 use serde::Deserialize;
-use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
-    entity::{Email, LoginForm, Password, UserClaims},
+    entity::{Email, LoginForm, Password, Timestamp, UserClaims},
     error::{AppError, EntityError, RouteError},
     route::{
         cookie::{REFRESH_COOKIE, clear_refresh_cookie},
@@ -27,10 +26,10 @@ pub struct LoginFormReq {
     pub password: String,
 }
 
-impl TryFrom<(LoginFormReq, HeaderMap, OffsetDateTime)> for LoginForm {
+impl TryFrom<(LoginFormReq, HeaderMap, Timestamp)> for LoginForm {
     type Error = EntityError;
 
-    fn try_from(ctx: (LoginFormReq, HeaderMap, OffsetDateTime)) -> Result<Self, Self::Error> {
+    fn try_from(ctx: (LoginFormReq, HeaderMap, Timestamp)) -> Result<Self, Self::Error> {
         let (req, headers, now) = ctx;
 
         let email = Email::try_from(req.email)?;
@@ -53,7 +52,7 @@ pub async fn login(
     headers: HeaderMap,
     Json(req): Json<LoginFormReq>,
 ) -> Result<(StatusCode, CookieJar, impl IntoResponse), AppError> {
-    let now = OffsetDateTime::now_utc();
+    let now = Timestamp::now();
     let form: LoginForm = (req, headers, now).try_into()?;
 
     let tokens = service.login(form).await?;
@@ -71,7 +70,7 @@ pub async fn refresh(
         .get(REFRESH_COOKIE)
         .map(|c| c.value().to_owned())
         .ok_or(RouteError::InvalidCredentials)?;
-    let now = OffsetDateTime::now_utc();
+    let now = Timestamp::now();
 
     let tokens = service.refresh_session(&token, now).await?;
 
@@ -93,7 +92,7 @@ pub async fn revoke_all_sessions(
     jar: CookieJar,
 ) -> Result<(StatusCode, CookieJar), AppError> {
     service
-        .revoke_all_sessions(claims.id, claims.sid, OffsetDateTime::now_utc())
+        .revoke_all_sessions(claims.id, claims.sid, Timestamp::now())
         .await?;
 
     Ok((StatusCode::NO_CONTENT, clear_refresh_cookie(jar)))
@@ -118,7 +117,7 @@ pub async fn revoke_session(
     Path(sid): Path<Uuid>,
 ) -> Result<(StatusCode, CookieJar), AppError> {
     service
-        .revoke_session(claims.id, claims.sid, sid, OffsetDateTime::now_utc())
+        .revoke_session(claims.id, claims.sid, sid, Timestamp::now())
         .await?;
 
     let jar = clear_cookie_for_own_session(jar, sid, claims.sid);

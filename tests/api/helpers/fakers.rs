@@ -12,9 +12,8 @@ use manga_theka::entity::{
     BookVisibility, Chapter, ChapterLocalization, ChapterName, ChapterNumber, ChapterVolume,
     ContentRating, Creator, CreatorQuery, CreatorRole, Email, Feedback, FeedbackKind,
     FeedbackStatus, Label, LabelKind, Language, LinkUrl, Name, PublicationDemographic, Role, Text,
-    UserQuery, Username,
+    Timestamp, UserQuery, Username,
 };
-use time::OffsetDateTime;
 use uuid::{Uuid, uuid};
 
 pub const COVER_JPG: &[u8] = include_bytes!("../fixtures/cover.jpg");
@@ -185,8 +184,8 @@ impl Dummy<UserFaker> for UserQuery {
             roles: config.roles.clone().try_into().unwrap(),
             verified_at: config
                 .verified
-                .then(|| (OffsetDateTime::now_utc() - time::Duration::hours(1)).into()),
-            created_at: OffsetDateTime::now_utc().into(),
+                .then(|| Timestamp::now() - time::Duration::hours(1)),
+            created_at: Timestamp::now(),
         }
     }
 }
@@ -199,7 +198,7 @@ impl Dummy<CreatorFaker> for Creator {
             id: Uuid::now_v7(),
             first_name: NameFaker.fake_with_rng(rng),
             last_name: NameFaker.fake_with_rng(rng),
-            created_at: OffsetDateTime::now_utc(),
+            created_at: Timestamp::now(),
         }
     }
 }
@@ -222,7 +221,7 @@ impl Dummy<CreatorQueryFaker> for CreatorQuery {
             first_name: NameFaker.fake_with_rng(rng),
             last_name: NameFaker.fake_with_rng(rng),
             roles,
-            created_at: OffsetDateTime::now_utc(),
+            created_at: Timestamp::now(),
         }
     }
 }
@@ -330,7 +329,7 @@ impl Dummy<FeedbackFaker> for Feedback {
             note: TextFaker.fake_with_rng(rng),
             book_id: config.book_id,
             updated_at: None,
-            created_at: OffsetDateTime::UNIX_EPOCH,
+            created_at: Timestamp::UNIX_EPOCH,
         }
     }
 }
@@ -422,7 +421,7 @@ pub struct BookFaker {
     pub publication_language: Option<Language>,
     pub publication_demographic: Option<PublicationDemographic>,
     pub publication_year: Option<i16>,
-    pub created_at: Option<OffsetDateTime>,
+    pub created_at: Option<Timestamp>,
     pub created_by: Option<Uuid>,
 }
 
@@ -516,7 +515,7 @@ impl Dummy<BookFaker> for BookQuery {
             note: None,
             submitted_at: None,
             updated_at: None,
-            created_at: config.created_at.unwrap_or(OffsetDateTime::UNIX_EPOCH),
+            created_at: config.created_at.unwrap_or(Timestamp::UNIX_EPOCH),
             created_by: config.created_by.unwrap_or_else(Uuid::now_v7),
         }
     }
@@ -586,7 +585,7 @@ impl Dummy<ChapterFaker> for Chapter {
                 .try_into()
                 .expect("too many localizations in faker"),
             updated_at: None,
-            created_at: OffsetDateTime::UNIX_EPOCH,
+            created_at: Timestamp::UNIX_EPOCH,
         }
     }
 }

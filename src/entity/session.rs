@@ -1,7 +1,7 @@
 use std::net::IpAddr;
 
 use serde::{Deserialize, Serialize};
-use time::{Duration, OffsetDateTime};
+use time::Duration;
 use uuid::Uuid;
 
 use crate::{
@@ -15,7 +15,7 @@ pub struct LoginForm {
     pub password: Password,
     pub ua: Option<ShortText>,
     pub ip: Option<IpAddr>,
-    pub now: OffsetDateTime,
+    pub now: Timestamp,
 }
 
 pub struct Token {
@@ -43,10 +43,10 @@ impl Entity for Session {
 }
 
 impl Session {
-    pub fn ensure_revoker(&self, now: OffsetDateTime) -> Result<(), EntityError> {
+    pub fn ensure_revoker(&self, now: Timestamp) -> Result<(), EntityError> {
         const MIN_REVOKER_AGE: Duration = Duration::hours(24);
 
-        if now - self.created_at.into_inner() < MIN_REVOKER_AGE {
+        if now - self.created_at < MIN_REVOKER_AGE {
             return Err(EntityError::SessionTooNewToRevoke);
         }
 
@@ -78,21 +78,21 @@ impl From<Session> for SessionQuery {
 
 #[cfg(test)]
 mod tests {
-    use time::{Duration, OffsetDateTime};
+    use time::Duration;
     use uuid::Uuid;
 
-    use crate::entity::{HexHash, Session, SessionQuery};
+    use crate::entity::{HexHash, Session, SessionQuery, Timestamp};
 
     fn session(age: Duration) -> Session {
-        let now = OffsetDateTime::now_utc();
+        let now = Timestamp::now();
 
         Session {
             sid: Uuid::now_v7(),
             jti: HexHash::try_from("a".repeat(64)).unwrap(),
             ua: None,
             ip: None,
-            created_at: (now - age).into(),
-            updated_at: (now - age).into(),
+            created_at: now - age,
+            updated_at: now - age,
         }
     }
 
@@ -100,14 +100,14 @@ mod tests {
     fn a_session_older_than_24h_may_revoke() {
         let s = session(Duration::hours(24) + Duration::seconds(1));
 
-        assert!(s.ensure_revoker(OffsetDateTime::now_utc()).is_ok());
+        assert!(s.ensure_revoker(Timestamp::now()).is_ok());
     }
 
     #[test]
     fn a_session_younger_than_24h_may_not_revoke() {
         let s = session(Duration::hours(23));
 
-        assert!(s.ensure_revoker(OffsetDateTime::now_utc()).is_err());
+        assert!(s.ensure_revoker(Timestamp::now()).is_err());
     }
 
     #[test]

@@ -1,10 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
-use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
-    entity::{Entity, Name},
+    entity::{Entity, Name, Timestamp},
     error::EntityError,
 };
 
@@ -41,8 +40,7 @@ pub struct Creator {
     pub id: Uuid,
     pub first_name: Name,
     pub last_name: Name,
-    #[serde(with = "time::serde::rfc3339")]
-    pub created_at: OffsetDateTime,
+    pub created_at: Timestamp,
 }
 
 impl Entity for Creator {
@@ -56,6 +54,5 @@ pub struct CreatorQuery {
     pub first_name: Name,
     pub last_name: Name,
     pub roles: Vec<CreatorRole>,
-    #[serde(with = "time::serde::rfc3339")]
-    pub created_at: OffsetDateTime,
+    pub created_at: Timestamp,
 }
