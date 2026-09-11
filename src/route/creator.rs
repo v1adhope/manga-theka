@@ -5,11 +5,10 @@ use axum::{
     response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
-    entity::{Creator, CreatorQuery, Filter, Name},
+    entity::{Creator, CreatorQuery, Filter, Name, Timestamp},
     error::{AppError, EntityError},
     route::{PaginationQuery, StoreResp, json_data_response, json_response},
     service::Service,
@@ -22,10 +21,10 @@ pub struct CreatorReq {
     pub last_name: String,
 }
 
-impl TryFrom<(CreatorReq, Uuid, OffsetDateTime)> for Creator {
+impl TryFrom<(CreatorReq, Uuid, Timestamp)> for Creator {
     type Error = EntityError;
 
-    fn try_from(ctx: (CreatorReq, Uuid, OffsetDateTime)) -> Result<Self, Self::Error> {
+    fn try_from(ctx: (CreatorReq, Uuid, Timestamp)) -> Result<Self, Self::Error> {
         let (req, id, created_at) = ctx;
 
         let first_name = Name::try_from(req.first_name)?;
@@ -47,7 +46,7 @@ pub async fn store_creator(
     Json(req): Json<CreatorReq>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let id = Uuid::now_v7();
-    let created_at = OffsetDateTime::now_utc();
+    let created_at = Timestamp::now();
     let creator: Creator = (req, id, created_at).try_into()?;
 
     service.store_creator(creator).await?;
@@ -60,7 +59,7 @@ pub async fn update_creator(
     Path(id): Path<Uuid>,
     Json(req): Json<CreatorReq>,
 ) -> Result<StatusCode, AppError> {
-    let creator: Creator = (req, id, OffsetDateTime::UNIX_EPOCH).try_into()?;
+    let creator: Creator = (req, id, Timestamp::UNIX_EPOCH).try_into()?;
     service.update_creator(creator).await?;
     Ok(StatusCode::NO_CONTENT)
 }

@@ -5,8 +5,8 @@ use axum::http::{Request, StatusCode, header};
 use fake::Fake;
 use fake::faker::internet::en::{IP, UserAgent};
 use http_body_util::BodyExt;
-use manga_theka::entity::{Chapter, Role, Session, SessionQuery, ShortText};
-use time::{Duration, OffsetDateTime};
+use manga_theka::entity::{Chapter, Role, Session, SessionQuery, ShortText, Timestamp};
+use time::Duration;
 use uuid::Uuid;
 
 use crate::helpers::fakers::ChapterFaker;
@@ -110,7 +110,7 @@ async fn refresh_succeeds_even_with_a_stale_access_token_still_attached() {
             Uuid::now_v7(),
             Uuid::now_v7(),
             &[Role::Reader],
-            OffsetDateTime::now_utc() - Duration::hours(1),
+            Timestamp::now() - Duration::hours(1),
         )
         .unwrap()
         .value;
@@ -148,7 +148,7 @@ async fn refresh_with_an_expired_token_returns_401() {
     let sub = Uuid::now_v7();
     let sid = Uuid::now_v7();
     let jti = Uuid::now_v7();
-    let long_ago = OffsetDateTime::now_utc() - Duration::days(40);
+    let long_ago = Timestamp::now() - Duration::days(40);
 
     app.memory
         .put_session(
@@ -158,8 +158,8 @@ async fn refresh_with_an_expired_token_returns_401() {
                 jti: app.hasher.compute_keyed_hex_hash(jti).unwrap(),
                 ua: None,
                 ip: None,
-                created_at: long_ago.into(),
-                updated_at: long_ago.into(),
+                created_at: long_ago,
+                updated_at: long_ago,
             },
         )
         .await
@@ -199,7 +199,7 @@ async fn a_refresh_token_presented_as_an_access_token_is_rejected() {
             Uuid::now_v7(),
             Uuid::now_v7(),
             Uuid::now_v7(),
-            OffsetDateTime::now_utc(),
+            Timestamp::now(),
         )
         .unwrap()
         .value;
@@ -220,8 +220,8 @@ async fn list_my_sessions_returns_every_live_session_with_the_full_read_shape() 
     let bare = Uuid::now_v7();
     let expected_ua: String = UserAgent().fake();
     let expected_ip: IpAddr = IP().fake();
-    let created_at = OffsetDateTime::now_utc() - Duration::hours(2);
-    let updated_at = OffsetDateTime::now_utc() - Duration::minutes(5);
+    let created_at = Timestamp::now() - Duration::hours(2);
+    let updated_at = Timestamp::now() - Duration::minutes(5);
 
     app.memory
         .put_session(
@@ -231,14 +231,13 @@ async fn list_my_sessions_returns_every_live_session_with_the_full_read_shape() 
                 jti: app.hasher.compute_keyed_hex_hash(Uuid::now_v7()).unwrap(),
                 ua: Some(ShortText::try_from(expected_ua.clone()).unwrap()),
                 ip: Some(expected_ip),
-                created_at: created_at.into(),
-                updated_at: updated_at.into(),
+                created_at,
+                updated_at,
             },
         )
         .await
         .unwrap();
-    app.memory_insert_session(sub, bare, OffsetDateTime::now_utc())
-        .await;
+    app.memory_insert_session(sub, bare, Timestamp::now()).await;
 
     let req = Request::get("/sessions/me")
         .header(
@@ -264,8 +263,8 @@ async fn list_my_sessions_returns_every_live_session_with_the_full_read_shape() 
         Some(expected_ua.as_str())
     );
     assert_eq!(row.ip, Some(expected_ip));
-    assert_eq!(row.created_at.into_inner(), created_at);
-    assert_eq!(row.updated_at.into_inner(), updated_at);
+    assert_eq!(row.created_at, created_at);
+    assert_eq!(row.updated_at, updated_at);
 }
 
 #[tokio::test]
@@ -273,8 +272,7 @@ async fn deleting_the_current_session_bypasses_the_24h_rule() {
     let app = TestApp::new().await;
     let sub = Uuid::now_v7();
     let sid = Uuid::now_v7();
-    app.memory_insert_session(sub, sid, OffsetDateTime::now_utc())
-        .await;
+    app.memory_insert_session(sub, sid, Timestamp::now()).await;
 
     let resp = app
         .delete_authed_as("/sessions/me/current", sub, sid, &[Role::Reader])
@@ -289,16 +287,12 @@ async fn deleting_a_session_owned_by_another_user_returns_404() {
     let app = TestApp::new().await;
     let sub = Uuid::now_v7();
     let current = Uuid::now_v7();
-    app.memory_insert_session(
-        sub,
-        current,
-        OffsetDateTime::now_utc() - Duration::hours(48),
-    )
-    .await;
+    app.memory_insert_session(sub, current, Timestamp::now() - Duration::hours(48))
+        .await;
 
     let other_sub = Uuid::now_v7();
     let other_sid = Uuid::now_v7();
-    app.memory_insert_session(other_sub, other_sid, OffsetDateTime::now_utc())
+    app.memory_insert_session(other_sub, other_sid, Timestamp::now())
         .await;
 
     let resp = app
@@ -324,9 +318,9 @@ async fn deleting_another_session_from_a_fresh_session_returns_409() {
     let sub = Uuid::now_v7();
     let current = Uuid::now_v7();
     let target = Uuid::now_v7();
-    app.memory_insert_session(sub, current, OffsetDateTime::now_utc())
+    app.memory_insert_session(sub, current, Timestamp::now())
         .await;
-    app.memory_insert_session(sub, target, OffsetDateTime::now_utc())
+    app.memory_insert_session(sub, target, Timestamp::now())
         .await;
 
     let resp = app
@@ -351,13 +345,9 @@ async fn deleting_another_session_from_an_aged_session_passes() {
     let sub = Uuid::now_v7();
     let current = Uuid::now_v7();
     let target = Uuid::now_v7();
-    app.memory_insert_session(
-        sub,
-        current,
-        OffsetDateTime::now_utc() - Duration::hours(48),
-    )
-    .await;
-    app.memory_insert_session(sub, target, OffsetDateTime::now_utc())
+    app.memory_insert_session(sub, current, Timestamp::now() - Duration::hours(48))
+        .await;
+    app.memory_insert_session(sub, target, Timestamp::now())
         .await;
 
     let resp = app
@@ -378,8 +368,7 @@ async fn deleting_all_sessions_from_a_fresh_session_returns_409() {
     let app = TestApp::new().await;
     let sub = Uuid::now_v7();
     let sid = Uuid::now_v7();
-    app.memory_insert_session(sub, sid, OffsetDateTime::now_utc())
-        .await;
+    app.memory_insert_session(sub, sid, Timestamp::now()).await;
 
     let resp = app
         .delete_authed_as("/sessions/me/all", sub, sid, &[Role::Reader])
@@ -397,9 +386,9 @@ async fn deleting_all_sessions_from_an_aged_session_passes() {
     let app = TestApp::new().await;
     let sub = Uuid::now_v7();
     let sid = Uuid::now_v7();
-    app.memory_insert_session(sub, sid, OffsetDateTime::now_utc() - Duration::hours(48))
+    app.memory_insert_session(sub, sid, Timestamp::now() - Duration::hours(48))
         .await;
-    app.memory_insert_session(sub, Uuid::now_v7(), OffsetDateTime::now_utc())
+    app.memory_insert_session(sub, Uuid::now_v7(), Timestamp::now())
         .await;
 
     let resp = app

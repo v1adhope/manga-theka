@@ -208,9 +208,9 @@ impl TryFrom<BookWithRelations> for BookQuery {
             creators,
             visibility,
             note,
-            submitted_at: row.submitted_at,
-            updated_at: row.updated_at,
-            created_at: row.created_at,
+            submitted_at: row.submitted_at.map(Into::into),
+            updated_at: row.updated_at.map(Into::into),
+            created_at: row.created_at.into(),
             created_by: row.created_by,
         })
     }
@@ -321,8 +321,8 @@ impl Database {
             item.kind.as_ref(),
             item.publication_language_id,
             item.publication_demographic.as_ref(),
-            item.updated_at,
-            item.created_at,
+            item.updated_at.map(Timestamp::into_inner),
+            item.created_at.into_inner(),
             item.created_by,
         )
         .execute(&mut *tx)
@@ -355,7 +355,7 @@ impl Database {
             item.kind.as_ref(),
             item.publication_language_id,
             item.publication_demographic.as_ref(),
-            item.updated_at,
+            item.updated_at.map(Timestamp::into_inner),
         )
         .fetch_optional(&mut *tx)
         .await?;

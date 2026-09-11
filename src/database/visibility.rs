@@ -5,6 +5,7 @@ use crate::{
     database::{Database, Invariant},
     entity::{
         Book, BookAccess, BookCover, BookVisibilityUpdate, Chapter, ChapterRelease, ReleaseAccess,
+        Timestamp,
     },
     error::{DatabaseError, LogInternal},
 };
@@ -36,8 +37,8 @@ impl Database {
             item.id,
             item.to.as_ref(),
             item.note.as_ref().map(AsRef::as_ref),
-            item.submitted_at,
-            item.updated_at,
+            item.submitted_at.map(Timestamp::into_inner),
+            item.updated_at.into_inner(),
             item.from.as_ref(),
         )
         .fetch_optional(&self.pool)

@@ -38,8 +38,8 @@ impl TryFrom<FeedbackRow> for Feedback {
             email,
             note,
             book_id: row.book_id,
-            updated_at: row.updated_at,
-            created_at: row.created_at,
+            updated_at: row.updated_at.map(Into::into),
+            created_at: row.created_at.into(),
         })
     }
 }
@@ -55,7 +55,7 @@ impl Database {
             item.email.as_ref(),
             item.note.as_ref(),
             item.book_id,
-            item.created_at
+            item.created_at.into_inner()
         )
         .execute(&self.pool)
         .await
@@ -154,7 +154,7 @@ impl Database {
             "queries/set_feedback_status.sql",
             item.id,
             item.status.as_ref(),
-            item.updated_at
+            item.updated_at.into_inner()
         )
         .fetch_optional(&self.pool)
         .await

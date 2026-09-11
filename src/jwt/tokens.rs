@@ -1,12 +1,11 @@
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
     config,
-    entity::{Role, Token},
+    entity::{Role, Timestamp, Token},
     error::JwtError,
 };
 
@@ -59,7 +58,7 @@ impl Jwt {
         sub: Uuid,
         sid: Uuid,
         roles: &[Role],
-        now: OffsetDateTime,
+        now: Timestamp,
     ) -> Result<Token, JwtError> {
         let iat = now.unix_timestamp();
         let claims = AccessClaims {
@@ -85,7 +84,7 @@ impl Jwt {
         sub: Uuid,
         sid: Uuid,
         jti: Uuid,
-        now: OffsetDateTime,
+        now: Timestamp,
     ) -> Result<Token, JwtError> {
         let iat = now.unix_timestamp();
         let claims = RefreshClaims {
@@ -119,10 +118,13 @@ impl Jwt {
 mod tests {
     use std::sync::atomic::{AtomicU32, Ordering};
 
-    use time::{Duration, OffsetDateTime};
+    use time::Duration;
     use uuid::Uuid;
 
-    use crate::{config, entity::Role};
+    use crate::{
+        config,
+        entity::{Role, Timestamp},
+    };
 
     use super::Jwt;
 
@@ -179,7 +181,7 @@ mod tests {
         let jwt = jwt();
         let sub = Uuid::now_v7();
         let sid = Uuid::now_v7();
-        let now = OffsetDateTime::now_utc();
+        let now = Timestamp::now();
 
         let token = jwt
             .issue_access(sub, sid, &[Role::Reader, Role::Admin], now)
@@ -202,7 +204,7 @@ mod tests {
         let sub = Uuid::now_v7();
         let sid = Uuid::now_v7();
         let jti = Uuid::now_v7();
-        let now = OffsetDateTime::now_utc();
+        let now = Timestamp::now();
 
         let token = jwt.issue_refresh(sub, sid, jti, now).unwrap();
         assert_eq!(token.ttl, REFRESH_TTL);
@@ -221,12 +223,7 @@ mod tests {
     fn an_access_token_with_no_roles_round_trips() {
         let jwt = jwt();
         let token = jwt
-            .issue_access(
-                Uuid::now_v7(),
-                Uuid::now_v7(),
-                &[],
-                OffsetDateTime::now_utc(),
-            )
+            .issue_access(Uuid::now_v7(), Uuid::now_v7(), &[], Timestamp::now())
             .unwrap();
 
         assert!(jwt.verify_access(&token.value).unwrap().roles.is_empty());
@@ -240,7 +237,7 @@ mod tests {
                 Uuid::now_v7(),
                 Uuid::now_v7(),
                 &[Role::Reader],
-                OffsetDateTime::now_utc(),
+                Timestamp::now(),
             )
             .unwrap();
 
@@ -255,7 +252,7 @@ mod tests {
                 Uuid::now_v7(),
                 Uuid::now_v7(),
                 Uuid::now_v7(),
-                OffsetDateTime::now_utc(),
+                Timestamp::now(),
             )
             .unwrap();
 
@@ -265,7 +262,7 @@ mod tests {
     #[test]
     fn an_expired_access_token_is_rejected() {
         let jwt = jwt();
-        let long_ago = OffsetDateTime::now_utc() - Duration::hours(2);
+        let long_ago = Timestamp::now() - Duration::hours(2);
         let token = jwt
             .issue_access(Uuid::now_v7(), Uuid::now_v7(), &[Role::Reader], long_ago)
             .unwrap();
@@ -282,7 +279,7 @@ mod tests {
                 Uuid::now_v7(),
                 Uuid::now_v7(),
                 &[Role::Reader],
-                OffsetDateTime::now_utc(),
+                Timestamp::now(),
             )
             .unwrap();
 
@@ -297,7 +294,7 @@ mod tests {
                 Uuid::now_v7(),
                 Uuid::now_v7(),
                 &[Role::Reader],
-                OffsetDateTime::now_utc(),
+                Timestamp::now(),
             )
             .unwrap();
 

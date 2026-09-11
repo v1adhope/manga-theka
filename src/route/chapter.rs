@@ -5,13 +5,12 @@ use axum::{
     response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
     entity::{
         Chapter, ChapterLocalization, ChapterLocalizations, ChapterName, ChapterNumber,
-        ChapterVolume, Filter, UserClaims,
+        ChapterVolume, Filter, Timestamp, UserClaims,
     },
     error::{AppError, EntityError},
     route::{PaginationQuery, StoreResp, json_data_response, json_response},
@@ -39,8 +38,8 @@ struct ChapterWithRelations {
     req: ChapterReq,
     id: Uuid,
     book_id: Uuid,
-    updated_at: Option<OffsetDateTime>,
-    created_at: OffsetDateTime,
+    updated_at: Option<Timestamp>,
+    created_at: Timestamp,
 }
 
 impl TryFrom<ChapterWithRelations> for Chapter {
@@ -94,7 +93,7 @@ pub async fn store_chapter(
         id,
         book_id,
         updated_at: None,
-        created_at: OffsetDateTime::now_utc(),
+        created_at: Timestamp::now(),
     }
     .try_into()?;
 
@@ -112,8 +111,8 @@ pub async fn update_chapter(
         req,
         id,
         book_id: Uuid::nil(),
-        updated_at: Some(OffsetDateTime::now_utc()),
-        created_at: OffsetDateTime::UNIX_EPOCH,
+        updated_at: Some(Timestamp::now()),
+        created_at: Timestamp::UNIX_EPOCH,
     }
     .try_into()?;
 

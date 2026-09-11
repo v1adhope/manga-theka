@@ -2,11 +2,10 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
-    entity::{Bounded, BoundedVec, Entity, validate_name},
+    entity::{Bounded, BoundedVec, Entity, Timestamp, validate_name},
     error::EntityError,
 };
 
@@ -93,10 +92,8 @@ pub struct Chapter {
     pub name: Option<ChapterName>,
     pub volume: Option<ChapterVolume>,
     pub localizations: ChapterLocalizations,
-    #[serde(with = "time::serde::rfc3339::option")]
-    pub updated_at: Option<OffsetDateTime>,
-    #[serde(with = "time::serde::rfc3339")]
-    pub created_at: OffsetDateTime,
+    pub updated_at: Option<Timestamp>,
+    pub created_at: Timestamp,
 }
 
 impl Entity for Chapter {

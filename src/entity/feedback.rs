@@ -1,11 +1,10 @@
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
-    entity::{Email, Entity, Filter, Text},
+    entity::{Email, Entity, Filter, Text, Timestamp},
     error::EntityError,
 };
 
@@ -78,10 +77,8 @@ pub struct Feedback {
     pub email: Email,
     pub note: Text,
     pub book_id: Option<Uuid>,
-    #[serde(with = "time::serde::rfc3339::option")]
-    pub updated_at: Option<OffsetDateTime>,
-    #[serde(with = "time::serde::rfc3339")]
-    pub created_at: OffsetDateTime,
+    pub updated_at: Option<Timestamp>,
+    pub created_at: Timestamp,
 }
 
 impl Entity for Feedback {
@@ -92,7 +89,7 @@ impl Entity for Feedback {
 pub struct FeedbackStatusUpdate {
     pub id: Uuid,
     pub status: FeedbackStatus,
-    pub updated_at: OffsetDateTime,
+    pub updated_at: Timestamp,
 }
 
 #[derive(Debug)]

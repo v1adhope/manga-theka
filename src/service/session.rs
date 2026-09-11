@@ -1,12 +1,11 @@
 use std::net::IpAddr;
 
-use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
     entity::{
         Email, LoginForm, Password, Role, Session, SessionQuery, SessionTokens, ShortText,
-        UserClaims, UserCredentials,
+        Timestamp, UserClaims, UserCredentials,
     },
     error::ServiceError,
     service::Service,
@@ -66,7 +65,7 @@ impl Service {
         user: &UserCredentials,
         ua: Option<ShortText>,
         ip: Option<IpAddr>,
-        now: OffsetDateTime,
+        now: Timestamp,
     ) -> Result<SessionTokens, ServiceError> {
         let jti = Uuid::now_v7();
 
@@ -75,8 +74,8 @@ impl Service {
             jti: self.hasher.compute_keyed_hex_hash(jti)?,
             ua,
             ip,
-            created_at: now.into(),
-            updated_at: now.into(),
+            created_at: now,
+            updated_at: now,
         };
 
         self.issue_tokens(user.id, session, jti, user.roles.as_slice(), now)
@@ -89,7 +88,7 @@ impl Service {
         session: Session,
         jti: Uuid,
         roles: &[Role],
-        now: OffsetDateTime,
+        now: Timestamp,
     ) -> Result<SessionTokens, ServiceError> {
         let sid = session.sid;
         self.memory.put_session(sub, session).await?;
@@ -103,7 +102,7 @@ impl Service {
     pub async fn refresh_session(
         &self,
         refresh_token: &str,
-        now: OffsetDateTime,
+        now: Timestamp,
     ) -> Result<SessionTokens, ServiceError> {
         let claims = self.jwt.verify_refresh(refresh_token)?;
 
@@ -127,7 +126,7 @@ impl Service {
             ua: session.ua,
             ip: session.ip,
             created_at: session.created_at,
-            updated_at: now.into(),
+            updated_at: now,
         };
 
         self.issue_tokens(claims.sub, rotated, jti, roles.as_slice(), now)
@@ -150,7 +149,7 @@ impl Service {
         sub: Uuid,
         current_sid: Uuid,
         target_sid: Uuid,
-        now: OffsetDateTime,
+        now: Timestamp,
     ) -> Result<(), ServiceError> {
         self.ensure_revoker(sub, current_sid, now).await?;
 
@@ -164,7 +163,7 @@ impl Service {
         &self,
         sub: Uuid,
         current_sid: Uuid,
-        now: OffsetDateTime,
+        now: Timestamp,
     ) -> Result<(), ServiceError> {
         self.ensure_revoker(sub, current_sid, now).await?;
 
@@ -178,7 +177,7 @@ impl Service {
         &self,
         sub: Uuid,
         current_sid: Uuid,
-        now: OffsetDateTime,
+        now: Timestamp,
     ) -> Result<(), ServiceError> {
         let current = self
             .memory

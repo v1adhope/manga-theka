@@ -203,23 +203,22 @@ impl MemoryStore {
 
 #[cfg(test)]
 mod tests {
-    use time::OffsetDateTime;
     use uuid::Uuid;
 
     use super::SessionBlob;
-    use crate::entity::{HexHash, Session};
+    use crate::entity::{HexHash, Session, Timestamp};
 
     #[test]
     fn the_blob_round_trips_and_never_stores_the_sid() {
-        let now = OffsetDateTime::now_utc();
+        let now = Timestamp::now();
         let sid = Uuid::now_v7();
         let session = Session {
             sid,
             jti: HexHash::try_from("a".repeat(64)).unwrap(),
             ua: None,
             ip: None,
-            created_at: now.into(),
-            updated_at: now.into(),
+            created_at: now,
+            updated_at: now,
         };
 
         let json = serde_json::to_string(&SessionBlob::from(session)).unwrap();

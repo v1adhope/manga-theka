@@ -156,7 +156,6 @@ impl BookFilter {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use time::OffsetDateTime;
     use uuid::Uuid;
 
     use crate::entity::{
@@ -214,7 +213,7 @@ pub(crate) mod tests {
     fn cursor_for() -> BookCursor {
         BookCursor {
             id: Uuid::now_v7(),
-            sort: BookSort::CreatedAt(Timestamp::from(OffsetDateTime::UNIX_EPOCH)),
+            sort: BookSort::CreatedAt(Timestamp::UNIX_EPOCH),
             selection_hash: short_hash(SELECTION_HASH),
         }
     }
@@ -274,7 +273,7 @@ pub(crate) mod tests {
     fn a_sort_value_belongs_to_one_field() {
         let cases = [
             (
-                BookSort::CreatedAt(Timestamp::from(OffsetDateTime::UNIX_EPOCH)),
+                BookSort::CreatedAt(Timestamp::UNIX_EPOCH),
                 BookSortField::CreatedAt,
             ),
             (

@@ -6,7 +6,6 @@ use axum::{
 };
 use axum_extra::extract::Query;
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
@@ -70,8 +69,8 @@ pub struct BookReq {
 struct BookWithRelations {
     req: BookReq,
     id: Uuid,
-    updated_at: Option<OffsetDateTime>,
-    created_at: OffsetDateTime,
+    updated_at: Option<Timestamp>,
+    created_at: Timestamp,
     created_by: Uuid,
 }
 
@@ -153,7 +152,7 @@ pub async fn store_book(
     Json(req): Json<BookReq>,
 ) -> Result<(StatusCode, impl IntoResponse), AppError> {
     let id = Uuid::now_v7();
-    let created_at = OffsetDateTime::now_utc();
+    let created_at = Timestamp::now();
     let book: Book = BookWithRelations {
         req,
         id,
@@ -174,12 +173,12 @@ pub async fn update_book(
     Path(id): Path<Uuid>,
     Json(req): Json<BookReq>,
 ) -> Result<StatusCode, AppError> {
-    let updated_at = OffsetDateTime::now_utc();
+    let updated_at = Timestamp::now();
     let book: Book = BookWithRelations {
         req,
         id,
         updated_at: Some(updated_at),
-        created_at: OffsetDateTime::UNIX_EPOCH,
+        created_at: Timestamp::UNIX_EPOCH,
         created_by: Uuid::nil(),
     }
     .try_into()?;
@@ -223,10 +222,10 @@ pub struct BookListQuery {
     pub available_translated_language: Vec<Uuid>,
     pub publication_year_from: Option<i16>,
     pub publication_year_to: Option<i16>,
-    #[serde(default, with = "time::serde::rfc3339::option")]
-    pub created_at_from: Option<OffsetDateTime>,
-    #[serde(default, with = "time::serde::rfc3339::option")]
-    pub created_at_to: Option<OffsetDateTime>,
+    #[serde(default)]
+    pub created_at_from: Option<Timestamp>,
+    #[serde(default)]
+    pub created_at_to: Option<Timestamp>,
 }
 
 impl TryFrom<(BookListQuery, Option<BookCursor>)> for BookFilter {
@@ -261,10 +260,7 @@ impl TryFrom<(BookListQuery, Option<BookCursor>)> for BookFilter {
                 q.publication_year_from,
                 q.publication_year_to,
             )?,
-            created_at: CreatedAtRange::try_new(
-                q.created_at_from.map(Timestamp::from),
-                q.created_at_to.map(Timestamp::from),
-            )?,
+            created_at: CreatedAtRange::try_new(q.created_at_from, q.created_at_to)?,
         };
 
         let selection_hash = Hasher::compute_short_hex_hash(&selection)?;
@@ -323,7 +319,7 @@ pub struct BookVisibilityReq {
 struct BookVisibilityWithContext {
     req: BookVisibilityReq,
     id: Uuid,
-    now: OffsetDateTime,
+    now: Timestamp,
 }
 
 impl TryFrom<BookVisibilityWithContext> for VisibilityTransition {
@@ -351,7 +347,7 @@ pub async fn update_book_visibility(
     let transition: VisibilityTransition = BookVisibilityWithContext {
         req,
         id,
-        now: OffsetDateTime::now_utc(),
+        now: Timestamp::now(),
     }
     .try_into()?;
 

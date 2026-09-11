@@ -35,7 +35,7 @@ impl TryFrom<CreatorQueryRow> for CreatorQuery {
             first_name,
             last_name,
             roles,
-            created_at: row.created_at,
+            created_at: row.created_at.into(),
         })
     }
 }
@@ -48,7 +48,7 @@ impl Database {
             item.id,
             item.first_name.as_ref(),
             item.last_name.as_ref(),
-            item.created_at
+            item.created_at.into_inner()
         )
         .execute(&self.pool)
         .await

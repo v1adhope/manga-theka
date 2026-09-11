@@ -8,7 +8,7 @@ use axum::response::Response;
 use manga_theka::{
     config::{Config, Database},
     database,
-    entity::{MAX_USER_ROLES, Role},
+    entity::{MAX_USER_ROLES, Role, Timestamp},
     hasher::Hasher,
     jwt::Jwt,
     memory_storage::{self, MemoryStore},
@@ -202,7 +202,7 @@ impl TestApp {
 
     pub fn access_token(&self, sub: Uuid, sid: Uuid, roles: &[Role]) -> String {
         self.jwt
-            .issue_access(sub, sid, roles, time::OffsetDateTime::now_utc())
+            .issue_access(sub, sid, roles, Timestamp::now())
             .expect("failed to issue a test access token")
             .value
     }

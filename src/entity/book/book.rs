@@ -1,13 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
-use time::OffsetDateTime;
 use url::Url;
 use uuid::Uuid;
 
 use crate::{
     entity::{
         BookVisibility, Bounded, BoundedVec, ContentRating, CreatorQuery, CreatorRole, Entity,
-        Label, Language, Text, validate_name,
+        Label, Language, Text, Timestamp, validate_name,
     },
     error::EntityError,
 };
@@ -210,8 +209,8 @@ pub struct Book {
     pub links: BookLinks,
     pub titles: BookTitles,
     pub creators: BookCreators,
-    pub updated_at: Option<OffsetDateTime>,
-    pub created_at: OffsetDateTime,
+    pub updated_at: Option<Timestamp>,
+    pub created_at: Timestamp,
     pub created_by: Uuid,
 }
 
@@ -237,12 +236,9 @@ pub struct BookQuery {
     pub creators: BookCreatorsQuery,
     pub visibility: BookVisibility,
     pub note: Option<Text>,
-    #[serde(with = "time::serde::rfc3339::option")]
-    pub submitted_at: Option<OffsetDateTime>,
-    #[serde(with = "time::serde::rfc3339::option")]
-    pub updated_at: Option<OffsetDateTime>,
-    #[serde(with = "time::serde::rfc3339")]
-    pub created_at: OffsetDateTime,
+    pub submitted_at: Option<Timestamp>,
+    pub updated_at: Option<Timestamp>,
+    pub created_at: Timestamp,
     pub created_by: Uuid,
 }
 
@@ -307,13 +303,12 @@ pub type BookCreators = BoundedVec<BookCreator, BookCreatorsBound>;
 
 #[cfg(test)]
 mod tests {
-    use time::OffsetDateTime;
     use uuid::Uuid;
 
     use crate::entity::{
         AlternativeTitle, BookCreatorsQuery, BookLabelIds, BookLink, BookLinkKind, BookLinks,
         BookName, BookTitles, CreatorQuery, CreatorRole, LinkUrl, MAX_BOOK_CREATORS,
-        MAX_BOOK_LABELS, MAX_BOOK_LINKS, MAX_BOOK_TITLES, Name, PublicationDemographic,
+        MAX_BOOK_LABELS, MAX_BOOK_LINKS, MAX_BOOK_TITLES, Name, PublicationDemographic, Timestamp,
     };
 
     fn sample_link() -> BookLink {
@@ -336,7 +331,7 @@ mod tests {
             first_name: Name::try_from("Jane".to_owned()).unwrap(),
             last_name: Name::try_from("Doe".to_owned()).unwrap(),
             roles: vec![CreatorRole::Author],
-            created_at: OffsetDateTime::now_utc(),
+            created_at: Timestamp::now(),
         }
     }
 
