@@ -101,7 +101,7 @@ impl BookAccess {
         match self.visibility {
             BookVisibility::Draft if claims.id == self.created_by => Ok(()),
             BookVisibility::Draft => Err(EntityError::Forbidden),
-            BookVisibility::Hidden if claims.has_standing_over(self.created_by) => Ok(()),
+            BookVisibility::Hidden if claims.can_moderate() => Ok(()),
             BookVisibility::Hidden => Err(EntityError::Forbidden),
             BookVisibility::Listed => Ok(()),
             blocked => Err(EntityError::BookNotWritable(blocked)),
@@ -515,7 +515,7 @@ mod tests {
     }
 
     #[test]
-    fn hidden_writes_admit_the_creator_and_a_moderator() {
+    fn hidden_writes_admit_only_a_moderator() {
         let owner = Uuid::now_v7();
 
         let by_owner =
@@ -525,7 +525,10 @@ mod tests {
         let by_stranger = access(BookVisibility::Hidden, owner)
             .ensure_record_writable(&claims(Uuid::now_v7(), &[Role::Uploader]));
 
-        assert!(by_owner.is_ok(), "hidden must admit its creator");
+        assert!(
+            by_owner.is_err(),
+            "hidden must refuse its creator without moderator standing"
+        );
         assert!(by_moderator.is_ok(), "hidden must admit a moderator");
         assert!(by_stranger.is_err(), "hidden must refuse a stranger");
     }
