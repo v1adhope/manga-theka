@@ -155,38 +155,20 @@ impl BookFilter {
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
+mod tests {
+    use rstest::rstest;
     use uuid::Uuid;
 
-    use crate::entity::{
-        BookCursor, BookFilter, BookKinds, BookLabelIds, BookSelection, BookSort, BookSortField,
-        BookStatuses, BookVisibility, CreatedAtRange, FilterLookupIds, LabelFilter, LabelsMode,
-        Limit, PublicationDemographics, PublicationYearRange, ShortHexHash, SortOrder, Timestamp,
+    use crate::{
+        entity::{
+            BookCursor, BookFilter, BookSelection, BookSort, BookSortField, Limit, ShortHexHash,
+            Timestamp,
+        },
+        fixtures::unfiltered_selection,
     };
 
     const SELECTION_HASH: &str = "0123456789abcdef";
     const STALE_HASH: &str = "fedcba9876543210";
-
-    pub(crate) fn unfiltered_selection() -> BookSelection {
-        BookSelection {
-            visibility: BookVisibility::Listed,
-            sort_field: BookSortField::CreatedAt,
-            order: SortOrder::Desc,
-            labels: LabelFilter {
-                included: BookLabelIds::try_from(vec![]).unwrap(),
-                mode: LabelsMode::And,
-                excluded: BookLabelIds::try_from(vec![]).unwrap(),
-            },
-            kinds: BookKinds::try_from(vec![]).unwrap(),
-            statuses: BookStatuses::try_from(vec![]).unwrap(),
-            content_rating_ids: FilterLookupIds::try_from(vec![]).unwrap(),
-            publication_language_ids: FilterLookupIds::try_from(vec![]).unwrap(),
-            publication_demographics: PublicationDemographics::try_from(vec![]).unwrap(),
-            available_translated_language_ids: FilterLookupIds::try_from(vec![]).unwrap(),
-            publication_year: PublicationYearRange::try_new(None, None).unwrap(),
-            created_at: CreatedAtRange::try_new(None, None).unwrap(),
-        }
-    }
 
     fn short_hash(hex: &str) -> ShortHexHash {
         ShortHexHash::try_from(hex.to_owned()).unwrap()
@@ -218,36 +200,38 @@ pub(crate) mod tests {
         }
     }
 
-    #[test]
-    fn a_cursor_from_the_same_filter_is_accepted() {
-        let filter = filter_paged(unfiltered_selection(), cursor_for());
+    #[rstest]
+    fn a_cursor_from_the_same_filter_is_accepted(unfiltered_selection: BookSelection) {
+        let filter = filter_paged(unfiltered_selection, cursor_for());
 
         assert!(filter.ensure_cursor_fits().is_ok());
     }
 
-    #[test]
-    fn no_cursor_is_always_accepted() {
-        let filter = filter(unfiltered_selection());
+    #[rstest]
+    fn no_cursor_is_always_accepted(unfiltered_selection: BookSelection) {
+        let filter = filter(unfiltered_selection);
 
         assert!(filter.ensure_cursor_fits().is_ok());
     }
 
-    #[test]
-    fn a_cursor_whose_selection_hash_no_longer_matches_is_rejected() {
+    #[rstest]
+    fn a_cursor_whose_selection_hash_no_longer_matches_is_rejected(
+        unfiltered_selection: BookSelection,
+    ) {
         let cursor = BookCursor {
             selection_hash: short_hash(STALE_HASH),
             ..cursor_for()
         };
-        let filter = filter_paged(unfiltered_selection(), cursor);
+        let filter = filter_paged(unfiltered_selection, cursor);
 
         assert!(filter.ensure_cursor_fits().is_err());
     }
 
-    #[test]
-    fn a_cursor_for_another_sort_field_is_rejected() {
+    #[rstest]
+    fn a_cursor_for_another_sort_field_is_rejected(unfiltered_selection: BookSelection) {
         let selection = BookSelection {
             sort_field: BookSortField::Name,
-            ..unfiltered_selection()
+            ..unfiltered_selection
         };
         let cursor = cursor_for();
         let filter = filter_paged(selection, cursor);
@@ -255,12 +239,12 @@ pub(crate) mod tests {
         assert!(filter.ensure_cursor_fits().is_err());
     }
 
-    #[test]
-    fn page_size_is_outside_the_selection_hash() {
+    #[rstest]
+    fn page_size_is_outside_the_selection_hash(unfiltered_selection: BookSelection) {
         let cursor = cursor_for();
         let resized = BookFilter {
             limit: Limit::try_from(50).unwrap(),
-            ..filter_paged(unfiltered_selection(), cursor)
+            ..filter_paged(unfiltered_selection, cursor)
         };
 
         assert!(

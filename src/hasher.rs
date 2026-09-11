@@ -88,11 +88,9 @@ mod tests {
     use time::{Duration, OffsetDateTime};
 
     use crate::{
-        entity::{
-            BookSelection, BookVisibility, CreatedAtRange, Password, Timestamp,
-            book_filter::tests::unfiltered_selection,
-        },
+        entity::{BookSelection, BookVisibility, CreatedAtRange, Password, Timestamp},
         error::HasherError,
+        fixtures::unfiltered_selection,
         hasher::Hasher,
     };
 
